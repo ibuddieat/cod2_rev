@@ -1275,6 +1275,11 @@ enum EffectiveStance
 	PM_EFF_STANCE_COUNT
 };
 
+#define TURRET_STANCE_INVALID   -1
+#define TURRET_STANCE_STAND      0
+#define TURRET_STANCE_CROUCH     1
+#define TURRET_STANCE_PRONE      2
+
 // Rafael
 // note to self: Corky test
 //#define	DEFAULT_VIEWHEIGHT	26
@@ -1295,6 +1300,14 @@ enum proneCheckType_t
 {
 	PCT_CLIENT = 0x0,
 	PCT_ACTOR = 0x1,
+};
+
+enum ViewLockTypes
+{
+	PLAYERVIEWLOCK_NONE = 0x0,
+	PLAYERVIEWLOCK_FULL = 0x1,
+	PLAYERVIEWLOCK_WEAPONJITTER = 0x2,
+	PLAYERVIEWLOCKCOUNT = 0x3,
 };
 
 // pmove->pm_flags	(sent as max 16 bits in msg.c)

@@ -535,7 +535,7 @@ void PM_UpdateLean( playerState_t *ps, float msec, usercmd_t *cmd,
 	VectorSet(tmins, -8.0, -8.0, -8.0);
 	VectorSet(tmaxs, 8.0, 8.0, 8.0);
 
-	capsuleTrace(&trace, start, tmins, tmaxs, end, ps->clientNum, 42008593);
+	capsuleTrace(&trace, start, tmins, tmaxs, end, ps->clientNum, MASK_PLAYERSOLID);
 
 	fLean = UnGetLeanFraction(trace.fraction);
 

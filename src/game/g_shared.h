@@ -12,6 +12,7 @@
 #define MAX_SCRIPT_MENUS 32
 #define MAX_HINTSTRINGS 32
 #define MAX_CLIENT_CORPSES 8
+#define MAX_TURRETS 32
 
 #define MAX_WEAPONS         128  // (SA) and yet more!
 
@@ -1242,6 +1243,8 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define ENT_HANDLER_CLIENT_SPECTATOR  10
 #define ENT_HANDLER_CLIENT_DEAD       11
 #define ENT_HANDLER_PLAYER_CLONE      12
+#define ENT_HANDLER_TURRET_INIT       13
+#define ENT_HANDLER_TURRET            14
 #define ENT_HANDLER_DROPPED_ITEM      15
 #define ENT_HANDLER_ITEM_INIT         16
 #define ENT_HANDLER_ITEM              17
@@ -1616,6 +1619,15 @@ void SP_script_brushmodel(gentity_s *ent);
 void SP_script_model(gentity_s *ent);
 void SP_script_origin(gentity_s *ent);
 
+void turret_shoot_internal( gentity_t *self, gentity_t *other );
+void Fire_Lead( gentity_t *ent, gentity_t *activator );
+void Turret_FillWeaponParms( gentity_t *ent, gentity_t *activator, weaponParms *wp );
+void turret_clientaim( gentity_t *self, gentity_t *other );
+int turret_UpdateTargetAngles( gentity_t *self, const vec3_t desiredAngles, qboolean bManned );
+void turret_track(gentity_s *self, gentity_s *other);
+int turret_ReturnToDefaultPos(gentity_s *self, int bManned);
+void turret_UpdateSound(gentity_s *self);
+qboolean turret_behind(gentity_s *self, gentity_s *player);
 qboolean G_IsTurretUsable(gentity_s *useEnt, gentity_s *playerEnt);
 void G_ClientStopUsingTurret(gentity_s *self);
 void G_FreeTurret(gentity_s *ent);
