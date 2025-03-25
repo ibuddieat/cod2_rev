@@ -1226,14 +1226,17 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define DAMAGE_PASSTHRU             0x00000020  // distance falloff
 
 // gentity->flags
-#define FL_GODMODE             0x0000001
-#define FL_DEMI_GODMODE        0x0000002
-#define FL_NOTARGET            0x0000004
-#define FL_NO_KNOCKBACK        0x0000008
-#define FL_DROPPED_ITEM        0x0000010
-#define FL_NODRAW              0x0000800
-#define FL_SUPPORTS_LINKTO     0x0001000
-#define FL_NO_AUTO_ANIM_UPDATE 0x0002000
+#define FL_GODMODE              0x0000001
+#define FL_DEMI_GODMODE         0x0000002
+#define FL_NOTARGET             0x0000004
+#define FL_NO_KNOCKBACK         0x0000008
+#define FL_DROPPED_ITEM         0x0000010
+#define FL_NODRAW               0x0000800
+#define FL_SUPPORTS_LINKTO      0x0001000
+#define FL_NO_AUTO_ANIM_UPDATE  0x0002000
+#define FL_GRENADE_TOUCH_DAMAGE 0x0004000
+#define FL_MISSILE_DESTABILIZED 0x0010000
+#define FL_STABLE_MISSILES      0x0020000
 
 #define ENT_HANDLER_NULL              0
 #define ENT_HANDLER_ACTOR_INIT        1
@@ -1574,6 +1577,12 @@ void G_RunCorpseAnimate(gentity_s *ent);
 int Pickup_Weapon(gentity_t *ent, gentity_t *other, int *pickupEvent, int touched);
 int Pickup_Health(gentity_t *ent, gentity_t *other);
 int Pickup_Ammo(gentity_t *ent, gentity_t *other);
+
+void G_MissileTrace(trace_t *results, const float *start, const float *end, int passEntityNum, int contentmask);
+void G_MissileImpact(gentity_s *ent, trace_t *trace, float *dir, float *endpos);
+void G_MissileTrace_IgnoreEntity(trace_t *results, int entityNum, gentity_s *ent, const float *origin);
+void G_RunMissile_CreateWaterSplash(gentity_s *missile, trace_t *trace);
+void G_RunMissile_Destabilize(gentity_s *missile);
 
 void Player_UpdateActivate(gentity_s *ent);
 void LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker);

@@ -1225,18 +1225,13 @@ void RoundFloatArray(vec3_t x, vec3_t y)
 {
 	int i;
 
-	for ( i = 0; i < 3; ++i )
+	for ( i = 0; i < 3; i++ )
 	{
 		if ( x[i] < y[i] )
 			x[i] = ceil(x[i]);
 		else
 			x[i] = floor(x[i]);
 	}
-}
-
-float convertDegreesToTan(float d)
-{
-	return tan(d * RADINDEG);
 }
 
 /*

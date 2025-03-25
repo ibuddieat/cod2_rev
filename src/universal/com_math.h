@@ -595,7 +595,6 @@ void ExpandBoundsToWidth(vec3_t mins, vec3_t maxs);
 void YawToAxis(float yaw, vec3_t axis[3]);
 void ProjectPointOnPlane(const vec3_t p, const vec3_t normal, vec3_t dst);
 void RoundFloatArray(vec3_t x, vec3_t y);
-float convertDegreesToTan(float d);
 void TransposeMatrix( const vec3_t matrix[3], vec3_t transpose[3] );
 void RotatePoint( vec3_t point, const vec3_t matrix[3] );
 void AnglesSubtract(const vec3_t v1, const vec3_t v2, vec3_t v3);

@@ -1291,7 +1291,7 @@ enum EffectiveStance
 
 #define PRONE_FEET_DIST_TURNED 45
 
-#define MIN_WALK_NORMAL 0.7
+#define MIN_WALK_NORMAL 0.69999999
 
 #define STEPSIZE        18
 #define STEPSIZE_PRONE  10
@@ -1309,6 +1309,8 @@ enum ViewLockTypes
 	PLAYERVIEWLOCK_WEAPONJITTER = 0x2,
 	PLAYERVIEWLOCKCOUNT = 0x3,
 };
+
+#define MISSILE_PRESTEP_TIME 50
 
 // pmove->pm_flags	(sent as max 16 bits in msg.c)
 #define PMF_PRONE           0x1
@@ -1357,6 +1359,7 @@ enum ViewLockTypes
 #define EF_TURRET_PRONE 0x100       // See EF_TURRET_ACTIVE
 #define EF_TURRET_DUCK  0x200       // See EF_TURRET_ACTIVE
 #define EF_TURRET_ACTIVE 0x300      // Set on players that use a turret
+#define EF_PROJECTILE   0x400       // guessed
 #define EF_MANTLE       0x4000      //
 #define EF_TAGCONNECT   0x8000      // Connected to another entity via tag
 #define EF_UNKNOWN      0x10000     //
