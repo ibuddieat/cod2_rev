@@ -4727,3 +4727,75 @@ void GScr_LoadScripts()
 	GScr_LoadFields();
 	Scr_EndLoadScripts();
 }
+
+void GScr_SetCursorHint(scr_entref_t entref)
+{
+	const char *pszHint;
+	gentity_s *pEnt;
+	int i;
+	int j;
+
+	pEnt = GetEntity(entref);
+	pszHint = Scr_GetString(0);
+
+	if ( (pEnt->classname == scr_const.trigger_use || pEnt->classname == scr_const.trigger_use_touch)
+	        && !I_stricmp(pszHint, "HINT_INHERIT") )
+	{
+		pEnt->s.dmgFlags = -1;
+	}
+	else
+	{
+		for ( i = 1; i < ARRAY_COUNT(hintStrings) && hintStrings[i]; ++i )
+		{
+			if ( !I_stricmp(pszHint, hintStrings[i]) )
+			{
+				pEnt->s.dmgFlags = i;
+				return;
+			}
+		}
+
+		Com_Printf("List of valid hint type strings\n");
+
+		if ( pEnt->classname == scr_const.trigger_use || pEnt->classname == scr_const.trigger_use_touch )
+			Com_Printf("HINT_INHERIT (for trigger_use or trigger_use_touch entities only)\n");
+
+		for ( j = 1; j < ARRAY_COUNT(hintStrings) && hintStrings[j]; ++j )
+			Com_Printf("%s\n", hintStrings[j]);
+
+		Scr_Error(va("%s is not a valid hint type. See above for list of valid hint types\n", pszHint));
+	}
+}
+
+void GScr_SetHintString(scr_entref_t entref)
+{
+	const char *string;
+	unsigned int paramNum;
+	char szHint[1024];
+	gentity_s *pEnt;
+	int type;
+	int i;
+
+	pEnt = GetEntity(entref);
+
+	if ( pEnt->classname != scr_const.trigger_use && pEnt->classname != scr_const.trigger_use_touch )
+		Scr_Error("The setHintString command only works on trigger_use or trigger_use_touch entities.\n");
+
+	type = Scr_GetType(0);
+
+	if ( type != VAR_STRING || (string = Scr_GetString(0), I_stricmp(string, "")) )
+	{
+		paramNum = Scr_GetNumParam();
+		Scr_ConstructMessageString(0, paramNum - 1, "Hint String", szHint, 1024);
+
+		if ( !G_GetHintStringIndex(&i, szHint) )
+		{
+			Scr_Error(va("Too many different hintstring values. Max allowed is %i different strings", 32));
+		}
+
+		pEnt->s.scale = (unsigned char)i;
+	}
+	else
+	{
+		pEnt->s.scale = 255;
+	}
+}

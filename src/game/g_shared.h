@@ -1133,6 +1133,15 @@ enum meansOfDeath_t
 	MOD_NUM = 0xF,
 };
 
+inline const char *hintStrings[] =
+{
+	"",
+	"HINT_NONE",
+	"HINT_ACTIVATE",
+	"HINT_HEALTH",
+	"HINT_FRIENDLY",
+};
+
 struct AntilagClientStore
 {
 	vec3_t realClientPositions[64];
@@ -1170,6 +1179,7 @@ enum cs_index_t
 	CS_HEAD_ICONS = 31,
 	CS_SHELLSHOCKS = 1167,
 	CS_SCRIPT_MENUS = 1247,
+	CS_HINTSTRINGS = 1279
 };
 
 enum SND_ENVEFFECTPRIO
@@ -1251,6 +1261,7 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define ENT_HANDLER_DROPPED_ITEM      15
 #define ENT_HANDLER_ITEM_INIT         16
 #define ENT_HANDLER_ITEM              17
+#define ENT_HANDLER_TRIGGER_USE       18
 #define ENT_HANDLER_PLAYER_BLOCK      19
 
 #define SAY_ALL 0
@@ -1620,13 +1631,15 @@ void SP_light(gentity_s *self);
 void SP_misc_model(gentity_s *self);
 void SP_turret(gentity_s *ent);
 void SP_corona(gentity_s *self);
-void SP_trigger_use(gentity_s *self);
-void SP_trigger_use_touch(gentity_s *self);
+void trigger_use(gentity_s *self);
+void trigger_use_touch(gentity_s *self);
 void SP_trigger_damage(gentity_s *ent);
 void SP_trigger_lookat(gentity_s *ent);
 void SP_script_brushmodel(gentity_s *ent);
 void SP_script_model(gentity_s *ent);
 void SP_script_origin(gentity_s *ent);
+
+int G_MoverPush(gentity_s *pusher, vec3_t move, vec3_t amove, gentity_s **obstacle);
 
 void turret_shoot_internal( gentity_t *self, gentity_t *other );
 void Fire_Lead( gentity_t *ent, gentity_t *activator );

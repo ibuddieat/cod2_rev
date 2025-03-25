@@ -276,15 +276,6 @@ void SP_trigger_once(gentity_s *ent)
 	SV_LinkEntity(ent);
 }
 
-void SP_trigger_use(gentity_s *self)
-{
-	trigger_use_shared(self);
-}
-
-void SP_trigger_use_touch(gentity_s *self)
-{
-	trigger_use_shared(self);
-}
 
 void SP_trigger_damage(gentity_s *ent)
 {
@@ -373,7 +364,3 @@ void Die_trigger_damage(gentity_s *pSelf, gentity_s *pInflictor, gentity_s *pAtt
 		pSelf->health = 32000;
 }
 
-void use_trigger_use(gentity_s *pSelf, gentity_s *pEnt, gentity_s *pOther)
-{
-	;
-}
