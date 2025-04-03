@@ -99,7 +99,7 @@ void Bullet_Fire_Extended(const gentity_s *inflictor, gentity_s *attacker, float
 
 		bulletEffectTempEnt = G_TempEntity(origin, event);
 		bulletEffectTempEnt->s.eventParm = DirToByte(trace.normal);
-		bulletEffectTempEnt->s.scale = DirToByte(dir);
+		bulletEffectTempEnt->s.eventParm2 = DirToByte(dir);
 
 		if ( hitEnt->s.eType == ET_PLAYER_CORPSE )
 			bulletEffectTempEnt->s.surfType = SURF_TYPE_FLESH;

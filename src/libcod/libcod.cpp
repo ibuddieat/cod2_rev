@@ -49,10 +49,10 @@ void RegisterLibcodDvars()
 
 void InitLibcodCallbacks()
 {
-	codecallback_playercommand = Scr_GetFunctionHandle("maps/mp/gametypes/_callbacksetup", "CodeCallback_PlayerCommand", 0);
-	codecallback_userinfochanged = Scr_GetFunctionHandle("maps/mp/gametypes/_callbacksetup", "CodeCallback_UserInfoChanged", 0);
-	codecallback_fire_grenade = Scr_GetFunctionHandle("maps/mp/gametypes/_callbacksetup", "CodeCallback_FireGrenade", 0);
-	codecallback_vid_restart = Scr_GetFunctionHandle("maps/mp/gametypes/_callbacksetup", "CodeCallback_VidRestart", 0);
+	codecallback_playercommand = GScr_LoadScriptAndLabel("maps/mp/gametypes/_callbacksetup", "CodeCallback_PlayerCommand", 0);
+	codecallback_userinfochanged = GScr_LoadScriptAndLabel("maps/mp/gametypes/_callbacksetup", "CodeCallback_UserInfoChanged", 0);
+	codecallback_fire_grenade = GScr_LoadScriptAndLabel("maps/mp/gametypes/_callbacksetup", "CodeCallback_FireGrenade", 0);
+	codecallback_vid_restart = GScr_LoadScriptAndLabel("maps/mp/gametypes/_callbacksetup", "CodeCallback_VidRestart", 0);
 }
 
 static void Com_Assert_f( void )

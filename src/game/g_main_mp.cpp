@@ -1140,9 +1140,9 @@ void G_RunFrameForEntity( gentity_t *ent )
 		}
 	}
 
-	//assert(ent->r.maxs[0] >= ent->r.mins[0]);
-	//assert(ent->r.maxs[1] >= ent->r.mins[2]);
-	//assert(ent->r.maxs[2] >= ent->r.mins[2]);
+	assert(ent->r.maxs[0] >= ent->r.mins[0]);
+	assert(ent->r.maxs[1] >= ent->r.mins[1]);
+	assert(ent->r.maxs[2] >= ent->r.mins[2]);
 
 	// clear events that are too old
 	if ( ent->s.eFlags == EF_UNKNOWN )

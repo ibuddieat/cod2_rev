@@ -28,7 +28,7 @@ gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir )
 	bolt->r.ownerNum = self->s.number;
 	bolt->parent = self;
 	bolt->dmg = weapDef->damage; // JPW NERVE
-	bolt->clipmask = MASK_MISSILESHOT;
+	bolt->clipmask = MASK_MISSILESHOT & ~CONTENTS_WATER;
 
 	bolt->s.time = level.time + MISSILE_PRESTEP_TIME;
 	bolt->s.pos.trType = TR_LINEAR;
@@ -94,7 +94,8 @@ gentity_t *fire_grenade( gentity_t *self, vec3_t start, vec3_t dir, int grenadeW
 
 	bolt->dmg = weapDef->damage;
 	bolt->s.eFlags = EF_BOUNCE;
-	bolt->clipmask = MASK_MISSILESHOT;
+	bolt->clipmask = MASK_MISSILESHOT & ~CONTENTS_WATER;
+
 	bolt->s.time = level.time + MISSILE_PRESTEP_TIME;     // move a bit on the very first frame
 	bolt->s.pos.trType = TR_GRAVITY;
 	bolt->s.pos.trTime = level.time;
@@ -593,7 +594,7 @@ void G_RunMissile_CreateWaterSplash( gentity_t *ent, trace_t *trace )
 	tent = G_TempEntity(ent->r.currentOrigin, EV_BULLET_HIT_LARGE);
 
 	tent->s.eventParm = DirToByte(trace->normal);
-	tent->s.scale = DirToByte(reflect);
+	tent->s.eventParm2 = DirToByte(reflect);
 	tent->s.surfType = SURF_TYPEINDEX(trace->surfaceFlags);
 	tent->s.otherEntityNum = ent->s.number;
 }

@@ -450,10 +450,10 @@ setstring:
 						        && (useEnt->trigger.singleUserEntIndex == 1023
 						            || useEnt->trigger.singleUserEntIndex == ent->client->ps.clientNum) )
 						{
-							item = useEnt->s.dmgFlags;
+							item = useEnt->s.hintType;
 
-							if ( item && useEnt->s.scale != 255 )
-								useHint = useEnt->s.scale;
+							if ( item && useEnt->s.hintString != -1 )
+								useHint = useEnt->s.hintString;
 
 							goto setstring;
 						}

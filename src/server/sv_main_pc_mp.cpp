@@ -143,7 +143,7 @@ void SVC_RemoteCommand( netadr_t from, msg_t *msg )
 
 void SV_MatchEnd( void )
 {
-	UNIMPLEMENTED(__FUNCTION__);
+	;
 }
 
 /*

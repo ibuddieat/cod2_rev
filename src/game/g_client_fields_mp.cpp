@@ -397,7 +397,7 @@ void ClientScr_GetHeadIcon( gclient_t *pSelf, const game_client_field_t *pField 
 		return;
 	}
 
-	if ( iHeadIcon >= MAX_HEADICONS )
+	if ( iHeadIcon > MAX_HEADICONS )
 	{
 		return;
 	}

@@ -1737,7 +1737,7 @@ void G_AddPlayerMantleBlockage( vec3_t endPos, int duration, pmove_t *pm )
 	ent->r.ownerNum = pm->ps->clientNum;
 	ent->r.contents = CONTENTS_PLAYERCLIP;
 	ent->clipmask = CONTENTS_PLAYERCLIP;
-	ent->r.svFlags = SVF_NOCLIENT | SVF_RADIUS;
+	ent->r.svFlags = SVF_NOCLIENT | SVF_CYLINDER;
 	ent->s.eType = ET_INVISIBLE;
 	ent->handler = ENT_HANDLER_PLAYER_BLOCK;
 

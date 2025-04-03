@@ -142,7 +142,7 @@ bool Scr_IsIdentifier(const char *token)
 	return true;
 }
 
-int Scr_GetFunctionHandleInternal(const char *filename, const char *name)
+int Scr_GetFunctionHandle(const char *filename, const char *name)
 {
 	VariableValue val;
 	unsigned int index;
@@ -186,20 +186,6 @@ int Scr_GetFunctionHandleInternal(const char *filename, const char *name)
 	return pos - scrVarPub.programBuffer;
 }
 
-int Scr_GetFunctionHandle(const char *filename, const char *name, qboolean errorIfMissing)
-{
-	int handle;
-
-	if ( !Scr_LoadScript(filename) && errorIfMissing )
-		Com_Error(ERR_DROP, "Could not find script '%s'", filename);
-
-	handle = Scr_GetFunctionHandleInternal(filename, name);
-
-	if ( !handle && errorIfMissing )
-		Com_Error(ERR_DROP, "Could not find label '%s' in script '%s'", name, filename);
-
-	return handle;
-}
 
 unsigned int Scr_LoadScript(const char *filename)
 {

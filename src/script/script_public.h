@@ -169,6 +169,10 @@ enum var_type_t
 	VAR_COUNT
 };
 
+#define FIRST_OBJECT VAR_THREAD
+#define FIRST_NONFIELD_OBJECT VAR_ARRAY
+#define FIRST_DEAD_OBJECT VAR_REMOVED_THREAD
+
 enum var_bits_t
 {
 	VAR_NAME_BITS = 0x8,
@@ -978,7 +982,7 @@ char* Scr_AddSourceBuffer(const char *filename, const char *extFilename, const c
 void Scr_ShutdownOpcodeLookup();
 
 qboolean Scr_IsSystemActive();
-int Scr_GetFunctionHandle(const char *filename, const char *name, qboolean errorIfMissing);
+int GScr_LoadScriptAndLabel(const char *filename, const char *name, qboolean errorIfMissing);
 unsigned int Scr_LoadScript(const char *filename);
 void Scr_BeginLoadScripts();
 void Scr_PostCompileScripts();

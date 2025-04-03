@@ -527,3 +527,4 @@ void SV_GetServerinfo(char *buffer, int bufferSize);
 void SV_FreeClientScriptPers();
 float SV_FX_GetVisibility(const vec3_t start, const vec3_t end);
 int SV_GetCurrentClientInfo(int clientNum, playerState_s *ps, clientState_t *cs);
+void SV_MatchEnd( void );

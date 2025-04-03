@@ -109,6 +109,7 @@ void Scr_AddUndefined()
 
 void Scr_AddBool(bool value)
 {
+	assert(value == false || value == true);
 	IncInParam();
 	scrVmPub.top->type = VAR_INTEGER;
 	scrVmPub.top->u.intValue = value;
@@ -198,6 +199,15 @@ void Scr_AddArray()
 	ArraySize = GetArraySize(scrVmPub.top->u.pointerValue);
 	id = GetNewArrayVariable(scrVmPub.top->u.pointerValue, ArraySize);
 	SetNewVariableValue(id, scrVmPub.top + 1);
+}
+
+void Scr_AddStruct()
+{
+	unsigned int id;
+
+	id = AllocObject();
+	Scr_AddObject(id);
+	RemoveRefToObject(id);
 }
 
 void Scr_AddArrayStringIndexed(unsigned int stringValue)

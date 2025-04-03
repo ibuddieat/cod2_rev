@@ -367,45 +367,45 @@ void trigger_use_shared( gentity_t *self )
 	self->r.contents = CONTENTS_DONOTENTER;
 	self->r.svFlags = SVF_NOCLIENT;
 	self->handler = ENT_HANDLER_TRIGGER_USE;
-	self->s.dmgFlags = DAMAGE_NO_ARMOR;
+	self->s.hintType = HINT_ACTIVATE;
 
 	if ( G_SpawnString("cursorhint", "", &cursorhint) )
 	{
 		if ( I_stricmp(cursorhint, "HINT_INHERIT") )
 		{
-			for ( i = 1; i <= ARRAY_COUNT(hintStrings); i++ )
+			for ( i = 1; i < ARRAY_COUNT(hintStrings); i++ )
 			{
 				if ( !I_stricmp(cursorhint, hintStrings[i]) )
 				{
-					self->s.dmgFlags = i;
+					self->s.hintType = i;
 					break;
 				}
 			}
 		}
 		else
 		{
-			self->s.dmgFlags = -1;
+			self->s.hintType = -1;
 		}
 	}
 
-	self->s.scale = 255;
+	self->s.hintString = -1;
 
 	if ( G_SpawnString("hintstring", "", &cursorhint) )
 	{
 		for ( i = 0; i < MAX_HINTSTRINGS; i++ )
 		{
-			SV_GetConfigstring(i + CS_HINTSTRINGS - 1, szConfigString, sizeof(szConfigString));
+			SV_GetConfigstring(i + CS_HINTSTRINGS, szConfigString, sizeof(szConfigString));
 
 			if ( !szConfigString[0] )
 			{
-				SV_SetConfigstring(i + CS_HINTSTRINGS - 1, cursorhint);
-				self->s.scale = (unsigned char)i;
+				SV_SetConfigstring(i + CS_HINTSTRINGS, cursorhint);
+				self->s.hintString = i;
 				break;
 			}
 
 			if ( !strcmp(cursorhint, szConfigString) )
 			{
-				self->s.scale = (unsigned char)i;
+				self->s.hintString = i;
 				break;
 			}
 		}

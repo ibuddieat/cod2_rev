@@ -6,13 +6,16 @@
 #define MAX_HUDELEMS_ARCHIVAL MAX_HUDELEMENTS
 #define MAX_HUDELEMS_CURRENT MAX_HUDELEMENTS
 #define MAX_OBJECTIVES 16
-#define MAX_HEADICONS 16
+#define MAX_HEADICONS 15
 #define MAX_STATUS_ICONS 8
 #define MAX_SHELLSHOCKS 16
 #define MAX_SCRIPT_MENUS 32
 #define MAX_HINTSTRINGS 32
 #define MAX_CLIENT_CORPSES 8
 #define MAX_TURRETS 32
+#define MAX_SCRIPT_IO_FILE_HANDLES 1
+#define MAX_EFFECT_NAMES 64
+#define MAX_EFFECT_TAGS 256
 
 #define MAX_WEAPONS         128  // (SA) and yet more!
 
@@ -100,7 +103,21 @@ typedef struct entityState_s
 	int time;
 	int time2;
 	vec3_t origin2;
-	vec3_t angles2;
+	union
+	{
+		vec3_t angles2;
+		struct // loop fx
+		{
+			float cullDist;
+			float period; // client expects float
+		};
+		struct // Earthquake
+		{
+			float scale2;
+			float radius;
+			float duration; // client expects float
+		};
+	};
 	int otherEntityNum;
 	int attackerEntityNum;
 	int groundEntityNum;
@@ -120,8 +137,18 @@ typedef struct entityState_s
 	int legsAnim;
 	int torsoAnim;
 	float leanf;
-	int scale;
-	int dmgFlags;
+	union
+	{
+		byte scale;
+		byte eventParm2;
+		byte hintString;
+		byte fxId;
+	};
+	union
+	{
+		int dmgFlags;
+		int hintType;
+	};
 	int animMovetype;
 	float fTorsoHeight;
 	float fTorsoPitch;
@@ -659,9 +686,9 @@ typedef struct
 	int registerWeapons;
 	int bRegisterItems;
 	int currentEntityThink;
-	int openScriptIOFileHandles[1];
-	char *openScriptIOFileBuffers[1];
-	com_parse_mark_t currentScriptIOLineMark[1];
+	int openScriptIOFileHandles[MAX_SCRIPT_IO_FILE_HANDLES];
+	char *openScriptIOFileBuffers[MAX_SCRIPT_IO_FILE_HANDLES];
+	com_parse_mark_t currentScriptIOLineMark[MAX_SCRIPT_IO_FILE_HANDLES];
 } level_locals_t;
 #if defined(__i386__)
 static_assert((sizeof(level_locals_t) == 0x3624), "ERROR: level_locals_t size is invalid!");
@@ -737,11 +764,12 @@ struct scr_entref_t
 
 struct gameTypeScript_t
 {
-	char pszScript[64];
-	char pszName[64];
+	char pszScript[MAX_QPATH];
+	char pszName[MAX_QPATH];
 	int bTeamBased;
 };
 
+#define MAX_GAMETYPE_SCRIPTS 32
 struct scr_gametype_data_t
 {
 	int main;
@@ -753,7 +781,7 @@ struct scr_gametype_data_t
 	int votecalled;
 	int playervote;
 	int iNumGameTypes;
-	gameTypeScript_t list[32];
+	gameTypeScript_t list[MAX_GAMETYPE_SCRIPTS];
 };
 
 #include "../bgame/bg_public.h"
@@ -1140,7 +1168,18 @@ inline const char *hintStrings[] =
 	"HINT_ACTIVATE",
 	"HINT_HEALTH",
 	"HINT_FRIENDLY",
+	NULL // terminator
 };
+
+enum hintType_t
+{
+	HINT_NONE,
+	HINT_NOICON,
+	HINT_ACTIVATE,
+	HINT_HEALTH,
+	HINT_FRIENDLY
+};
+
 
 struct AntilagClientStore
 {
@@ -1167,6 +1206,7 @@ enum cs_index_t
 	CS_SCORES2 = 6,
 	CS_WEAPONS = 7,
 	CS_ITEMS = 8,
+	CS_NORTHYAW = 11,
 	CS_FOGVARS = 12,
 	CS_VOTE_TIME = 15,
 	CS_VOTE_STRING = 16,
@@ -1177,9 +1217,11 @@ enum cs_index_t
 	CS_MULTI_MAPWINNER = 22,
 	CS_STATUS_ICONS = 23,
 	CS_HEAD_ICONS = 31,
-	CS_SHELLSHOCKS = 1167,
-	CS_SCRIPT_MENUS = 1247,
-	CS_HINTSTRINGS = 1279
+	CS_EFFECT_NAMES = 846,
+	CS_EFFECT_TAGS = 910,
+	CS_SHELLSHOCKS = 1166,
+	CS_SCRIPT_MENUS = 1246,
+	CS_HINTSTRINGS = 1278
 };
 
 enum SND_ENVEFFECTPRIO
@@ -1224,7 +1266,8 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define	SVF_BODY      0x00000002 // player or corpse
 #define	SVF_DOBJ      0x00000004 // dobj model, can be player model, script model, item.
 #define	SVF_BROADCAST 0x00000008 // send to all connected clients
-#define SVF_RADIUS    0x00000020 // trigger_radius and few other things
+#define	SVF_OBJECTIVE 0x00000010 // entity has an objective on it
+#define SVF_CYLINDER  0x00000020 // trigger_radius and few other things
 #define SVF_DISK      0x00000040 // trigger_disk and few other things
 
 // damage flags
@@ -1245,6 +1288,7 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define FL_SUPPORTS_LINKTO      0x0001000
 #define FL_NO_AUTO_ANIM_UPDATE  0x0002000
 #define FL_GRENADE_TOUCH_DAMAGE 0x0004000
+#define FL_GRENADE_BOUNCE       0x0008000
 #define FL_MISSILE_DESTABILIZED 0x0010000
 #define FL_STABLE_MISSILES      0x0020000
 
@@ -1268,6 +1312,7 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define SAY_TEAM 1
 #define SAY_TELL 2
 
+extern dvar_t *g_maxclients;
 extern dvar_t *g_password;
 extern dvar_t *g_playerCollisionEjectSpeed;
 extern dvar_t *g_inactivity;
@@ -1293,6 +1338,7 @@ extern dvar_t *g_dropForwardSpeed;
 extern dvar_t *g_dropUpSpeedRand;
 extern dvar_t *g_maxDroppedWeapons;
 extern dvar_t *g_weaponAmmoPools;
+extern dvar_t *g_no_script_spam;
 
 extern dvar_t *voice_global;
 extern dvar_t *voice_deadChat;
@@ -1353,7 +1399,10 @@ char *ConcatArgs( int start );
 qboolean ConsoleCommand();
 
 void Scr_LocalizationError(int iParm, const char *pszErrorMessage);
-void Scr_ConstructMessageString(int firstParmIndex, int lastParmIndex, const char *errorContext, char *string, unsigned int stringLimit);
+void Scr_ConstructMessageString(int firstParmIndex, int lastParmIndex, const char *errorContext, char *string, int stringLimit);
+void Scr_ValidateLocalizedStringRef(int parmIndex, const char *token, int tokenLen);
+void GScr_PostLoadScripts();
+void GScr_LoadLevelScript();
 void CalculateRanks();
 float G_GetFogOpaqueDistSqrd();
 int G_FindConfigstringIndex(const char *name, int start, int max, int create, const char *errormsg);
@@ -1655,6 +1704,7 @@ void G_ClientStopUsingTurret(gentity_s *self);
 void G_FreeTurret(gentity_s *ent);
 void G_PlayerTurretPositionAndBlend(gentity_s *ent, gentity_s *pTurretEnt);
 void G_GeneralLink(gentity_s *ent);
+int Scr_GetFunctionHandle(const char *filename, const char *name);
 
 void (*Player_GetMethod(const char **pName))(scr_entref_t);
 void (*ScriptEnt_GetMethod(const char **pName))(scr_entref_t);
@@ -1717,6 +1767,7 @@ void use_trigger_use(gentity_s *pSelf, gentity_s *pEnt, gentity_s *pOther);
 void turret_controller(gentity_s *self, int *partBits);
 void FinishSpawningItem(gentity_s *ent);
 void DroppedItemClearOwner(gentity_s *pSelf);
+void ClearObjective(objective_t *obj);
 
 #define COMPFR_GET_INDEX( i ) ( i & ( MAX_CLIENTS - 1 ) )
 unsigned int G_GetNonPVSFriendlyInfo(gentity_s *pSelf, float *vPosition, int iLastUpdateEnt);
@@ -1754,12 +1805,19 @@ inline entityHandler_t entityHandlers[] =
 	{ G_FreeEntity, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0 },
 };
 
+enum
+{
+	LF_NONE,
+	LF_MAP_RESTART,
+	LF_MAP_CHANGE,
+	LF_EXITLEVEL
+};
 
 void print();
 void println();
 void iprintln();
 void iprintlnbold();
-void print3d();
+void GScr_print3d();
 void GScr_line();
 void Scr_GetEnt();
 void Scr_GetEntArray();

@@ -778,7 +778,7 @@ void Cmd_MenuResponse_f( gentity_t *pEnt )
 	char szResponse[MAX_TOKEN_CHARS];
 	char szMenuName[MAX_TOKEN_CHARS];
 	char szServerId[MAX_TOKEN_CHARS];
-	int iMenuIndex;
+	unsigned int iMenuIndex;
 
 	iMenuIndex = -1;
 
@@ -796,7 +796,7 @@ void Cmd_MenuResponse_f( gentity_t *pEnt )
 
 		if ( iMenuIndex < MAX_SCRIPT_MENUS )
 		{
-			SV_GetConfigstring(iMenuIndex + CS_SCRIPT_MENUS - 1, szMenuName, sizeof(szMenuName));
+			SV_GetConfigstring(iMenuIndex + CS_SCRIPT_MENUS, szMenuName, sizeof(szMenuName));
 		}
 
 		SV_Cmd_ArgvBuffer(3, szResponse, sizeof(szResponse));

@@ -1360,7 +1360,7 @@ void PlayerCmd_SetChannelVolumes( scr_entref_t entref )
 	}
 
 	shockName = Scr_GetString(1);
-	shockIndex = G_FindConfigstringIndex(shockName, CS_SHELLSHOCKS - 1, MAX_SHELLSHOCKS, qfalse, NULL);
+	shockIndex = G_FindConfigstringIndex(shockName, CS_SHELLSHOCKS, MAX_SHELLSHOCKS, qfalse, NULL);
 	priorityString = Scr_GetConstString(0);
 
 	if ( priorityString == scr_const.snd_channelvolprio_holdbreath )
@@ -2744,7 +2744,7 @@ void PlayerCmd_finishPlayerDamage( scr_entref_t entref )
 			tempBulletHitEntity = G_TempEntity(vPoint, EV_BULLET_HIT_LARGE);
 
 		tempBulletHitEntity->s.eventParm = DirToByte(localdir);
-		tempBulletHitEntity->s.scale = DirToByte(localdir);
+		tempBulletHitEntity->s.eventParm2 = DirToByte(localdir);
 		tempBulletHitEntity->s.surfType = SURF_TYPE_FLESH;
 		tempBulletHitEntity->s.otherEntityNum = attacker->s.number;
 		assert(tempBulletHitEntity->r.clientMask[ 0 ] == 0);
