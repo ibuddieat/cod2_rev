@@ -837,7 +837,7 @@ void Scr_ParseGameTypeList()
 		}
 
 		I_strncpyz(entry->pszScript, src, sizeof(entry->pszScript));
-		strlwr(entry->pszScript);
+		I_strlwr(entry->pszScript);
 
 		len = FS_FOpenFileByMode(va("maps/mp/gametypes/%s.txt", src), &f, FS_READ);
 
