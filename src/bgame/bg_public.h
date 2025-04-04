@@ -1350,6 +1350,7 @@ enum ViewLockTypes
 // reference, see Enemy-Territory:
 // https://github.com/id-Software/Enemy-Territory/blob/40342a9e3690cb5b627a433d4d5cbf30e3c57698/src/game/bg_public.h#L649
 //
+#define EF_NONSOLID_BMODEL  0x00000001      // bmodel is visible, but not solid
 #define EF_TELEPORT_BIT 0x2         // Toggled every time the origin abruptly changes
 #define EF_CROUCH       0x4         //
 #define EF_PRONE        0x8         //

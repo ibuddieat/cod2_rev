@@ -1,135 +1,579 @@
 #include "../qcommon/qcommon.h"
 #include "g_shared.h"
 
+#define X 0
+#define Y 1
+#define Z 2
+
 scr_method_t scriptent_methods[] =
 {
-	{ "moveto", ScriptEntCmd_MoveTo, 0, },
-	{ "movex", ScriptEntCmd_MoveX, 0, },
-	{ "movey", ScriptEntCmd_MoveY, 0, },
-	{ "movez", ScriptEntCmd_MoveZ, 0, },
-	{ "movegravity", ScriptEntCmd_GravityMove, 0, },
-	{ "rotateto", ScriptEntCmd_RotateTo, 0, },
-	{ "rotatepitch", ScriptEntCmd_RotatePitch, 0, },
-	{ "rotateyaw", ScriptEntCmd_RotateYaw, 0, },
-	{ "rotateroll", ScriptEntCmd_RotateRoll, 0, },
-	{ "rotatevelocity", ScriptEntCmd_RotateVelocity, 0, },
-	{ "solid", ScriptEntCmd_Solid, 0, },
-	{ "notsolid", ScriptEntCmd_NotSolid, 0, },
+	{ "moveto", ScriptEntCmd_MoveTo, qfalse, },
+	{ "movex", ScriptEntCmd_MoveX, qfalse, },
+	{ "movey", ScriptEntCmd_MoveY, qfalse, },
+	{ "movez", ScriptEntCmd_MoveZ, qfalse, },
+	{ "movegravity", ScriptEntCmd_GravityMove, qfalse, },
+	{ "rotateto", ScriptEntCmd_RotateTo, qfalse, },
+	{ "rotatepitch", ScriptEntCmd_RotatePitch, qfalse, },
+	{ "rotateyaw", ScriptEntCmd_RotateYaw, qfalse, },
+	{ "rotateroll", ScriptEntCmd_RotateRoll, qfalse, },
+	{ "rotatevelocity", ScriptEntCmd_RotateVelocity, qfalse, },
+	{ "solid", ScriptEntCmd_Solid, qfalse, },
+	{ "notsolid", ScriptEntCmd_NotSolid, qfalse, },
 };
 
-void ScriptEntCmdGetCommandTimes(float *pfTotalTime, float *pfAccelTime, float *pfDecelTime)
+/*
+===============
+ScriptEnt_GetMethod
+===============
+*/
+void (*ScriptEnt_GetMethod( const char **pName ))( scr_entref_t )
 {
-	signed int paramNum;
-
-	*pfTotalTime = Scr_GetFloat(1u);
-
-	if ( *pfTotalTime <= 0.0 )
-		Scr_ParamError(1, "total time must be positive");
-
-	paramNum = Scr_GetNumParam();
-
-	if ( paramNum <= 2 )
+	for ( int i = 0; i < ARRAY_COUNT(scriptent_methods); i++ )
 	{
-		*pfAccelTime = 0.0;
-		*pfDecelTime = 0.0;
-	}
-	else
-	{
-		*pfAccelTime = Scr_GetFloat(2u);
-
-		if ( *pfAccelTime < 0.0 )
-			Scr_ParamError(2, "accel time must be nonnegative");
-
-		if ( paramNum <= 3 )
+		if ( !strcmp(*pName, scriptent_methods[i].name) )
 		{
-			*pfDecelTime = 0.0;
+			*pName = scriptent_methods[i].name;
+			return scriptent_methods[i].call;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+===============
+ScriptEntCmdGetCommandTimes
+===============
+*/
+void ScriptEntCmdGetCommandTimes( float *pfTotalTime, float *pfAccelTime, float *pfDecelTime )
+{
+	*pfTotalTime = Scr_GetFloat(1);
+
+	if ( *pfTotalTime <= 0 )
+	{
+		Scr_ParamError(1, "total time must be positive");
+	}
+
+	int iNumParms = Scr_GetNumParam();
+
+	if ( iNumParms >= 3 )
+	{
+		*pfAccelTime = Scr_GetFloat(2);
+
+		if ( *pfAccelTime < 0 )
+		{
+			Scr_ParamError(2, "accel time must be nonnegative");
+		}
+
+		if ( iNumParms >= 4 )
+		{
+			*pfDecelTime = Scr_GetFloat(3);
+
+			if ( *pfDecelTime < 0 )
+			{
+				Scr_ParamError(3, "decel time must be nonnegative");
+			}
 		}
 		else
 		{
-			*pfDecelTime = Scr_GetFloat(3u);
-
-			if ( *pfDecelTime < 0.0 )
-				Scr_ParamError(3, "decel time must be nonnegative");
+			*pfDecelTime = 0;
 		}
+	}
+	else
+	{
+		*pfAccelTime = 0;
+		*pfDecelTime = 0;
 	}
 
 	if ( *pfAccelTime + *pfDecelTime > *pfTotalTime )
+	{
 		Scr_Error("accel time plus decel time is greater than total time");
+	}
 }
 
-int ScriptMover_UpdateMove(trajectory_t *pTr, float *vCurrPos, float fSpeed, float fMidTime, float fDecelTime, float *vPos1, float *vPos2, float *vPos3)
+/*
+===============
+InitScriptMover
+===============
+*/
+void InitScriptMover( gentity_t *pSelf )
 {
-	int trDuration;
-	vec3_t vMove;
-	float fDelta;
-
-	trDuration = (int)(fMidTime * 1000.0);
-
-	if ( pTr->trType == TR_ACCELERATE && trDuration > 0 )
+	if ( level.spawnVars.spawnVarsValid )
 	{
-		pTr->trTime = level.time;
-		pTr->trDuration = trDuration;
-		VectorCopy(vPos1, pTr->trBase);
-		VectorSubtract(vPos2, vPos1, vMove);
-		fDelta = 1000.0 / (float)trDuration;
-		VectorScale(vMove, fDelta, pTr->trDelta);
-		pTr->trType = TR_LINEAR_STOP;
+		float light;
+		vec3_t color;
+		qboolean lightSet, colorSet;
 
-		return 0;
-	}
-
-	if ( (pTr->trType == TR_ACCELERATE && trDuration <= 0 || pTr->trType == TR_LINEAR_STOP) && fDecelTime > 0.0 )
-	{
-		pTr->trTime = level.time;
-		pTr->trDuration = (int)(fDecelTime * 1000.0);
-		VectorCopy(vPos2, pTr->trBase);
-		VectorSubtract(vPos3, vPos2, vMove);
-		Vec3Normalize(vMove);
-		VectorScale(vMove, fSpeed, vMove);
-		VectorCopy(vMove, pTr->trDelta);
-		pTr->trType = TR_DECCELERATE;
-
-		return 0;
-	}
-
-	if ( pTr->trType == TR_GRAVITY )
-		BG_EvaluateTrajectory(pTr, level.time, pTr->trBase);
-	else
-		VectorCopy(vPos3, pTr->trBase);
-
-	pTr->trTime = level.time;
-	pTr->trType = TR_STATIONARY;
-
-	return 1;
-}
-
-void Reached_ScriptMover(gentity_s *pEnt)
-{
-	int bMoveFinished;
-
-	if ( pEnt->s.pos.trType )
-	{
-		if ( pEnt->s.pos.trTime + pEnt->s.pos.trDuration <= level.time )
+		// if the "color" or "light" keys are set, setup constantLight
+		lightSet = G_SpawnFloat( "light", "100", &light );
+		colorSet = G_SpawnVector( "color", "1 1 1", color );
+		if ( lightSet || colorSet )
 		{
-			bMoveFinished = ScriptMover_UpdateMove(
-			                    &pEnt->s.pos,
-			                    pEnt->r.currentOrigin,
-			                    pEnt->mover.speed,
-			                    pEnt->mover.midTime,
-			                    pEnt->mover.decelTime,
-			                    pEnt->mover.pos1,
-			                    pEnt->mover.pos2,
-			                    pEnt->mover.pos3);
+			int r, g, b, i;
 
-			BG_EvaluateTrajectory(&pEnt->s.pos, level.time, pEnt->r.currentOrigin);
-			SV_LinkEntity(pEnt);
-
-			if ( bMoveFinished )
-				Scr_Notify(pEnt, scr_const.movedone, 0);
+			r = color[0] * 255;
+			if ( r > 255 )
+			{
+				r = 255;
+			}
+			g = color[1] * 255;
+			if ( g > 255 )
+			{
+				g = 255;
+			}
+			b = color[2] * 255;
+			if ( b > 255 )
+			{
+				b = 255;
+			}
+			i = light / 4;
+			if ( i > 255 )
+			{
+				i = 255;
+			}
+			pSelf->s.constantLight = r | ( g << 8 ) | ( b << 16 ) | ( i << 24 );
 		}
 	}
 
-	if ( pEnt->s.apos.trType && pEnt->s.apos.trTime + pEnt->s.apos.trDuration <= level.time )
+	pSelf->handler = ENT_HANDLER_SCRIPT_MOVER;
+	pSelf->r.svFlags = 0;
+	pSelf->s.eType = ET_SCRIPTMOVER;
+
+	VectorCopy(pSelf->r.currentOrigin, pSelf->s.pos.trBase);
+	pSelf->s.pos.trType = TR_STATIONARY;
+
+	VectorCopy(pSelf->r.currentAngles, pSelf->s.apos.trBase);
+	pSelf->s.apos.trType = TR_STATIONARY;
+
+	pSelf->flags |= FL_SUPPORTS_LINKTO;
+}
+
+/*
+===============
+ScriptEntCmd_NotSolid
+===============
+*/
+void ScriptEntCmd_NotSolid( scr_entref_t entref )
+{
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+		return;
+	}
+
+	if ( pSelf->classname == scr_const.script_origin )
+	{
+		Com_DPrintf("cannot use the solid/notsolid commands on a script_origin entity( number %i )\n", pSelf->s.number);
+		return;
+	}
+
+	pSelf->r.contents = 0;
+
+	if ( pSelf->classname != scr_const.script_model )
+	{
+		pSelf->s.eFlags |= EF_NONSOLID_BMODEL;
+	}
+
+	SV_LinkEntity(pSelf);
+}
+
+/*
+===============
+ScriptEntCmd_Solid
+===============
+*/
+void ScriptEntCmd_Solid( scr_entref_t entref )
+{
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+		return;
+	}
+
+	if ( pSelf->classname == scr_const.script_origin )
+	{
+		Com_DPrintf("cannot use the solid/notsolid commands on a script_origin entity( number %i )\n", pSelf->s.number);
+		return;
+	}
+
+	if ( pSelf->classname == scr_const.script_model )
+	{
+		pSelf->r.contents = CONTENTS_MISSILECLIP | CONTENTS_CLIPSHOT;
+	}
+	else
+	{
+		pSelf->r.contents = CONTENTS_SOLID;
+		pSelf->s.eFlags &= ~EF_NONSOLID_BMODEL;
+	}
+
+	SV_LinkEntity(pSelf);
+}
+
+/*
+===============
+SP_script_origin
+===============
+*/
+void SP_script_origin( gentity_t *pSelf )
+{
+	InitScriptMover(pSelf);
+	pSelf->r.contents = 0;
+	SV_LinkEntity(pSelf);
+
+	if ( pSelf->s.constantLight )
+	{
+		pSelf->s.eFlags |= EF_NODRAW;
+		return;
+	}
+
+	pSelf->r.svFlags |= SVF_NOCLIENT;
+}
+
+/*
+===============
+SP_script_brushmodel
+===============
+*/
+void SP_script_brushmodel( gentity_t *pSelf )
+{
+	SV_SetBrushModel(pSelf);
+	InitScriptMover(pSelf);
+	pSelf->r.contents = CONTENTS_SOLID;
+
+	SV_LinkEntity(pSelf);
+}
+
+/*
+===============
+ScriptEntCmd_RotateVelocity
+===============
+*/
+void ScriptEntCmd_RotateVelocity( scr_entref_t entref )
+{
+	vec3_t vSpeed;
+	float fDecelTime;
+	float fAccelTime;
+	float fTotalTime;
+
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+		return;
+	}
+
+	Scr_GetVector(0, vSpeed);
+
+	ScriptEntCmdGetCommandTimes(&fTotalTime, &fAccelTime, &fDecelTime);
+	ScriptMover_RotateSpeed(pSelf, vSpeed, fTotalTime, fAccelTime, fDecelTime);
+}
+
+/*
+===============
+ScriptEnt_RotateAxis
+===============
+*/
+void ScriptEnt_RotateAxis( scr_entref_t entref, int iAxis )
+{
+	vec3_t vRot;
+	float fDecelTime;
+	float fAccelTime;
+	float fTotalTime;
+	float fMove;
+
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+		return;
+	}
+
+	fMove = Scr_GetFloat(0);
+
+	ScriptEntCmdGetCommandTimes(&fTotalTime, &fAccelTime, &fDecelTime);
+	VectorCopy(pSelf->r.currentAngles, vRot);
+
+	vRot[iAxis] += fMove;
+	ScriptMover_Rotate(pSelf, vRot, fTotalTime, fAccelTime, fDecelTime);
+}
+
+/*
+===============
+ScriptEntCmd_RotateTo
+===============
+*/
+void ScriptEntCmd_RotateTo( scr_entref_t entref )
+{
+	vec3_t vRot;
+	vec3_t vDest;
+	float fDecelTime;
+	float fAccelTime;
+	float fTotalTime;
+
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+		return;
+	}
+
+	Scr_GetVector(0, vDest);
+
+	ScriptEntCmdGetCommandTimes(&fTotalTime, &fAccelTime, &fDecelTime);
+
+	for ( int i = 0; i < 3; i++ )
+	{
+		vRot[i] = AngleSubtract(vDest[i], pSelf->r.currentAngles[i]) + pSelf->r.currentAngles[i];
+	}
+
+	ScriptMover_Rotate(pSelf, vRot, fTotalTime, fAccelTime, fDecelTime);
+}
+
+/*
+===============
+ScriptEnt_MoveAxis
+===============
+*/
+void ScriptEnt_MoveAxis( scr_entref_t entref, int iAxis )
+{
+	vec3_t vPos;
+	float fDecelTime;
+	float fAccelTime;
+	float fTotalTime;
+	float fMove;
+
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+		return;
+	}
+
+	fMove = Scr_GetFloat(0);
+
+	ScriptEntCmdGetCommandTimes(&fTotalTime, &fAccelTime, &fDecelTime);
+	VectorCopy(pSelf->r.currentOrigin, vPos);
+
+	vPos[iAxis] += fMove;
+	ScriptMover_Move(pSelf, vPos, fTotalTime, fAccelTime, fDecelTime);
+}
+
+/*
+===============
+ScriptEntCmd_GravityMove
+===============
+*/
+void ScriptEntCmd_GravityMove( scr_entref_t entref )
+{
+	vec3_t velocity;
+
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+	}
+
+	Scr_GetVector(0, velocity);
+	ScriptMover_GravityMove(pSelf, velocity, Scr_GetFloat(1));
+}
+
+/*
+===============
+ScriptEntCmd_MoveTo
+===============
+*/
+void ScriptEntCmd_MoveTo( scr_entref_t entref )
+{
+	vec3_t vPos;
+	float fDecelTime;
+	float fAccelTime;
+	float fTotalTime;
+
+	if ( entref.classnum != CLASS_NUM_ENTITY )
+	{
+		Scr_ObjectError("not an entity");
+		return;
+	}
+
+	assert(entref.entnum < MAX_GENTITIES);
+	gentity_t *pSelf = &g_entities[entref.entnum];
+
+	if ( pSelf->classname != scr_const.script_brushmodel && pSelf->classname != scr_const.script_model && pSelf->classname != scr_const.script_origin )
+	{
+		Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
+	}
+
+	Scr_GetVector(0, vPos);
+
+	ScriptEntCmdGetCommandTimes(&fTotalTime, &fAccelTime, &fDecelTime);
+	ScriptMover_Move(pSelf, vPos, fTotalTime, fAccelTime, fDecelTime);
+}
+
+/*
+===============
+ScriptEntCmd_RotateRoll
+===============
+*/
+void ScriptEntCmd_RotateRoll( scr_entref_t entref )
+{
+	ScriptEnt_RotateAxis(entref, ROLL);
+}
+
+/*
+===============
+ScriptEntCmd_RotateYaw
+===============
+*/
+void ScriptEntCmd_RotateYaw( scr_entref_t entref )
+{
+	ScriptEnt_RotateAxis(entref, YAW);
+}
+
+/*
+===============
+ScriptEntCmd_RotatePitch
+===============
+*/
+void ScriptEntCmd_RotatePitch( scr_entref_t entref )
+{
+	ScriptEnt_RotateAxis(entref, PITCH);
+}
+
+/*
+===============
+ScriptEntCmd_MoveZ
+===============
+*/
+void ScriptEntCmd_MoveZ( scr_entref_t entref )
+{
+	ScriptEnt_MoveAxis(entref, Z);
+}
+
+/*
+===============
+ScriptEntCmd_MoveY
+===============
+*/
+void ScriptEntCmd_MoveY( scr_entref_t entref )
+{
+	ScriptEnt_MoveAxis(entref, Y);
+}
+
+/*
+===============
+ScriptEntCmd_MoveX
+===============
+*/
+void ScriptEntCmd_MoveX( scr_entref_t entref )
+{
+	ScriptEnt_MoveAxis(entref, X);
+}
+
+/*
+===============
+SP_script_model
+===============
+*/
+void SP_script_model( gentity_t *pSelf )
+{
+	G_DObjUpdate(pSelf);
+	InitScriptMover(pSelf);
+
+	pSelf->r.svFlags |= SVF_MODEL;
+	pSelf->r.contents = CONTENTS_MISSILECLIP | CONTENTS_CLIPSHOT;
+
+	SV_LinkEntity(pSelf);
+}
+
+/*
+===============
+Reached_ScriptMover
+===============
+*/
+void Reached_ScriptMover( gentity_t *pEnt )
+{
+	qboolean bMoveFinished;
+
+	if ( pEnt->s.pos.trType != TR_STATIONARY && pEnt->s.pos.trTime + pEnt->s.pos.trDuration <= level.time )
+	{
+		bMoveFinished = ScriptMover_UpdateMove(
+		                    &pEnt->s.pos,
+		                    pEnt->r.currentOrigin,
+		                    pEnt->mover.speed,
+		                    pEnt->mover.midTime,
+		                    pEnt->mover.decelTime,
+		                    pEnt->mover.pos1,
+		                    pEnt->mover.pos2,
+		                    pEnt->mover.pos3);
+
+		BG_EvaluateTrajectory(&pEnt->s.pos, level.time, pEnt->r.currentOrigin);
+		SV_LinkEntity(pEnt);
+
+		if ( bMoveFinished )
+		{
+			Scr_Notify(pEnt, scr_const.movedone, 0);
+		}
+	}
+
+	if ( pEnt->s.apos.trType != TR_STATIONARY && pEnt->s.apos.trTime + pEnt->s.apos.trDuration <= level.time )
 	{
 		bMoveFinished = ScriptMover_UpdateMove(
 		                    &pEnt->s.apos,
@@ -155,194 +599,273 @@ void Reached_ScriptMover(gentity_s *pEnt)
 	}
 }
 
-void ScriptMover_SetupMove(trajectory_t *pTr, float *vPos, float fTotalTime, float fAccelTime, float fDecelTime, float *vCurrPos, float *pfSpeed, float *pfMidTime, float *pfDecelTime, float *vPos1, float *vPos2, float *vPos3)
-{
-	vec3_t vMaxSpeed;
-	vec3_t vMove;
-	float fDelta;
-	float fDist;
-
-	VectorSubtract(vPos, vCurrPos, vMove);
-
-	if ( pTr->trType )
-		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
-
-	if ( fAccelTime == 0.0 && fDecelTime == 0.0 )
-	{
-		pTr->trTime = level.time;
-		pTr->trDuration = (int)(fTotalTime * 1000.0);
-		*pfMidTime = fTotalTime;
-		*pfDecelTime = 0.0;
-		VectorCopy(vPos, vPos3);
-		VectorCopy(vCurrPos, pTr->trBase);
-		fDelta = 1000.0 / (float)pTr->trDuration;
-		VectorScale(vMove, fDelta, pTr->trDelta);
-		pTr->trType = TR_LINEAR_STOP;
-		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
-	}
-	else
-	{
-		*pfMidTime = fTotalTime - fAccelTime - fDecelTime;
-		*pfDecelTime = fDecelTime;
-		fDist = VectorLength(vMove);
-		*pfSpeed = (fDist + fDist) / (fTotalTime + fTotalTime - fAccelTime - fDecelTime);
-		Vec3NormalizeTo(vMove, vMaxSpeed);
-		VectorScale(vMaxSpeed, *pfSpeed, vMaxSpeed);
-
-		if ( fAccelTime == 0.0 )
-		{
-			VectorCopy(vCurrPos, vPos1);
-
-			if ( *pfMidTime == 0.0 )
-			{
-				pTr->trTime = level.time;
-				pTr->trDuration = (int)(*pfDecelTime * 1000.0);
-				VectorCopy(vCurrPos, pTr->trBase);
-				VectorCopy(vMaxSpeed, pTr->trDelta);
-				pTr->trType = TR_DECCELERATE;
-			}
-			else
-			{
-				pTr->trTime = level.time;
-				pTr->trDuration = (int)(*pfMidTime * 1000.0);
-				VectorCopy(vCurrPos, pTr->trBase);
-				VectorScale(vMaxSpeed, *pfMidTime, vMove);
-				fDelta = 1000.0 / (float)pTr->trDuration;
-				VectorScale(vMove, fDelta, pTr->trDelta);
-				pTr->trType = TR_LINEAR_STOP;
-			}
-		}
-		else
-		{
-			pTr->trTime = level.time;
-			pTr->trDuration = (int)(fAccelTime * 1000.0);
-			VectorCopy(vCurrPos, pTr->trBase);
-			VectorCopy(vMaxSpeed, pTr->trDelta);
-			pTr->trType = TR_ACCELERATE;
-			BG_EvaluateTrajectory(pTr, level.time + pTr->trDuration, vPos1);
-		}
-
-		VectorMA(vPos1, *pfMidTime, vMaxSpeed, vPos2);
-		VectorCopy(vPos, vPos3);
-		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
-	}
-}
-
-void ScriptMover_SetupMoveSpeed(trajectory_t *pTr, float *vSpeed, float fTotalTime, float fAccelTime, float fDecelTime, float *vCurrPos, float *pfSpeed, float *pfMidTime, float *pfDecelTime, float *vPos1, float *vPos2, float *vPos3)
+/*
+===============
+ScriptMover_SetupMoveSpeed
+===============
+*/
+void ScriptMover_SetupMoveSpeed( trajectory_t *pTr, const float *vSpeed, float fTotalTime, float fAccelTime, float fDecelTime,
+                                 vec3_t vCurrPos, float *pfSpeed, float *pfMidTime, float *pfDecelTime,
+                                 vec3_t vPos1, vec3_t vPos2, vec3_t vPos3 )
 {
 	trajectory_t tr;
 
-	if ( pTr->trType )
+	if ( pTr->trType != TR_STATIONARY )
+	{
 		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
+	}
 
-	if ( fAccelTime == 0.0 && fDecelTime == 0.0 )
+	if ( fAccelTime == 0 && fDecelTime == 0 )
 	{
 		pTr->trTime = level.time;
-		pTr->trDuration = (int)(fTotalTime * 1000.0);
+		pTr->trDuration = fTotalTime * 1000;
+
 		*pfMidTime = fTotalTime;
-		*pfDecelTime = 0.0;
+		*pfDecelTime = 0;
+
 		VectorCopy(vCurrPos, pTr->trBase);
 		VectorCopy(vSpeed, pTr->trDelta);
+
+		assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
 		pTr->trType = TR_LINEAR_STOP;
+
 		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
 		BG_EvaluateTrajectory(pTr, level.time + pTr->trDuration, vPos3);
+
+		return;
 	}
-	else
+
+	*pfMidTime = fTotalTime - fAccelTime - fDecelTime;
+	*pfDecelTime = fDecelTime;
+	*pfSpeed = VectorLength(vSpeed);
+
+	if ( fAccelTime == 0 )
 	{
-		*pfMidTime = fTotalTime - fAccelTime - fDecelTime;
-		*pfDecelTime = fDecelTime;
-		*pfSpeed = VectorLength(vSpeed);
+		VectorCopy(vCurrPos, vPos1);
 
-		if ( fAccelTime == 0.0 )
+		if ( *pfMidTime == 0 )
 		{
-			VectorCopy(vCurrPos, vPos1);
+			pTr->trTime = level.time;
+			pTr->trDuration = *pfDecelTime * 1000;
 
-			if ( *pfMidTime == 0.0 )
-			{
-				pTr->trTime = level.time;
-				pTr->trDuration = (int)(*pfDecelTime * 1000.0);
-				VectorCopy(vCurrPos, pTr->trBase);
-				VectorCopy(vSpeed, pTr->trDelta);
-				pTr->trType = TR_DECCELERATE;
-			}
-			else
-			{
-				pTr->trTime = level.time;
-				pTr->trDuration = (int)(*pfMidTime * 1000.0);
-				VectorCopy(vCurrPos, pTr->trBase);
-				VectorCopy(vSpeed, pTr->trDelta);
-				pTr->trType = TR_LINEAR_STOP;
-			}
+			VectorCopy(vCurrPos, pTr->trBase);
+			VectorCopy(vSpeed, pTr->trDelta);
+
+			assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+			pTr->trType = TR_DECCELERATE;
 		}
 		else
 		{
 			pTr->trTime = level.time;
-			pTr->trDuration = (int)(fAccelTime * 1000.0);
+			pTr->trDuration = *pfMidTime * 1000;
+
 			VectorCopy(vCurrPos, pTr->trBase);
 			VectorCopy(vSpeed, pTr->trDelta);
-			pTr->trType = TR_ACCELERATE;
-			BG_EvaluateTrajectory(pTr, level.time + pTr->trDuration, vPos1);
+
+			assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+			pTr->trType = TR_LINEAR_STOP;
 		}
+	}
+	else
+	{
+		pTr->trTime = level.time;
+		pTr->trDuration = fAccelTime * 1000;
 
-		VectorMA(vPos1, *pfMidTime, vSpeed, vPos2);
+		VectorCopy(vCurrPos, pTr->trBase);
+		VectorCopy(vSpeed, pTr->trDelta);
 
-		if ( *pfDecelTime == 0.0 )
+		assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+		pTr->trType = TR_ACCELERATE;
+
+		BG_EvaluateTrajectory(pTr, level.time + pTr->trDuration, vPos1);
+	}
+
+	VectorMA(vPos1, *pfMidTime, vSpeed, vPos2);
+
+	if ( *pfDecelTime == 0 )
+	{
+		VectorCopy(vPos2, vPos3);
+	}
+	else
+	{
+		tr.trType = TR_DECCELERATE;
+		tr.trTime = level.time;
+
+		tr.trDuration = *pfDecelTime * 1000;
+
+		VectorCopy(vPos2, tr.trBase);
+		VectorCopy(vSpeed, tr.trDelta);
+
+		assert(!IS_NAN((tr.trDelta)[0]) && !IS_NAN((tr.trDelta)[1]) && !IS_NAN((tr.trDelta)[2]));
+
+		BG_EvaluateTrajectory(&tr, level.time + tr.trDuration, vPos3);
+	}
+
+	BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
+}
+
+/*
+===============
+ScriptMover_SetupMove
+===============
+*/
+void ScriptMover_SetupMove( trajectory_t *pTr, const vec3_t vPos, float fTotalTime, float fAccelTime, float fDecelTime,
+                            vec3_t vCurrPos, float *pfSpeed, float *pfMidTime, float *pfDecelTime,
+                            vec3_t vPos1, vec3_t vPos2, vec3_t vPos3 )
+{
+	vec3_t vMaxSpeed;
+	vec3_t vMove;
+
+	VectorSubtract(vPos, vCurrPos, vMove);
+
+	if ( pTr->trType != TR_STATIONARY )
+	{
+		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
+	}
+
+	if ( fAccelTime == 0 && fDecelTime == 0 )
+	{
+		pTr->trTime = level.time;
+		pTr->trDuration = fTotalTime * 1000;
+
+		*pfMidTime = fTotalTime;
+		*pfDecelTime = 0;
+
+		VectorCopy(vPos, vPos3);
+		VectorCopy(vCurrPos, pTr->trBase);
+
+		assert(pTr->trDuration);
+		VectorScale(vMove, 1000.0f / pTr->trDuration, pTr->trDelta);
+		assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+		pTr->trType = TR_LINEAR_STOP;
+
+		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
+		return;
+	}
+
+	*pfMidTime = fTotalTime - fAccelTime - fDecelTime;
+	*pfDecelTime = fDecelTime;
+
+	float fDist = VectorLength(vMove);
+	assert((2.0f * fTotalTime) - fAccelTime - fDecelTime);
+	*pfSpeed = (fDist + fDist) / (fTotalTime + fTotalTime - fAccelTime - fDecelTime);
+
+	Vec3NormalizeTo(vMove, vMaxSpeed);
+	VectorScale(vMaxSpeed, *pfSpeed, vMaxSpeed);
+
+	if ( fAccelTime == 0 )
+	{
+		VectorCopy(vCurrPos, vPos1);
+
+		if ( *pfMidTime == 0 )
 		{
-			VectorCopy(vPos2, vPos3);
+			pTr->trTime = level.time;
+			pTr->trDuration = *pfDecelTime * 1000;
+
+			VectorCopy(vCurrPos, pTr->trBase);
+			VectorCopy(vMaxSpeed, pTr->trDelta);
+
+			assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+			pTr->trType = TR_DECCELERATE;
 		}
 		else
 		{
-			tr.trType = TR_DECCELERATE;
-			tr.trTime = level.time;
-			tr.trDuration = (int)(*pfDecelTime * 1000.0);
-			VectorCopy(vPos2, tr.trBase);
-			VectorCopy(vSpeed, tr.trDelta);
-			BG_EvaluateTrajectory(&tr, level.time + tr.trDuration, vPos3);
+			pTr->trTime = level.time;
+			pTr->trDuration = *pfMidTime * 1000;
+
+			VectorCopy(vCurrPos, pTr->trBase);
+			VectorScale(vMaxSpeed, *pfMidTime, vMove);
+
+			assert(pTr->trDuration);
+			VectorScale(vMove, 1000.0f / pTr->trDuration, pTr->trDelta);
+			assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+			pTr->trType = TR_LINEAR_STOP;
 		}
-
-		BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
 	}
+	else
+	{
+		pTr->trTime = level.time;
+		pTr->trDuration = fAccelTime * 1000;
+
+		VectorCopy(vCurrPos, pTr->trBase);
+		VectorCopy(vMaxSpeed, pTr->trDelta);
+
+		assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+		pTr->trType = TR_ACCELERATE;
+
+		BG_EvaluateTrajectory(pTr, level.time + pTr->trDuration, vPos1);
+	}
+
+	VectorMA(vPos1, *pfMidTime, vMaxSpeed, vPos2);
+	VectorCopy(vPos, vPos3);
+
+	BG_EvaluateTrajectory(pTr, level.time, vCurrPos);
 }
 
-void ScriptMover_Move(gentity_s *pEnt, float *vPos, const float fTotalTime, const float fAccelTime, const float fDecelTime)
+/*
+===============
+ScriptMover_UpdateMove
+===============
+*/
+qboolean ScriptMover_UpdateMove( trajectory_t *pTr, vec3_t vCurrPos, float fSpeed, float fMidTime, float fDecelTime,
+                                 const vec3_t vPos1, const vec3_t vPos2, const vec3_t vPos3 )
 {
-	ScriptMover_SetupMove(
-	    &pEnt->s.pos,
-	    vPos,
-	    fTotalTime,
-	    fAccelTime,
-	    fDecelTime,
-	    pEnt->r.currentOrigin,
-	    &pEnt->mover.speed,
-	    &pEnt->mover.midTime,
-	    &pEnt->mover.decelTime,
-	    pEnt->mover.pos1,
-	    pEnt->mover.pos2,
-	    pEnt->mover.pos3);
+	vec3_t vMove;
+	int trDuration = fMidTime * 1000;
 
-	SV_LinkEntity(pEnt);
+	if ( pTr->trType == TR_ACCELERATE && trDuration > 0 )
+	{
+		pTr->trTime = level.time;
+		pTr->trDuration = trDuration;
+
+		VectorCopy(vPos1, pTr->trBase);
+		VectorSubtract(vPos2, vPos1, vMove);
+
+		assert(trDuration);
+		VectorScale(vMove, 1000.0f / trDuration, pTr->trDelta);
+
+		assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+		pTr->trType = TR_LINEAR_STOP;
+
+		return qfalse;
+	}
+
+	if ( (pTr->trType == TR_ACCELERATE && trDuration <= 0 || pTr->trType == TR_LINEAR_STOP) && fDecelTime > 0 )
+	{
+		pTr->trTime = level.time;
+		pTr->trDuration = fDecelTime * 1000;
+
+		VectorCopy(vPos2, pTr->trBase);
+		VectorSubtract(vPos3, vPos2, vMove);
+
+		Vec3Normalize(vMove);
+
+		VectorScale(vMove, fSpeed, vMove);
+		VectorCopy(vMove, pTr->trDelta);
+
+		assert(!IS_NAN((pTr->trDelta)[0]) && !IS_NAN((pTr->trDelta)[1]) && !IS_NAN((pTr->trDelta)[2]));
+		pTr->trType = TR_DECCELERATE;
+
+		return qfalse;
+	}
+
+	if ( pTr->trType == TR_GRAVITY )
+		BG_EvaluateTrajectory(pTr, level.time, pTr->trBase);
+	else
+		VectorCopy(vPos3, pTr->trBase);
+
+	pTr->trTime = level.time;
+	pTr->trType = TR_STATIONARY;
+
+	return qtrue;
 }
 
-void ScriptMover_Rotate(gentity_s *pEnt, float *vRot, float fTotalTime, float fAccelTime, float fDecelTime)
-{
-	ScriptMover_SetupMove(
-	    &pEnt->s.apos,
-	    vRot,
-	    fTotalTime,
-	    fAccelTime,
-	    fDecelTime,
-	    pEnt->r.currentAngles,
-	    &pEnt->mover.aSpeed,
-	    &pEnt->mover.aMidTime,
-	    &pEnt->mover.aDecelTime,
-	    pEnt->mover.apos1,
-	    pEnt->mover.apos2,
-	    pEnt->mover.apos3);
-
-	SV_LinkEntity(pEnt);
-}
-
-void ScriptMover_RotateSpeed(gentity_s *pEnt, float *vRotSpeed, float fTotalTime, float fAccelTime, float fDecelTime)
+/*
+===============
+ScriptMover_RotateSpeed
+===============
+*/
+void ScriptMover_RotateSpeed( gentity_t *pEnt, const float *vRotSpeed, float fTotalTime, float fAccelTime, float fDecelTime )
 {
 	ScriptMover_SetupMoveSpeed(
 	    &pEnt->s.apos,
@@ -361,411 +884,73 @@ void ScriptMover_RotateSpeed(gentity_s *pEnt, float *vRotSpeed, float fTotalTime
 	SV_LinkEntity(pEnt);
 }
 
-void ScriptEntCmd_MoveTo(scr_entref_t entref)
+/*
+===============
+ScriptMover_Rotate
+===============
+*/
+void ScriptMover_Rotate( gentity_t *pEnt, const vec3_t vRot, float fTotalTime, float fAccelTime, float fDecelTime )
 {
-	gentity_s *pEnt;
-	vec3_t vPos;
-	float pfDecelTime;
-	float pfAccelTime;
-	float fTotalTime;
+	ScriptMover_SetupMove(
+	    &pEnt->s.apos,
+	    vRot,
+	    fTotalTime,
+	    fAccelTime,
+	    fDecelTime,
+	    pEnt->r.currentAngles,
+	    &pEnt->mover.aSpeed,
+	    &pEnt->mover.aMidTime,
+	    &pEnt->mover.aDecelTime,
+	    pEnt->mover.apos1,
+	    pEnt->mover.apos2,
+	    pEnt->mover.apos3);
 
-	if ( entref.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		pEnt = 0;
-	}
-	else
-	{
-		pEnt = &g_entities[entref.entnum];
-
-		if ( pEnt->classname != scr_const.script_brushmodel
-		        && pEnt->classname != scr_const.script_model
-		        && pEnt->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
-		}
-	}
-
-	Scr_GetVector(0, vPos);
-	ScriptEntCmdGetCommandTimes(&fTotalTime, &pfAccelTime, &pfDecelTime);
-	ScriptMover_Move(pEnt, vPos, fTotalTime, pfAccelTime, pfDecelTime);
+	SV_LinkEntity(pEnt);
 }
 
-void ScriptEnt_MoveAxis(scr_entref_t entref, int iAxis)
+/*
+===============
+ScriptMover_GravityMove
+===============
+*/
+void ScriptMover_GravityMove( gentity_t *mover, const vec3_t velocity, float totalTime )
 {
-	gentity_s *pEnt;
-	vec3_t vPos;
-	float pfDecelTime;
-	float pfAccelTime;
-	float pfTotalTime;
-	float fMove;
+	assert(mover);
+	assert(!IS_NAN((velocity)[0]) && !IS_NAN((velocity)[1]) && !IS_NAN((velocity)[2]));
 
-	if ( entref.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		pEnt = 0;
-	}
-	else
-	{
-		pEnt = &g_entities[entref.entnum];
+	mover->s.pos.trTime = level.time;
+	mover->s.pos.trDuration = totalTime * 1000;
 
-		if ( pEnt->classname != scr_const.script_brushmodel
-		        && pEnt->classname != scr_const.script_model
-		        && pEnt->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
-		}
-	}
+	VectorCopy(mover->r.currentOrigin, mover->s.pos.trBase);
+	VectorCopy(velocity, mover->s.pos.trDelta);
 
-	fMove = Scr_GetFloat(0);
-	ScriptEntCmdGetCommandTimes(&pfTotalTime, &pfAccelTime, &pfDecelTime);
-	VectorCopy(pEnt->r.currentOrigin, vPos);
-	vPos[iAxis] = vPos[iAxis] + fMove;
-	ScriptMover_Move(pEnt, vPos, pfTotalTime, pfAccelTime, pfDecelTime);
+	assert(!IS_NAN((mover->s.pos.trDelta)[0]) && !IS_NAN((mover->s.pos.trDelta)[1]) && !IS_NAN((mover->s.pos.trDelta)[2]));
+	mover->s.pos.trType = TR_GRAVITY;
+
+	BG_EvaluateTrajectory(&mover->s.pos, level.time, mover->r.currentOrigin);
+	SV_LinkEntity(mover);
 }
 
-void ScriptEntCmd_MoveX(scr_entref_t entref)
+/*
+===============
+ScriptMover_Move
+===============
+*/
+void ScriptMover_Move( gentity_s *pEnt, const vec3_t vPos, float fTotalTime, float fAccelTime, float fDecelTime )
 {
-	ScriptEnt_MoveAxis(entref, 0);
-}
+	ScriptMover_SetupMove(
+	    &pEnt->s.pos,
+	    vPos,
+	    fTotalTime,
+	    fAccelTime,
+	    fDecelTime,
+	    pEnt->r.currentOrigin,
+	    &pEnt->mover.speed,
+	    &pEnt->mover.midTime,
+	    &pEnt->mover.decelTime,
+	    pEnt->mover.pos1,
+	    pEnt->mover.pos2,
+	    pEnt->mover.pos3);
 
-void ScriptEntCmd_MoveY(scr_entref_t entref)
-{
-	ScriptEnt_MoveAxis(entref, 1);
-}
-
-void ScriptEntCmd_MoveZ(scr_entref_t entref)
-{
-	ScriptEnt_MoveAxis(entref, 2);
-}
-
-void Scr_MoveGravity(gentity_s *ent, float *vEnd, float time)
-{
-	ent->s.pos.trTime = level.time;
-	ent->s.pos.trDuration = (int)(time * 1000.0);
-	VectorCopy(ent->r.currentOrigin, ent->s.pos.trBase);
-	VectorCopy(vEnd, ent->s.pos.trDelta);
-	ent->s.pos.trType = TR_GRAVITY;
-	BG_EvaluateTrajectory(&ent->s.pos, level.time, ent->r.currentOrigin);
-	SV_LinkEntity(ent);
-}
-
-void ScriptEntCmd_GravityMove(scr_entref_t entRef)
-{
-	gentity_s *ent;
-	vec3_t vEnd;
-	float time;
-
-	if ( entRef.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		ent = 0;
-	}
-	else
-	{
-		ent = &g_entities[entRef.entnum];
-
-		if ( ent->classname != scr_const.script_brushmodel
-		        && ent->classname != scr_const.script_model
-		        && ent->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entRef.entnum));
-		}
-	}
-
-	Scr_GetVector(0, vEnd);
-	time = Scr_GetFloat(1u);
-	Scr_MoveGravity(ent, vEnd, time);
-}
-
-void ScriptEntCmd_RotateTo(scr_entref_t entref)
-{
-	gentity_s *pEnt;
-	vec3_t vRot;
-	vec3_t vDest;
-	float pfDecelTime;
-	float pfAccelTime;
-	float pfTotalTime;
-	int i;
-
-	if ( entref.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		pEnt = 0;
-	}
-	else
-	{
-		pEnt = &g_entities[entref.entnum];
-
-		if ( pEnt->classname != scr_const.script_brushmodel
-		        && pEnt->classname != scr_const.script_model
-		        && pEnt->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
-		}
-	}
-
-	Scr_GetVector(0, vDest);
-	ScriptEntCmdGetCommandTimes(&pfTotalTime, &pfAccelTime, &pfDecelTime);
-
-	for ( i = 0; i < 3; ++i )
-	{
-		vRot[i] = AngleSubtract(vDest[i], pEnt->r.currentAngles[i]) + pEnt->r.currentAngles[i];
-	}
-
-	ScriptMover_Rotate(pEnt, vRot, pfTotalTime, pfAccelTime, pfDecelTime);
-}
-
-void ScriptEnt_RotateAxis(scr_entref_t entref, int iAxis)
-{
-	gentity_s *pEnt;
-	vec3_t vRot;
-	float pfDecelTime;
-	float pfAccelTime;
-	float pfTotalTime;
-	float fMove;
-
-	if ( entref.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		pEnt = 0;
-	}
-	else
-	{
-		pEnt = &g_entities[entref.entnum];
-
-		if ( pEnt->classname != scr_const.script_brushmodel
-		        && pEnt->classname != scr_const.script_model
-		        && pEnt->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
-		}
-	}
-
-	fMove = Scr_GetFloat(0);
-	ScriptEntCmdGetCommandTimes(&pfTotalTime, &pfAccelTime, &pfDecelTime);
-	VectorCopy(pEnt->r.currentAngles, vRot);
-	vRot[iAxis] = vRot[iAxis] + fMove;
-	ScriptMover_Rotate(pEnt, vRot, pfTotalTime, pfAccelTime, pfDecelTime);
-}
-
-void ScriptEntCmd_RotatePitch(scr_entref_t entref)
-{
-	ScriptEnt_RotateAxis(entref, 0);
-}
-
-void ScriptEntCmd_RotateYaw(scr_entref_t entref)
-{
-	ScriptEnt_RotateAxis(entref, 1);
-}
-
-void ScriptEntCmd_RotateRoll(scr_entref_t entref)
-{
-	ScriptEnt_RotateAxis(entref, 2);
-}
-
-void ScriptEntCmd_RotateVelocity(scr_entref_t entref)
-{
-	gentity_s *pEnt;
-	vec3_t vSpeed;
-	float pfDecelTime;
-	float pfAccelTime;
-	float fTotalTime;
-
-	if ( entref.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		pEnt = 0;
-	}
-	else
-	{
-		pEnt = &g_entities[entref.entnum];
-
-		if ( pEnt->classname != scr_const.script_brushmodel
-		        && pEnt->classname != scr_const.script_model
-		        && pEnt->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entref.entnum));
-		}
-	}
-
-	Scr_GetVector(0, vSpeed);
-	ScriptEntCmdGetCommandTimes(&fTotalTime, &pfAccelTime, &pfDecelTime);
-	ScriptMover_RotateSpeed(pEnt, vSpeed, fTotalTime, pfAccelTime, pfDecelTime);
-}
-
-void ScriptEntCmd_Solid(scr_entref_t entRef)
-{
-	gentity_s *ent;
-
-	if ( entRef.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		ent = 0;
-	}
-	else
-	{
-		ent = &g_entities[entRef.entnum];
-		if ( ent->classname != scr_const.script_brushmodel
-		        && ent->classname != scr_const.script_model
-		        && ent->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entRef.entnum));
-		}
-	}
-
-	if ( ent->classname == scr_const.script_origin )
-	{
-		Com_DPrintf("cannot use the solid/notsolid commands on a script_origin entity( number %i )\n", ent->s.number);
-	}
-	else
-	{
-		if ( ent->classname == scr_const.script_model )
-		{
-			ent->r.contents = 8320;
-		}
-		else
-		{
-			ent->r.contents = 1;
-			ent->s.eFlags &= ~1u;
-		}
-
-		SV_LinkEntity(ent);
-	}
-}
-
-void ScriptEntCmd_NotSolid(scr_entref_t entRef)
-{
-	gentity_s *ent;
-
-	if ( entRef.classnum )
-	{
-		Scr_ObjectError("not an entity");
-		ent = 0;
-	}
-	else
-	{
-		ent = &g_entities[entRef.entnum];
-
-		if ( ent->classname != scr_const.script_brushmodel
-		        && ent->classname != scr_const.script_model
-		        && ent->classname != scr_const.script_origin )
-		{
-			Scr_ObjectError(va("entity %i is not a script_brushmodel, script_model, or script_origin", entRef.entnum));
-		}
-	}
-
-	if ( ent->classname == scr_const.script_origin )
-	{
-		Com_DPrintf("cannot use the solid/notsolid commands on a script_origin entity( number %i )\n", ent->s.number);
-	}
-	else
-	{
-		ent->r.contents = 0;
-
-		if ( ent->classname != scr_const.script_model )
-			ent->s.eFlags |= 1u;
-
-		SV_LinkEntity(ent);
-	}
-}
-
-void (*ScriptEnt_GetMethod(const char **pName))(scr_entref_t)
-{
-	const char *name;
-	unsigned int i;
-
-	name = *pName;
-
-	for ( i = 0; i < ARRAY_COUNT(scriptent_methods); ++i )
-	{
-		if ( !strcmp(name, scriptent_methods[i].name) )
-		{
-			*pName = scriptent_methods[i].name;
-			return scriptent_methods[i].call;
-		}
-	}
-
-	return NULL;
-}
-
-void InitScriptMover(gentity_s *pSelf)
-{
-	int v1;
-	int v2;
-	int v3;
-	int v4;
-	int v5;
-	int v6;
-	vec3_t color;
-	float light;
-
-	if ( level.spawnVars.spawnVarsValid )
-	{
-		v6 = G_SpawnFloat("light", "100", &light);
-		v5 = G_SpawnVector("color", "1 1 1", color);
-
-		if ( v6 || v5 )
-		{
-			v4 = (int)(color[0] * 255.0);
-
-			if ( v4 > 255 )
-				v4 = 255;
-
-			v3 = (int)(color[1] * 255.0);
-
-			if ( v3 > 255 )
-				v3 = 255;
-
-			v2 = (int)(color[2] * 255.0);
-
-			if ( v2 > 255 )
-				v2 = 255;
-
-			v1 = (int)(light / 4.0);
-
-			if ( v1 > 255 )
-				v1 = 255;
-
-			pSelf->s.constantLight = (v2 << 16) | v4 | (v3 << 8) | (v1 << 24);
-		}
-	}
-
-	pSelf->handler = 5;
-	pSelf->r.svFlags = 0;
-	pSelf->s.eType = ET_SCRIPTMOVER;
-	VectorCopy(pSelf->r.currentOrigin, pSelf->s.pos.trBase);
-	pSelf->s.pos.trType = TR_STATIONARY;
-	VectorCopy(pSelf->r.currentAngles, pSelf->s.apos.trBase);
-	pSelf->s.apos.trType = TR_STATIONARY;
-	pSelf->flags |= 0x1000u;
-}
-
-void SP_script_brushmodel(gentity_s *ent)
-{
-	SV_SetBrushModel(ent);
-	InitScriptMover(ent);
-	ent->r.contents = 1;
-	SV_LinkEntity(ent);
-}
-
-void SP_script_model(gentity_s *ent)
-{
-	G_DObjUpdate(ent);
-	InitScriptMover(ent);
-	ent->r.svFlags |= 4u;
-	ent->r.contents = 8320;
-	SV_LinkEntity(ent);
-}
-
-void SP_script_origin(gentity_s *ent)
-{
-	InitScriptMover(ent);
-	ent->r.contents = 0;
-	SV_LinkEntity(ent);
-
-	if ( ent->s.constantLight )
-		ent->s.eFlags |= 0x20u;
-	else
-		ent->r.svFlags |= 1u;
+	SV_LinkEntity(pEnt);
 }

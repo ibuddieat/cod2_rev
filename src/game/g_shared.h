@@ -1264,7 +1264,7 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 // special server behaviors
 #define	SVF_NOCLIENT  0x00000001 // don't send entity to clients, even if it has effects
 #define	SVF_BODY      0x00000002 // player or corpse
-#define	SVF_DOBJ      0x00000004 // dobj model, can be player model, script model, item.
+#define	SVF_MODEL     0x00000004 // can be player model, script model, item.
 #define	SVF_BROADCAST 0x00000008 // send to all connected clients
 #define	SVF_OBJECTIVE 0x00000010 // entity has an objective on it
 #define SVF_CYLINDER  0x00000020 // trigger_radius and few other things
@@ -1294,6 +1294,7 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 
 #define ENT_HANDLER_NULL              0
 #define ENT_HANDLER_ACTOR_INIT        1
+#define ENT_HANDLER_SCRIPT_MOVER      5
 #define ENT_HANDLER_GRENADE           7
 #define ENT_HANDLER_ROCKET            8
 #define ENT_HANDLER_CLIENT            9
@@ -2019,7 +2020,11 @@ void GScr_ClientClaimTrigger(scr_entref_t entref);
 void GScr_ClientReleaseTrigger(scr_entref_t entref);
 void GScr_ReleaseClaimedTrigger(scr_entref_t entref);
 
-
+void ScriptMover_RotateSpeed( gentity_t *pEnt, const float *vRotSpeed, float fTotalTime, float fAccelTime, float fDecelTime );
+void ScriptMover_Rotate( gentity_t *pEnt, const vec3_t vRot, float fTotalTime, float fAccelTime, float fDecelTime );
+void ScriptMover_Move( gentity_s *pEnt, const vec3_t vPos, float fTotalTime, float fAccelTime, float fDecelTime );
+void ScriptMover_GravityMove( gentity_t *mover, const vec3_t velocity, float totalTime );
+qboolean ScriptMover_UpdateMove( trajectory_t *pTr, vec3_t vCurrPos, float fSpeed, float fMidTime, float fDecelTime, const vec3_t vPos1, const vec3_t vPos2, const vec3_t vPos3 );
 
 void ScriptEntCmd_MoveTo(scr_entref_t entref);
 void ScriptEntCmd_MoveX(scr_entref_t entref);
