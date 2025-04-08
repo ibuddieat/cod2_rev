@@ -52,10 +52,7 @@ int G_SpawnStringInternal(const SpawnVar *spawnVar, const char *key, const char 
 	return 0;
 }
 
-int G_SpawnString(const char *key, const char *defaultString, const char **out)
-{
-	return G_SpawnStringInternal(&level.spawnVars, key, defaultString, out);
-}
+
 
 int G_GetEntityToken(char *buffer, int bufferSize)
 {

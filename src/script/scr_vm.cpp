@@ -3895,3 +3895,22 @@ void Scr_Init()
 	scrCompilePub.builtinFunc = 0;
 	scrVarPub.bInited = 1;
 }
+
+void Scr_AddExecEntThreadNum(int entnum, unsigned int classnum, int handle, int paramcount)
+{
+	unsigned int threadId;
+	unsigned int id;
+	unsigned int self;
+	const char *pos;
+
+	pos = &scrVarPub.programBuffer[handle];
+	if ( !scrVmPub.function_count )
+		Scr_ResetTimeout();
+	self = Scr_GetEntityId(entnum, classnum);
+	AddRefToObject(self);
+	threadId = AllocThread(self);
+	id = VM_Execute(threadId, pos, paramcount);
+	RemoveRefToObject(id);
+	++scrVmPub.outparamcount;
+	--scrVmPub.inparamcount;
+}

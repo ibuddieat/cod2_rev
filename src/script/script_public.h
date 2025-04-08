@@ -823,6 +823,7 @@ void SL_Restart();
 void SL_Init();
 
 unsigned int Scr_CreateCanonicalFilename(const char *name);
+void Scr_CopyEntityNum( int fromEntnum, int toEntnum, unsigned int classnum );
 
 VariableValue* Scr_GetValue(unsigned int param);
 unsigned int FindNextSibling(unsigned int id);
@@ -967,7 +968,7 @@ void Scr_PrecacheAnimTrees(void *(*Alloc)(int), int user);
 void Scr_FindAnimTree(scr_animtree_t *pTree, const char *filename);
 
 qboolean Scr_IsInOpcodeMemory(const char *pos);
-void Scr_GetGenericField(const byte *data, int fieldtype, int offset);
+void Scr_GetGenericField( byte *b, int type, int ofs );
 void Scr_SetGenericField(byte *data, int fieldtype, int offset);
 unsigned int Scr_GetCanonicalStringIndex(unsigned int index);
 unsigned int SL_GetCanonicalString(const char *str);
@@ -1031,3 +1032,5 @@ void EmitMethod(sval_u expr, sval_u func_name, sval_u params, sval_u methodSourc
 void EmitThread(sval_u val);
 
 void ScriptCompile(sval_u val, unsigned int filePosId, unsigned int scriptId);
+
+void Scr_AddExecEntThreadNum(int entnum, unsigned int classnum, int handle, int paramcount);

@@ -2,7 +2,7 @@
 #include "g_shared.h"
 #include "../script/script_public.h"
 
-game_hudelem_t g_hudelems[MAX_GENTITIES];
+game_hudelem_t g_hudelems[MAX_HUDELEMS_TOTAL];
 
 const char *g_he_horzalign[] =
 {
@@ -32,7 +32,7 @@ const char *g_he_alignx[] = { "left", "center", "right" };
 const char *g_he_aligny[] = { "top", "middle", "bottom" };
 const char *g_he_font[] =   { "default", "bigfixed", "smallfixed", };
 
-#define HEOFS( x ) (intptr_t)&( (game_hudelem_t*)0 )->x
+#define HEOFS( x ) ( (intptr_t)&( ( (game_hudelem_t *)0 )->x ) )
 
 game_hudelem_field_t g_hudelem_fields[] =
 {
@@ -106,7 +106,7 @@ void HudElem_UpdateClient( gclient_t *client, int clientNum, int which )
 	archivalCount = 0;
 	currentCount = 0;
 
-	for ( i = 0, hud = g_hudelems; i < MAX_GENTITIES; i++, hud++ )
+	for ( i = 0, hud = g_hudelems; i < MAX_HUDELEMS_TOTAL; i++, hud++ )
 	{
 		if ( hud->elem.type == HE_TYPE_FREE )
 		{

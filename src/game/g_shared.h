@@ -1,6 +1,7 @@
 #pragma once
 
 #define GAMEVERSION "Call of Duty 2"
+#define GAME_VERSION "cod"
 
 #define MAX_HUDELEMENTS 31
 #define MAX_HUDELEMS_ARCHIVAL MAX_HUDELEMENTS
@@ -16,7 +17,7 @@
 #define MAX_SCRIPT_IO_FILE_HANDLES 1
 #define MAX_EFFECT_NAMES 64
 #define MAX_EFFECT_TAGS 256
-
+#define MAX_HUDELEMS_TOTAL MAX_GENTITIES // meh
 #define MAX_WEAPONS         128  // (SA) and yet more!
 
 typedef struct gclient_s gclient_t;
@@ -124,7 +125,13 @@ typedef struct entityState_s
 	int constantLight;
 	int loopSound;
 	int surfType;
-	int index;
+	union
+	{
+		int index;
+		short brushmodel;
+		short xmodel;
+		short primaryLight;
+	};
 	int clientNum;
 	int iHeadIcon;
 	int iHeadIconTeam;
@@ -735,7 +742,7 @@ typedef struct game_entity_field_s
 	const char *name;
 	int ofs;
 	int type;
-	void (*setter)(gentity_s *, int);
+	void (*callback)(gentity_s *, int);
 } game_entity_field_t;
 
 typedef struct game_client_field_s
@@ -751,8 +758,6 @@ enum g_class_num_t
 {
 	CLASS_NUM_ENTITY,
 	CLASS_NUM_HUDELEM,
-	CLASS_NUM_PATHNODE,
-	CLASS_NUM_VEHICLENODE,
 	CLASS_NUM_COUNT
 };
 
@@ -1201,13 +1206,17 @@ struct useList_t
 
 enum cs_index_t
 {
+	CS_GAME_VERSION = 2,
 	CS_AMBIENT = 3,
+	CS_MESSAGE = 4,
 	CS_SCORES1 = 5,
 	CS_SCORES2 = 6,
 	CS_WEAPONS = 7,
 	CS_ITEMS = 8,
 	CS_NORTHYAW = 11,
 	CS_FOGVARS = 12,
+	CS_LEVEL_START_TIME = 13,
+	CS_MOTD = 14,
 	CS_VOTE_TIME = 15,
 	CS_VOTE_STRING = 16,
 	CS_VOTE_YES = 17,
@@ -1222,6 +1231,13 @@ enum cs_index_t
 	CS_SHELLSHOCKS = 1166,
 	CS_SCRIPT_MENUS = 1246,
 	CS_HINTSTRINGS = 1278
+};
+
+enum
+{
+	ENTFIELD_ENTITY = 0x0,
+	ENTFIELD_CLIENT = 0xC000,
+	ENTFIELD_MASK = 0xC000,
 };
 
 enum SND_ENVEFFECTPRIO
@@ -1252,8 +1268,6 @@ extern const char *modNames[];
 
 inline vec3_t playerMins = { -15.0, -15.0, 0.0 };
 inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
-
-#define ENTFIELD_MASK 0xC000
 
 //#define	ITEM_RADIUS			15		// item sizes are needed for client side pickup detection
 #define ITEM_RADIUS     1 // Rafael changed the radius so that the items would fit in the 3 new containers
@@ -1340,6 +1354,7 @@ extern dvar_t *g_dropUpSpeedRand;
 extern dvar_t *g_maxDroppedWeapons;
 extern dvar_t *g_weaponAmmoPools;
 extern dvar_t *g_no_script_spam;
+extern dvar_t *g_motd;
 
 extern dvar_t *voice_global;
 extern dvar_t *voice_deadChat;
@@ -1598,6 +1613,7 @@ void G_PlayerStateToEntityStateExtrapolate( playerState_t *ps, entityState_t *s,
 
 void GScr_AddFieldsForEntity();
 void GScr_AddFieldsForRadiant();
+void G_SpawnStruct();
 
 void Scr_PlayerDamage(gentity_s *self, gentity_s *inflictor, gentity_s *attacker, int damage, int dflags, unsigned int meansOfDeath, int iWeapon, const float *vPoint, const float *vDir, int hitLoc, int timeOffset);
 void Scr_PlayerKilled(gentity_s *self, gentity_s *inflictor, gentity_s *attacker, int damage, unsigned int meansOfDeath, int iWeapon, const float *vDir, int hitLoc, int psTimeOffset, int deathAnimDuration);
@@ -1742,6 +1758,8 @@ void GScr_LoadScripts();
 void GScr_FreeScripts();
 
 void G_RegisterDvars();
+
+int G_SpawnStringInternal(const SpawnVar *spawnVar, const char *key, const char *defaultString, const char **out);
 
 void Touch_Multi(gentity_s *self, gentity_s *other, int touched);
 void hurt_use(gentity_s *self, gentity_s *ent, gentity_s *other);

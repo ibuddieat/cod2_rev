@@ -3203,3 +3203,40 @@ void Var_Init()
 	Var_ResetAll();
 	Var_InitClassMap();
 }
+
+void CopyEntity(unsigned int parentId, unsigned int newParentId)
+{
+	int type;
+	VariableValueInternal *newEntryValue;
+	VariableValueInternal *entryValue;
+	unsigned int index;
+	unsigned int id;
+
+	for ( id = FindNextSibling(parentId); id; id = FindNextSibling(id) )
+	{
+		entryValue = &scrVarGlob.variableList[id];
+		index = entryValue->w.status >> 8;
+		if ( index != 131070 )
+		{
+			newEntryValue = &scrVarGlob.variableList[GetVariable(newParentId, index)];
+			type = entryValue->w.status & 0x1F;
+			newEntryValue->w.status |= type;
+			newEntryValue->u.u.intValue = entryValue->u.u.intValue;
+			AddRefToValueInternal(type, newEntryValue->u.u);
+		}
+	}
+}
+
+void Scr_CopyEntityNum( int fromEntnum, int toEntnum, unsigned int classnum )
+{
+	unsigned int fromEntId;
+
+	fromEntId = FindEntityId(fromEntnum, classnum);
+	if ( fromEntId )
+	{
+		if ( FindNextSibling(fromEntId) )
+		{
+			CopyEntity(fromEntId, Scr_GetEntityId(toEntnum, classnum));
+		}
+	}
+}

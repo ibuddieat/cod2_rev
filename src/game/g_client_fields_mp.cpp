@@ -2,23 +2,23 @@
 #include "../server/server.h"
 #include "g_shared.h"
 
-#define GCOFS( x ) (intptr_t)&( (gclient_t*)0 )->x
+#define CFOFS( x ) ( (intptr_t)&( ( (gclient_t *)0 )->x ) )
 
 game_client_field_t g_client_fields[] =
 {
-	{ "name", GCOFS( sess.state.name ), F_LSTRING, ClientScr_ReadOnly, NULL },
+	{ "name", CFOFS( sess.state.name ), F_LSTRING, ClientScr_ReadOnly, NULL },
 	{ "sessionteam", 0, F_STRING, ClientScr_SetSessionTeam, ClientScr_GetSessionTeam },
 	{ "sessionstate", 0, F_STRING, ClientScr_SetSessionState, ClientScr_GetSessionState },
-	{ "maxhealth", GCOFS( sess.maxHealth ), F_INT, ClientScr_SetMaxHealth, NULL },
-	{ "score", GCOFS( sess.score ), F_INT, ClientScr_SetScore, NULL },
-	{ "deaths", GCOFS( sess.deaths ), F_INT, NULL, NULL },
+	{ "maxhealth", CFOFS( sess.maxHealth ), F_INT, ClientScr_SetMaxHealth, NULL },
+	{ "score", CFOFS( sess.score ), F_INT, ClientScr_SetScore, NULL },
+	{ "deaths", CFOFS( sess.deaths ), F_INT, NULL, NULL },
 	{ "statusicon", 0, F_STRING, ClientScr_SetStatusIcon, ClientScr_GetStatusIcon },
 	{ "headicon", 0, F_STRING, ClientScr_SetHeadIcon, ClientScr_GetHeadIcon },
 	{ "headiconteam", 0, F_STRING, ClientScr_SetHeadIconTeam, ClientScr_GetHeadIconTeam },
-	{ "spectatorclient", GCOFS( sess.forceSpectatorClient ), F_INT, ClientScr_SetSpectatorClient, NULL },
-	{ "archivetime", GCOFS( sess.archiveTime ), F_FLOAT, ClientScr_SetArchiveTime, ClientScr_GetArchiveTime },
-	{ "psoffsettime", GCOFS( sess.psOffsetTime ), F_INT, ClientScr_SetPSOffsetTime, ClientScr_GetPSOffsetTime },
-	{ "pers", GCOFS( sess.pers ), F_OBJECT, ClientScr_ReadOnly, NULL },
+	{ "spectatorclient", CFOFS( sess.forceSpectatorClient ), F_INT, ClientScr_SetSpectatorClient, NULL },
+	{ "archivetime", CFOFS( sess.archiveTime ), F_FLOAT, ClientScr_SetArchiveTime, ClientScr_GetArchiveTime },
+	{ "psoffsettime", CFOFS( sess.psOffsetTime ), F_INT, ClientScr_SetPSOffsetTime, ClientScr_GetPSOffsetTime },
+	{ "pers", CFOFS( sess.pers ), F_OBJECT, ClientScr_ReadOnly, NULL },
 	{ NULL, 0, F_INT, NULL, NULL } // field terminator
 };
 
