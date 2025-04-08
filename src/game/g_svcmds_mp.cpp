@@ -1,6 +1,57 @@
 #include "../qcommon/qcommon.h"
 #include "g_shared.h"
 
+/*
+===================
+Svcmd_EntityList_f
+===================
+*/
+void    Svcmd_EntityList_f( void )
+{
+	int e;
+	gentity_t       *check;
+
+	check = g_entities + 1;
+	for ( e = 1; e < level.num_entities ; e++, check++ )
+	{
+		if ( !check->r.inuse )
+		{
+			continue;
+		}
+		Com_Printf( "%3i:", e );
+		switch ( check->s.eType )
+		{
+		case ET_GENERAL:
+			Com_Printf( "ET_GENERAL          " );
+			break;
+		case ET_PLAYER:
+			Com_Printf( "ET_PLAYER           " );
+			break;
+		case ET_ITEM:
+			Com_Printf( "ET_ITEM             " );
+			break;
+		case ET_MISSILE:
+			Com_Printf( "ET_MISSILE          " );
+			break;
+		case ET_INVISIBLE:
+			Com_Printf( "ET_INVISIBLE        " );
+			break;
+		case ET_SCRIPTMOVER:
+			Com_Printf( "ET_SCRIPTMOVER      " );
+			break;
+		default:
+			Com_Printf( "%3i                 ", check->s.eType );
+			break;
+		}
+
+		if ( check->classname )
+		{
+			Com_Printf( "%s", SL_ConvertToString( check->classname ) );
+		}
+		Com_Printf( "\n" );
+	}
+}
+
 #define MAX_CVAR_VALUE_STRING   256
 
 typedef struct ipFilter_s
@@ -18,8 +69,6 @@ typedef struct ipFilterList_s
 } ipFilterList_t;
 
 static ipFilterList_t ipFilters;
-
-extern dvar_t *g_banIPs;
 
 /*
 =================
@@ -85,7 +134,7 @@ qboolean StringToFilter( const char *s, ipFilter_t *f )
 UpdateIPBans
 =================
 */
-static void UpdateIPBans( ipFilterList_t *ipFilterList )
+void UpdateIPBans( void )
 {
 	byte b[4];
 	byte m[4];
@@ -94,15 +143,15 @@ static void UpdateIPBans( ipFilterList_t *ipFilterList )
 	char ip[64];
 
 	*iplist_final = 0;
-	for ( i = 0 ; i < ipFilterList->numIPFilters ; i++ )
+	for ( i = 0 ; i < ipFilters.numIPFilters ; i++ )
 	{
-		if ( ipFilterList->ipFilters[i].compare == 0xffffffff )
+		if ( ipFilters.ipFilters[i].compare == 0xffffffff )
 		{
 			continue;
 		}
 
-		*(unsigned *)b = ipFilterList->ipFilters[i].compare;
-		*(unsigned *)m = ipFilterList->ipFilters[i].mask;
+		*(unsigned *)b = ipFilters.ipFilters[i].compare;
+		*(unsigned *)m = ipFilters.ipFilters[i].mask;
 		*ip = 0;
 		for ( j = 0; j < 4 ; j++ )
 		{
@@ -130,34 +179,74 @@ static void UpdateIPBans( ipFilterList_t *ipFilterList )
 AddIP
 =================
 */
-void AddIP( ipFilterList_t *ipFilterList, const char *str )
+void AddIP( const char *str )
 {
 	int i;
 
-	for ( i = 0; i < ipFilterList->numIPFilters; i++ )
+	for ( i = 0; i < ipFilters.numIPFilters; i++ )
 	{
-		if (  ipFilterList->ipFilters[i].compare == 0xffffffff )
+		if (  ipFilters.ipFilters[i].compare == 0xffffffff )
 		{
 			break;      // free spot
 		}
 	}
 
-	if ( i == ipFilterList->numIPFilters )
+	if ( i == ipFilters.numIPFilters )
 	{
-		if ( ipFilterList->numIPFilters == MAX_IPFILTERS )
+		if ( ipFilters.numIPFilters == MAX_IPFILTERS )
 		{
 			Com_Printf( "IP filter list is full\n" );
 			return;
 		}
-		ipFilterList->numIPFilters++;
+		ipFilters.numIPFilters++;
 	}
 
-	if ( !StringToFilter( str, &ipFilterList->ipFilters[i] ) )
+	if ( !StringToFilter( str, &ipFilters.ipFilters[i] ) )
 	{
-		ipFilterList->ipFilters[i].compare = 0xffffffffu;
+		ipFilters.ipFilters[i].compare = 0xffffffffu;
 	}
 
-	UpdateIPBans( ipFilterList );
+	UpdateIPBans();
+}
+
+/*
+=================
+Svcmd_RemoveIP_f
+=================
+*/
+void Svcmd_RemoveIP_f( void )
+{
+	ipFilter_t f;
+	int i;
+	char str[MAX_TOKEN_CHARS];
+
+	if ( SV_Cmd_Argc() < 2 )
+	{
+		Com_Printf( "Usage:  sv removeip <ip-mask>\n" );
+		return;
+	}
+
+	SV_Cmd_ArgvBuffer( 1, str, sizeof( str ) );
+
+	if ( !StringToFilter( str, &f ) )
+	{
+		return;
+	}
+
+	for ( i = 0 ; i < ipFilters.numIPFilters ; i++ )
+	{
+		if ( ipFilters.ipFilters[i].mask == f.mask   &&
+		        ipFilters.ipFilters[i].compare == f.compare )
+		{
+			ipFilters.ipFilters[i].compare = 0xffffffffu;
+			Com_Printf( "Removed.\n" );
+
+			UpdateIPBans();
+			return;
+		}
+	}
+
+	Com_Printf( "Didn't find %s.\n", str );
 }
 
 /*
@@ -177,48 +266,7 @@ void Svcmd_AddIP_f( void )
 
 	SV_Cmd_ArgvBuffer( 1, str, sizeof( str ) );
 
-	AddIP( &ipFilters, str );
-
-}
-
-/*
-=================
-Svcmd_RemoveIP_f
-=================
-*/
-void Svcmd_RemoveIP_f( void )
-{
-	ipFilter_t f;
-	int i;
-	char str[MAX_TOKEN_CHARS];
-
-	if ( SV_Cmd_Argc() < 2 )
-	{
-		Com_Printf( "Usage:  removeip <ip-mask>\n" );
-		return;
-	}
-
-	SV_Cmd_ArgvBuffer( 1, str, sizeof( str ) );
-
-	if ( !StringToFilter( str, &f ) )
-	{
-		return;
-	}
-
-	for ( i = 0 ; i < ipFilters.numIPFilters ; i++ )
-	{
-		if ( ipFilters.ipFilters[i].mask == f.mask   &&
-		        ipFilters.ipFilters[i].compare == f.compare )
-		{
-			ipFilters.ipFilters[i].compare = 0xffffffffu;
-			Com_Printf( "Removed.\n" );
-
-			UpdateIPBans( &ipFilters );
-			return;
-		}
-	}
-
-	Com_Printf( "Didn't find %s.\n", str );
+	AddIP( str );
 }
 
 /*
@@ -246,77 +294,70 @@ void G_ProcessIPBans( void )
 			*s++ = 0;
 		if ( *t )
 		{
-			AddIP( &ipFilters, t );
+			AddIP( t );
 		}
 		t = s;
 	}
 }
 
-void Svcmd_EntityList_f()
+// fretn, note: if a player is called '3' and there are only 2 players
+// on the server (clientnum 0 and 1)
+// this function will say 'client 3 is not connected'
+// solution: first check for usernames, if none is found, check for slotnumbers
+gclient_t   *ClientForString( const char *s )
 {
-	gentity_s *entity;
+	gclient_t   *cl;
 	int i;
+	int idnum;
 
-	entity = &g_entities[1];
-
-	for ( i = 1; i < level.num_entities; ++i, ++entity )
+	// check for a name match
+	for ( i = 0 ; i < level.maxclients ; i++ )
 	{
-		if ( entity->r.inuse )
+		cl = &level.clients[i];
+		if ( cl->sess.connected == CON_DISCONNECTED )
 		{
-			Com_Printf("%3i:", i);
-
-			switch ( entity->s.eType )
-			{
-			case ET_GENERAL:
-				Com_Printf("ET_GENERAL          ");
-				break;
-			case ET_PLAYER:
-				Com_Printf("ET_PLAYER           ");
-				break;
-			case ET_PLAYER_CORPSE:
-				Com_Printf("ET_PLAYER_CORPSE    ");
-				break;
-			case ET_ITEM:
-				Com_Printf("ET_ITEM             ");
-				break;
-			case ET_MISSILE:
-				Com_Printf("ET_MISSILE          ");
-				break;
-			case ET_INVISIBLE:
-				Com_Printf("ET_INVISIBLE        ");
-				break;
-			case ET_SCRIPTMOVER:
-				Com_Printf("ET_SCRIPTMOVER      ");
-				break;
-			case ET_FX:
-				Com_Printf("ET_FX               ");
-				break;
-			case ET_LOOP_FX:
-				Com_Printf("ET_LOOP_FX          ");
-				break;
-			case ET_TURRET:
-				Com_Printf("ET_TURRET           ");
-				break;
-			default:
-				Com_Printf("%3i                 ", entity->s.eType);
-				break;
-			}
-
-			if ( entity->classname )
-			{
-				Com_Printf("%s", SL_ConvertToString(entity->classname));
-			}
-
-			Com_Printf("\n");
+			continue;
+		}
+		if ( !Q_stricmp( cl->sess.state.name, s ) )
+		{
+			return cl;
 		}
 	}
+
+	// numeric values are just slot numbers
+	if ( s[0] >= '0' && s[0] <= '9' )
+	{
+		idnum = atoi( s );
+		if ( idnum < 0 || idnum >= level.maxclients )
+		{
+			Com_Printf( "Bad client slot: %i\n", idnum );
+			return NULL;
+		}
+
+		cl = &level.clients[idnum];
+		if ( cl->sess.connected == CON_DISCONNECTED )
+		{
+			Com_Printf( "Client %i is not connected\n", idnum );
+			return NULL;
+		}
+		return cl;
+	}
+
+	Com_Printf( "User %s is not on the server\n", s );
+
+	return NULL;
 }
 
+/*
+=================
+ConsoleCommand
+=================
+*/
 qboolean ConsoleCommand()
 {
 	char cmd[MAX_TOKEN_CHARS];
 
-	SV_Cmd_ArgvBuffer(0, cmd, 1024);
+	SV_Cmd_ArgvBuffer( 0, cmd, sizeof( cmd ) );
 
 	if ( Q_stricmp( cmd, "entitylist" ) == 0 )
 	{
@@ -342,6 +383,7 @@ qboolean ConsoleCommand()
 		return qtrue;
 	}
 
+	// if ( g_dedicated.integer ) {
 	if ( Q_stricmp( cmd, "say" ) == 0 )
 	{
 		SV_GameSendServerCommand(-1, SV_CMD_CAN_IGNORE, va("%c \"GAME_SERVER\x15: %s\"", 101, ConcatArgs(1)));

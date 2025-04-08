@@ -1355,6 +1355,7 @@ extern dvar_t *g_maxDroppedWeapons;
 extern dvar_t *g_weaponAmmoPools;
 extern dvar_t *g_no_script_spam;
 extern dvar_t *g_motd;
+extern dvar_t *g_banIPs;
 
 extern dvar_t *voice_global;
 extern dvar_t *voice_deadChat;
