@@ -88,7 +88,7 @@ void G_UpdateObjectiveToClients()
 		{
 			obj = &level.objectives[objNum];
 
-			if ( obj->state == OBJST_EMPTY || ( obj->teamNum != TEAM_NONE && obj->teamNum != client->sess.state.team ) )
+			if ( obj->state == OBJST_EMPTY || ( obj->teamNum != TEAM_NONE && obj->teamNum != client->sess.cs.team ) )
 			{
 				client->ps.objective[objNum].state = OBJST_EMPTY;
 				continue;
@@ -142,7 +142,7 @@ G_GetClientState
 clientState_t* G_GetClientState( int clientNum )
 {
 	assert(clientNum >= 0 && clientNum < MAX_CLIENTS);
-	return &level.clients[clientNum].sess.state;
+	return &level.clients[clientNum].sess.cs;
 }
 
 /*
@@ -262,7 +262,7 @@ static signed int SortRanks( const void *a, const void *b )
 		return -1;
 	}
 	// then spectators
-	if ( ca->sess.state.team == TEAM_SPECTATOR && cb->sess.state.team == TEAM_SPECTATOR )
+	if ( ca->sess.cs.team == TEAM_SPECTATOR && cb->sess.cs.team == TEAM_SPECTATOR )
 	{
 		if ( ca < cb)
 		{
@@ -274,11 +274,11 @@ static signed int SortRanks( const void *a, const void *b )
 		}
 		return 0;
 	}
-	if ( ca->sess.state.team == TEAM_SPECTATOR )
+	if ( ca->sess.cs.team == TEAM_SPECTATOR )
 	{
 		return 1;
 	}
-	if ( cb->sess.state.team == TEAM_SPECTATOR )
+	if ( cb->sess.cs.team == TEAM_SPECTATOR )
 	{
 		return -1;
 	}
@@ -329,7 +329,7 @@ void CalculateRanks()
 		level.sortedClients[level.numConnectedClients] = i;
 		level.numConnectedClients++;
 
-		if ( level.clients[i].sess.state.team == TEAM_SPECTATOR )
+		if ( level.clients[i].sess.cs.team == TEAM_SPECTATOR )
 		{
 			continue;
 		}

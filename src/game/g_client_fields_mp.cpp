@@ -6,7 +6,7 @@
 
 game_client_field_t g_client_fields[] =
 {
-	{ "name", CFOFS( sess.state.name ), F_LSTRING, ClientScr_ReadOnly, NULL },
+	{ "name", CFOFS( sess.cs.name ), F_LSTRING, ClientScr_ReadOnly, NULL },
 	{ "sessionteam", 0, F_STRING, ClientScr_SetSessionTeam, ClientScr_GetSessionTeam },
 	{ "sessionstate", 0, F_STRING, ClientScr_SetSessionState, ClientScr_GetSessionState },
 	{ "maxhealth", CFOFS( sess.maxHealth ), F_INT, ClientScr_SetMaxHealth, NULL },
@@ -297,19 +297,19 @@ void ClientScr_SetSessionTeam( gclient_t *pSelf, const game_client_field_t *pFie
 
 	if ( newTeam == scr_const.axis )
 	{
-		pSelf->sess.state.team = TEAM_AXIS;
+		pSelf->sess.cs.team = TEAM_AXIS;
 	}
 	else if ( newTeam == scr_const.allies )
 	{
-		pSelf->sess.state.team = TEAM_ALLIES;
+		pSelf->sess.cs.team = TEAM_ALLIES;
 	}
 	else if ( newTeam == scr_const.spectator )
 	{
-		pSelf->sess.state.team = TEAM_SPECTATOR;
+		pSelf->sess.cs.team = TEAM_SPECTATOR;
 	}
 	else if ( newTeam == scr_const.none )
 	{
-		pSelf->sess.state.team = TEAM_FREE;
+		pSelf->sess.cs.team = TEAM_FREE;
 	}
 	else
 	{
@@ -466,7 +466,7 @@ void ClientScr_GetSessionTeam( gclient_t *pSelf, const game_client_field_t *pFie
 {
 	assert(pSelf);
 
-	switch ( pSelf->sess.state.team )
+	switch ( pSelf->sess.cs.team )
 	{
 	case TEAM_FREE:
 		Scr_AddConstString(scr_const.none);

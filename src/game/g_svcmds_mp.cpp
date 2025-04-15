@@ -318,7 +318,7 @@ gclient_t   *ClientForString( const char *s )
 		{
 			continue;
 		}
-		if ( !Q_stricmp( cl->sess.state.name, s ) )
+		if ( !Q_stricmp( cl->sess.cs.name, s ) )
 		{
 			return cl;
 		}

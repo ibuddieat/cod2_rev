@@ -75,7 +75,7 @@ void Player_UpdateLookAtEntity(gentity_s *ent)
 			{
 				VectorSubtract(lookAtEnt->r.currentOrigin, vOrigin, vPos);
 
-				if ( lookAtEnt->client->sess.state.team == ent->client->sess.state.team && ent->client->sess.state.team )
+				if ( lookAtEnt->client->sess.cs.team == ent->client->sess.cs.team && ent->client->sess.cs.team )
 				{
 					if ( Square(g_friendlyNameDist->current.decimal) > VectorLengthSquared(vPos) && !ent->client->pLookatEnt )
 						ent->client->pLookatEnt = lookAtEnt;
@@ -446,7 +446,7 @@ setstring:
 						if ( useEnt->classname != scr_const.trigger_use && useEnt->classname != scr_const.trigger_use_touch )
 							goto setstring;
 
-						if ( (!useEnt->team || useEnt->team == ent->client->sess.state.team)
+						if ( (!useEnt->team || useEnt->team == ent->client->sess.cs.team)
 						        && (useEnt->trigger.singleUserEntIndex == 1023
 						            || useEnt->trigger.singleUserEntIndex == ent->client->ps.clientNum) )
 						{

@@ -32,7 +32,7 @@ void G_BroadcastVoice( gentity_t *talker, VoicePacket_t *voicePacket )
 		{
 			if ( !OnSameTeam(talker, ent) )
 			{
-				if ( talker->client->sess.state.team != TEAM_FREE )
+				if ( talker->client->sess.cs.team != TEAM_FREE )
 				{
 					continue;
 				}
@@ -298,18 +298,18 @@ void ClientUserinfoChanged( int clientNum )
 	}
 	else
 	{
-		Q_strncpyz( oldname, client->sess.state.name, sizeof( oldname ) );
+		Q_strncpyz( oldname, client->sess.cs.name, sizeof( oldname ) );
 		s = Info_ValueForKey( userinfo, "name" );
-		ClientCleanName( s, client->sess.state.name, sizeof(client->sess.state.name) );
-		Q_strncpyz( client->sess.name, client->sess.state.name, sizeof(client->sess.state.name) );
+		ClientCleanName( s, client->sess.cs.name, sizeof(client->sess.cs.name) );
+		Q_strncpyz( client->sess.name, client->sess.cs.name, sizeof(client->sess.cs.name) );
 	}
 
 	ci = &level_bgs.clientinfo[clientNum];
 	assert(ci->infoValid);
 
 	ci->clientNum = clientNum;
-	Q_strncpyz( ci->name, client->sess.state.name, sizeof(client->sess.state.name) );
-	ci->team = client->sess.state.team;
+	Q_strncpyz( ci->name, client->sess.cs.name, sizeof(client->sess.cs.name) );
+	ci->team = client->sess.cs.team;
 }
 
 /*
@@ -331,7 +331,7 @@ unsigned int G_GetNonPVSFriendlyInfo( gentity_t *pSelf, vec3_t vPosition, int iL
 	int iBaseEnt;
 
 	assert(pSelf);
-	team = pSelf->client->sess.state.team;
+	team = pSelf->client->sess.cs.team;
 
 	if ( team == TEAM_FREE || team == TEAM_SPECTATOR )
 	{
@@ -370,7 +370,7 @@ unsigned int G_GetNonPVSFriendlyInfo( gentity_t *pSelf, vec3_t vPosition, int iL
 			continue;
 		}
 
-		if ( pEnt->client->sess.state.team != team )
+		if ( pEnt->client->sess.cs.team != team )
 		{
 			continue;
 		}
@@ -526,7 +526,7 @@ const char *ClientConnect( int clientNum, unsigned short scriptPersId )
 	client->sess.pers = scriptPersId;
 
 	// force into spectator
-	client->sess.state.team = TEAM_SPECTATOR;
+	client->sess.cs.team = TEAM_SPECTATOR;
 	client->sess.sessionState = SESS_STATE_SPECTATOR;
 
 	client->spectatorClient = -1;
@@ -538,7 +538,7 @@ const char *ClientConnect( int clientNum, unsigned short scriptPersId )
 	ent->client = client;
 
 	client->useHoldEntity = ENTITYNUM_NONE;
-	client->sess.state.clientIndex = clientNum;
+	client->sess.cs.clientIndex = clientNum;
 	client->ps.clientNum = clientNum;
 
 	// get and distribute relevent paramters
@@ -692,7 +692,7 @@ void ClientDisconnect( int clientNum )
 	G_FreeEntity(ent);
 	client->sess.connected = CON_DISCONNECTED;
 
-	memset(&client->sess.state, 0, sizeof(client->sess.state));
+	memset(&client->sess.cs, 0, sizeof(client->sess.cs));
 
 	CalculateRanks();
 }
@@ -774,7 +774,7 @@ void ClientSpawn( gentity_t *ent, const vec3_t spawn_origin, const vec3_t spawn_
 
 	client->ps.eFlags = iFlags;
 
-	client->sess.state.clientIndex = index;
+	client->sess.cs.clientIndex = index;
 	client->ps.clientNum = index;
 	client->ps.viewlocked_entNum = ENTITYNUM_NONE;
 

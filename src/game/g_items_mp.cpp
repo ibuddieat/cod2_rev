@@ -1063,7 +1063,7 @@ void Touch_Item( gentity_t *ent, gentity_t *other, qboolean touched )
 		return;
 	}
 
-	I_strncpyz(cleanname, other->client->sess.state.name, sizeof(cleanname));
+	I_strncpyz(cleanname, other->client->sess.cs.name, sizeof(cleanname));
 	I_CleanStr(cleanname);
 
 	if ( item->giType == IT_WEAPON )

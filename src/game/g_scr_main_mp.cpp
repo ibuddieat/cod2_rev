@@ -929,7 +929,7 @@ void Scr_ConstructMessageString( int firstParmIndex, int lastParmIndex, const ch
 				Scr_ParamError(firstParmIndex, "Entity is not a player");
 			}
 
-			token = va("%s^7", ent->client->sess.state.name);
+			token = va("%s^7", ent->client->sess.cs.name);
 			tokenLen = strlen(token);
 
 			if ( stringLen + tokenLen + 1 >= stringLimit )
@@ -2775,7 +2775,7 @@ void GScr_GetTeamPlayersAlive()
 			continue;
 		}
 
-		if ( pEnt->client->sess.state.team != iTeamNum )
+		if ( pEnt->client->sess.cs.team != iTeamNum )
 		{
 			continue;
 		}
@@ -2814,13 +2814,13 @@ void GScr_UpdateClientNames()
 			continue;
 		}
 
-		if ( !strcmp(cl->sess.state.name, cl->sess.name) )
+		if ( !strcmp(cl->sess.cs.name, cl->sess.name) )
 		{
 			continue;
 		}
 
-		I_strncpyz(oldname, cl->sess.state.name, sizeof(oldname));
-		I_strncpyz(cl->sess.state.name, cl->sess.name, sizeof(cl->sess.state.name));
+		I_strncpyz(oldname, cl->sess.cs.name, sizeof(oldname));
+		I_strncpyz(cl->sess.cs.name, cl->sess.name, sizeof(cl->sess.cs.name));
 
 		ClientUserinfoChanged(i);
 	}

@@ -431,7 +431,7 @@ typedef struct
 	int viewmodelIndex;
 	int noSpectate;
 	int teamInfo;
-	clientState_t state;
+	clientState_t cs;
 	int psOffsetTime;
 } clientSession_t;
 

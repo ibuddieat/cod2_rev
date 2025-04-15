@@ -130,7 +130,7 @@ int ClientNumberFromString( gentity_t *to, char *s )
 		{
 			continue;
 		}
-		SanitizeString( cl->sess.state.name, n2 );
+		SanitizeString( cl->sess.cs.name, n2 );
 		if ( !strcmp( n2, s2 ) )
 		{
 			return idnum;
@@ -652,17 +652,17 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText )
 	gentity_t *other;
 	int i;
 
-	if ( mode == SAY_TEAM && ent->client->sess.state.team != TEAM_AXIS )
-		mode = ent->client->sess.state.team == TEAM_ALLIES;
+	if ( mode == SAY_TEAM && ent->client->sess.cs.team != TEAM_AXIS )
+		mode = ent->client->sess.cs.team == TEAM_ALLIES;
 
-	I_strncpyz(cleanname, ent->client->sess.state.name, sizeof(cleanname));
+	I_strncpyz(cleanname, ent->client->sess.cs.name, sizeof(cleanname));
 	I_CleanStr(cleanname);
 
-	if ( ent->client->sess.state.team == TEAM_AXIS )
+	if ( ent->client->sess.cs.team == TEAM_AXIS )
 	{
 		pszTeamColorString = "^9";
 	}
-	else if ( ent->client->sess.state.team == TEAM_ALLIES )
+	else if ( ent->client->sess.cs.team == TEAM_ALLIES )
 	{
 		pszTeamColorString = "^8";
 	}
@@ -671,7 +671,7 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText )
 		pszTeamColorString = "";
 	}
 
-	if ( ent->client->sess.state.team == TEAM_SPECTATOR )
+	if ( ent->client->sess.cs.team == TEAM_SPECTATOR )
 	{
 		Com_sprintf(teamname, sizeof(teamname), "\x15(\x14GAME_SPECTATOR\x15)");
 	}
@@ -686,7 +686,7 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText )
 
 	if ( mode == SAY_TEAM )
 	{
-		if ( ent->client->sess.state.team == TEAM_AXIS )
+		if ( ent->client->sess.cs.team == TEAM_AXIS )
 			pszTeamString = "GAME_AXIS";
 		else
 			pszTeamString = "GAME_ALLIES";
@@ -836,7 +836,7 @@ void Cmd_Vote_f( gentity_t *ent )
 			return;
 		}
 
-		if ( ent->client->sess.state.team == TEAM_SPECTATOR )
+		if ( ent->client->sess.cs.team == TEAM_SPECTATOR )
 		{
 			SV_GameSendServerCommand( ent-g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_NOSPECTATORVOTE\"", 101) );
 			return;
@@ -907,7 +907,7 @@ void Cmd_CallVote_f( gentity_t *ent )
 			return;
 		}
 
-		if ( ent->client->sess.state.team == TEAM_SPECTATOR )
+		if ( ent->client->sess.cs.team == TEAM_SPECTATOR )
 		{
 			SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_NOSPECTATORCALLVOTE\"", 101));
 			return;
@@ -1081,7 +1081,7 @@ void Cmd_CallVote_f( gentity_t *ent )
 
 			if ( (kicknum || !I_stricmp(arg2, "0")) && kicknum < MAX_CLIENTS && level.clients[kicknum].sess.connected == CON_CONNECTED )
 			{
-				I_strncpyz(cleanName, level.clients[kicknum].sess.state.name, sizeof(cleanName));
+				I_strncpyz(cleanName, level.clients[kicknum].sess.cs.name, sizeof(cleanName));
 				I_CleanStr(cleanName);
 			}
 			else
@@ -1095,7 +1095,7 @@ void Cmd_CallVote_f( gentity_t *ent )
 			{
 				if ( level.clients[i].sess.connected == CON_CONNECTED )
 				{
-					I_strncpyz(cleanName, level.clients[i].sess.state.name, sizeof(cleanName));
+					I_strncpyz(cleanName, level.clients[i].sess.cs.name, sizeof(cleanName));
 					I_CleanStr(cleanName);
 
 					if ( !I_stricmp(cleanName, arg2) )
@@ -1117,10 +1117,10 @@ void Cmd_CallVote_f( gentity_t *ent )
 		else
 			Com_sprintf(level.voteString, MAX_STRING_CHARS, "%s \"%d\"", "clientkick", kicknum);
 
-		Com_sprintf(level.voteDisplayString, MAX_STRING_CHARS, "GAME_VOTE_KICK\x15(%i)%s", kicknum, level.clients[kicknum].sess.state.name);
+		Com_sprintf(level.voteDisplayString, MAX_STRING_CHARS, "GAME_VOTE_KICK\x15(%i)%s", kicknum, level.clients[kicknum].sess.cs.name);
 	}
 
-	SV_GameSendServerCommand(-1, SV_CMD_CAN_IGNORE, va("%c \"GAME_CALLEDAVOTE\x15%s\"", 101, ent->client->sess.state.name));
+	SV_GameSendServerCommand(-1, SV_CMD_CAN_IGNORE, va("%c \"GAME_CALLEDAVOTE\x15%s\"", 101, ent->client->sess.cs.name));
 
 	// start the voting, the caller autoamtically votes yes
 	level.voteTime = level.time + 30000;
@@ -1481,10 +1481,10 @@ void Cmd_Tell_f( gentity_s *ent )
 
 	p = ConcatArgs(2);
 
-	I_strncpyz(cleanname, ent->client->sess.state.name, sizeof(cleanname));
+	I_strncpyz(cleanname, ent->client->sess.cs.name, sizeof(cleanname));
 	I_CleanStr(cleanname);
 
-	I_strncpyz(target_cleanname, target->client->sess.state.name, sizeof(target_cleanname));
+	I_strncpyz(target_cleanname, target->client->sess.cs.name, sizeof(target_cleanname));
 	I_CleanStr(target_cleanname);
 
 	target_guid = SV_GetGuid(target->s.number);

@@ -113,7 +113,7 @@ void HudElem_UpdateClient( gclient_t *client, int clientNum, int which )
 			continue;
 		}
 
-		if ( hud->team != TEAM_FREE && hud->team != client->sess.state.team )
+		if ( hud->team != TEAM_FREE && hud->team != client->sess.cs.team )
 		{
 			continue;
 		}

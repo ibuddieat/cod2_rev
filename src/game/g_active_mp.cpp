@@ -1668,7 +1668,7 @@ qboolean G_UpdateClientInfo( gentity_t *ent )
 	bChanged = qfalse;
 
 	modelName = G_ModelName(ent->model);
-	client->sess.state.modelindex = ent->model;
+	client->sess.cs.modelindex = ent->model;
 
 	if ( strcmp(ci->model, modelName) )
 	{
@@ -1681,7 +1681,7 @@ qboolean G_UpdateClientInfo( gentity_t *ent )
 		if ( ent->attachModelNames[i] )
 		{
 			modelName = G_ModelName(ent->attachModelNames[i]);
-			client->sess.state.attachModelIndex[i] = ent->attachModelNames[i];
+			client->sess.cs.attachModelIndex[i] = ent->attachModelNames[i];
 
 			if ( strcmp(ci->attachModelNames[i], modelName) )
 			{
@@ -1691,7 +1691,7 @@ qboolean G_UpdateClientInfo( gentity_t *ent )
 
 			assert(ent->attachTagNames[i]);
 			tagName = SL_ConvertToString(ent->attachTagNames[i]);
-			client->sess.state.attachTagIndex[i] = G_TagIndex(tagName);
+			client->sess.cs.attachTagIndex[i] = G_TagIndex(tagName);
 
 			if ( strcmp(ci->attachTagNames[i], tagName) )
 			{
@@ -1704,8 +1704,8 @@ qboolean G_UpdateClientInfo( gentity_t *ent )
 			ci->attachModelNames[i][0] = 0;
 			ci->attachTagNames[i][0] = 0;
 
-			client->sess.state.attachModelIndex[i] = 0;
-			client->sess.state.attachTagIndex[i] = 0;
+			client->sess.cs.attachModelIndex[i] = 0;
+			client->sess.cs.attachTagIndex[i] = 0;
 		}
 	}
 
