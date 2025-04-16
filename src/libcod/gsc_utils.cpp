@@ -856,6 +856,11 @@ void gsc_utils_getlasttestclientnumber()
 	stackPushInt(botport);
 }
 
+void gsc_utils_getmaxmsglen()
+{
+	stackPushInt(MAX_MSGLEN);
+}
+
 void gsc_utils_bullethiteffect()
 {
 	vec3_t origin;

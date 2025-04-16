@@ -1,5 +1,4 @@
 #include "../qcommon/qcommon.h"
-#include "../qcommon/sys_thread.h"
 
 // can't just use function pointers, or dll linkage can
 // mess up when qcommon is included in multiple places
@@ -1365,4 +1364,20 @@ int I_DrawStrlen(const char *str)
 	}
 
 	return count;
+}
+
+va_info_t va_info[NUMTHREADS];
+jmp_buf g_com_error[NUMTHREADS];
+TraceThreadInfo g_traceThreadInfo[NUMTHREADS];
+
+void Com_InitThreadData(int threadContext)
+{
+	Sys_SetValue(THREAD_VALUE_VA, &va_info[threadContext]);
+	Sys_SetValue(THREAD_VALUE_COM_ERROR, &g_com_error[threadContext]);
+	Sys_SetValue(THREAD_VALUE_TRACE, &g_traceThreadInfo[threadContext]);
+}
+
+void Sys_UnimplementedFunctionInternal(const char *function)
+{
+	Com_Printf("FUNCTION NOT IMPLEMENTED!!! (%s)\n", function);
 }

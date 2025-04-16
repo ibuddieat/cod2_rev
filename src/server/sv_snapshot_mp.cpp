@@ -940,11 +940,11 @@ void SV_SendClientMessages( void )
 		numclients++;       // NERVE - SMF - net debugging
 
 #ifdef LIBCOD
-		for ( int j = 0; j < MAX_DOWNLOAD_WINDOW; j++ )
+		for ( int j = 0; j < MAX_MSGLEN / MAX_DOWNLOAD_BLKSIZE; j++ )
 		{
 			if ( !sv_fastDownload->current.boolean || !*c->downloadName || c->downloadingWWW || c->clientDownloadingWWW )
 			{
-				j = MAX_DOWNLOAD_WINDOW;
+				j = 99999;
 			}
 
 			// send additional message fragments if the last message
@@ -958,7 +958,6 @@ void SV_SendClientMessages( void )
 			// generate and send a new message
 			SV_SendClientSnapshot( c );
 		}
-		SV_SendClientVoiceData( c );
 #else
 		// send additional message fragments if the last message
 		// was too large to send at once
@@ -971,8 +970,8 @@ void SV_SendClientMessages( void )
 
 		// generate and send a new message
 		SV_SendClientSnapshot( c );
-		SV_SendClientVoiceData( c );
 #endif
+		SV_SendClientVoiceData( c );
 	}
 
 	// NERVE - SMF - net debugging

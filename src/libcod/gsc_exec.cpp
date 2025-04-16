@@ -2,8 +2,6 @@
 
 #if LIBCOD_COMPILE_EXEC == 1
 
-#include "../qcommon/sys_thread.h"
-
 enum
 {
 	INT_VALUE,

@@ -1,5 +1,4 @@
 #include "../qcommon/qcommon.h"
-#include "../qcommon/sys_thread.h"
 
 static ParseThreadInfo q_parse[NUMTHREADS];
 

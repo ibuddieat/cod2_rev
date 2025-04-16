@@ -1,5 +1,4 @@
 #include "qcommon.h"
-#include "sys_thread.h"
 
 static huffman_t msgHuff;
 static qboolean msgInit = qfalse;

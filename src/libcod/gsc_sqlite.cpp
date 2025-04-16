@@ -2,7 +2,6 @@
 
 #if LIBCOD_COMPILE_SQLITE == 1
 
-#include "../qcommon/sys_thread.h"
 #include "sqlite/sqlite3.h"
 
 #define MAX_SQLITE_FIELDS 128

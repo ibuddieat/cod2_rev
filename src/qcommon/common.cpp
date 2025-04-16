@@ -1,6 +1,5 @@
 #include "qcommon.h"
 #include "cmd.h"
-#include "sys_thread.h"
 
 // common.c -- misc functions used in client and server
 

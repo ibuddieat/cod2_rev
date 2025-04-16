@@ -1,6 +1,5 @@
 #include "qcommon.h"
 #include "cm_local.h"
-#include "sys_thread.h"
 
 clipMap_t cm;
 

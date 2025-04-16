@@ -194,6 +194,7 @@ scr_function_t scriptFunctions[] =
 	{"sqrt", gsc_utils_sqrt, 0},
 	{"sqrtinv", gsc_utils_sqrtInv, 0},
 	{"getlasttestclientnumber", gsc_utils_getlasttestclientnumber, 0},
+	{"getmaxmsglen", gsc_utils_getmaxmsglen, 0},
 	{"bullethiteffect", gsc_utils_bullethiteffect, 0},
 	{"vectorscale", gsc_utils_vectorscale, 0},
 	{"remove_file", gsc_utils_remove_file, 0},

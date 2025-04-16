@@ -34,7 +34,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../qcommon/qcommon.h"
 #include "../qcommon/cmd.h"
 #include "../qcommon/netchan.h"
-#include "../qcommon/sys_thread.h"
 #include "../universal/universal_public.h"
 
 #define	CD_BASEDIR	"quake3"

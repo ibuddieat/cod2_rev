@@ -1,5 +1,4 @@
 #include "../qcommon/qcommon.h"
-#include "../qcommon/sys_thread.h"
 
 serverStatic_t svs;
 server_t sv;

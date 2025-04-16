@@ -11,6 +11,12 @@ static fileData_t* com_fileDataHashTable[FILEDATA_HASH_SIZE];
 
 static int currentPos;
 
+void Sys_OutOfMemErrorInternal(const char *filename, int line)
+{
+	Com_Printf("OUT OF MEMORY! ABORTING!!! (%s:%d)\n", filename, line);
+	exit(-1);
+}
+
 void *Z_TryMallocInternal( int size )
 {
 	void *buf;
@@ -368,7 +374,7 @@ void* TempMalloc(int size)
 	char *buf;
 
 	pos = currentPos + size;
-	buf = (char *)Hunk_ReallocateTempMemoryInternal(currentPos + size) + currentPos;
+	buf = (char *)Hunk_ReallocateTempMemoryInternal(pos) + currentPos;
 	currentPos = pos;
 
 	return buf;
