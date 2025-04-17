@@ -19,6 +19,7 @@
 #define MAX_EFFECT_TAGS 256
 #define MAX_HUDELEMS_TOTAL MAX_GENTITIES // meh
 #define MAX_WEAPONS         128  // (SA) and yet more!
+#define MAX_TRIGGERS 256
 
 typedef struct gclient_s gclient_t;
 typedef struct gentity_s gentity_t;
@@ -683,8 +684,8 @@ typedef struct
 	float fFogOpaqueDistSqrd;
 	int remapCount;
 	int currentPlayerClone;
-	trigger_info_t pendingTriggerList[256];
-	trigger_info_t currentTriggerList[256];
+	trigger_info_t pendingTriggerList[MAX_TRIGGERS];
+	trigger_info_t currentTriggerList[MAX_TRIGGERS];
 	int pendingTriggerListSize;
 	int currentTriggerListSize;
 	int finished;
@@ -1306,22 +1307,25 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define FL_MISSILE_DESTABILIZED 0x0010000
 #define FL_STABLE_MISSILES      0x0020000
 
-#define ENT_HANDLER_NULL              0
-#define ENT_HANDLER_ACTOR_INIT        1
-#define ENT_HANDLER_SCRIPT_MOVER      5
-#define ENT_HANDLER_GRENADE           7
-#define ENT_HANDLER_ROCKET            8
-#define ENT_HANDLER_CLIENT            9
-#define ENT_HANDLER_CLIENT_SPECTATOR  10
-#define ENT_HANDLER_CLIENT_DEAD       11
-#define ENT_HANDLER_PLAYER_CLONE      12
-#define ENT_HANDLER_TURRET_INIT       13
-#define ENT_HANDLER_TURRET            14
-#define ENT_HANDLER_DROPPED_ITEM      15
-#define ENT_HANDLER_ITEM_INIT         16
-#define ENT_HANDLER_ITEM              17
-#define ENT_HANDLER_TRIGGER_USE       18
-#define ENT_HANDLER_PLAYER_BLOCK      19
+#define ENT_HANDLER_NULL               0
+#define ENT_HANDLER_TRIGGER_MULTIPLE   1
+#define ENT_HANDLER_TRIGGER_HURT       2
+#define ENT_HANDLER_TRIGGER_HURT_TOUCH 3
+#define ENT_HANDLER_TRIGGER_DAMAGE     4
+#define ENT_HANDLER_SCRIPT_MOVER       5
+#define ENT_HANDLER_GRENADE            7
+#define ENT_HANDLER_ROCKET             8
+#define ENT_HANDLER_CLIENT             9
+#define ENT_HANDLER_CLIENT_SPECTATOR   10
+#define ENT_HANDLER_CLIENT_DEAD        11
+#define ENT_HANDLER_PLAYER_CLONE       12
+#define ENT_HANDLER_TURRET_INIT        13
+#define ENT_HANDLER_TURRET             14
+#define ENT_HANDLER_DROPPED_ITEM       15
+#define ENT_HANDLER_ITEM_INIT          16
+#define ENT_HANDLER_ITEM               17
+#define ENT_HANDLER_TRIGGER_USE        18
+#define ENT_HANDLER_PLAYER_BLOCK       19
 
 #define SAY_ALL 0
 #define SAY_TEAM 1
@@ -1436,11 +1440,11 @@ void G_DObjUpdate(gentity_s *ent);
 unsigned int G_ModelIndex(const char *name);
 void G_OverrideModel(int modelIndex, const char *defaultModelName);
 void G_RunThink(gentity_s *ent);
-void G_CheckHitTriggerDamage(gentity_s *pActivator, float *vStart, float *vEnd, int iDamage, unsigned int iMOD);
+void G_CheckHitTriggerDamage( gentity_t *pActivator, const vec3_t vStart, const vec3_t vEnd, int iDamage, int iMOD );
 qboolean OnSameTeam(gentity_s *ent1, gentity_s *ent2);
 void G_AntiLagRewindClientPos(int gameTime, AntilagClientStore *antilagStore);
 void G_AntiLag_RestoreClientPos(AntilagClientStore *antilagStore);
-void G_GrenadeTouchTriggerDamage(gentity_s *pActivator, float *vStart, float *vEnd, int iDamage, int iMOD);
+void G_GrenadeTouchTriggerDamage( gentity_t *pActivator, const vec3_t vStart, const vec3_t vEnd, int iDamage, int iMOD );
 
 void FireWeaponMelee(gentity_s *ent);
 void G_UseOffHand(gentity_s *ent);
@@ -1706,6 +1710,8 @@ void SP_script_brushmodel(gentity_s *ent);
 void SP_script_model(gentity_s *ent);
 void SP_script_origin(gentity_s *ent);
 
+
+void InitTriggerWait(gentity_t *ent, int spawnflag);
 int G_MoverPush(gentity_s *pusher, vec3_t move, vec3_t amove, gentity_s **obstacle);
 
 void turret_shoot_internal( gentity_t *self, gentity_t *other );

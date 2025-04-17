@@ -71,7 +71,7 @@ void TeamplayInfoMessage( gentity_t *ent )
 		VectorMA(vStart, 8192, vForward, vEnd);
 	}
 
-	G_TraceCapsule(&trace, vStart, vec3_origin, vec3_origin, vEnd, ent->client->ps.clientNum, 33554433);
+	G_TraceCapsule(&trace, vStart, vec3_origin, vec3_origin, vEnd, ent->client->ps.clientNum, CONTENTS_SOLID | CONTENTS_BODY);
 	num = trace.entityNum;
 
 	if ( trace.entityNum < MAX_CLIENTS && g_entities[num].client && (!G_IsPlaying(ent) || g_entities[num].client->sess.cs.team == ent->client->sess.cs.team) )

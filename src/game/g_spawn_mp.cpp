@@ -46,7 +46,6 @@ spawn_t spawns[] =
 
 #define NUMSPAWNS   ( sizeof( spawns ) / sizeof( spawn_t ) )
 
-
 /*
 ===============
 G_SpawnString
@@ -439,54 +438,55 @@ Scr_GetGenericField
 */
 void Scr_GetGenericField( byte *b, int type, int ofs )
 {
-	unsigned short str;
-	unsigned short obj;
+	unsigned short s, o;
+	gentity_t *e;
 	vec3_t vec;
 
 	switch ( type )
 	{
 	case F_INT:
-		Scr_AddInt(*(int *)&b[ofs]);
+		Scr_AddInt( *( int * )( b + ofs ) );
 		break;
 
 	case F_FLOAT:
-		Scr_AddFloat(*(float *)&b[ofs]);
+		Scr_AddFloat( *( float * )( b + ofs ) );
 		break;
 
 	case F_LSTRING:
-		Scr_AddString((const char *)&b[ofs]);
+		Scr_AddString( ( const char * )( b + ofs ) );
 		break;
 
 	case F_STRING:
-		str = *(unsigned short *)&b[ofs];
-		if ( str )
-			Scr_AddConstString(str);
+		s = *( unsigned short * )( b + ofs );
+		if ( s )
+			Scr_AddConstString(s);
 		break;
 
 	case F_VECTOR:
-		Scr_AddVector((const float *)&b[ofs]);
+		Scr_AddVector( ( float * )( b + ofs ) );
 		break;
 
 	case F_ENTITY:
-		if ( *(_DWORD *)&b[ofs] )
-			Scr_AddEntity(*(gentity_t **)&b[ofs]);
+		e = *( gentity_t ** )( b + ofs );
+		if ( e )
+			Scr_AddEntity(e);
 		break;
 
 	case F_VECTORHACK:
 		vec[0] = 0;
-		vec[1] = *(float *)&b[ofs];
+		vec[1] = *( float * )( b + ofs );
 		vec[2] = 0;
 		Scr_AddVector(vec);
 		break;
 
 	case F_OBJECT:
-		obj = *(unsigned short *)&b[ofs];
-		if ( obj )
-			Scr_AddObject(obj);
+		o = *( unsigned short * )( b + ofs );
+		if ( o )
+			Scr_AddObject(o);
 		break;
 
 	case F_MODEL:
-		Scr_AddString(G_ModelName(b[ofs]));
+		Scr_AddString( G_ModelName( *( byte * )( b + ofs ) ) );
 		break;
 	}
 }

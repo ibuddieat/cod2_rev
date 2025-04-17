@@ -49,7 +49,6 @@ static void Sys_InitializeCriticalSections( void )
 	}
 
 	pthread_mutexattr_destroy(&muxattr);
-
 }
 
 /*

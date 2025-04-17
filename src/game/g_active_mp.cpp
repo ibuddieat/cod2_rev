@@ -783,7 +783,7 @@ void SpectatorThink( gentity_t *ent, usercmd_t *ucmd )
 	pm.ps = &client->ps;
 	pm.cmd = *ucmd;
 	pm.tracemask = ( CONTENTS_SOLID | CONTENTS_GLASS | CONTENTS_SKY | CONTENTS_UNKNOWN );   // spectators can fly through bodies
-	pm.handler = ENT_HANDLER_ACTOR_INIT;
+	pm.handler = PMOVE_HANDLER_SERVER;
 
 	Pmove( &pm ); // JPW NERVE
 
