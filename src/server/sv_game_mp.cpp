@@ -275,7 +275,7 @@ qboolean SV_inSnapshot( const vec3_t origin, int iEntityNum )
 		return qfalse;
 	}
 
-	if ( ent->r.svFlags & 0x18 )
+	if ( ent->r.svFlags & ( SVF_BROADCAST | SVF_OBJECTIVE ) )
 	{
 		return qtrue;
 	}
@@ -692,7 +692,7 @@ qboolean SV_EntityContact( const vec3_t mins, const vec3_t maxs, const gentity_t
 	vec2_t center;
 	unsigned int model;
 
-	if ( !(gEnt->r.svFlags & 0x60) )
+	if ( !( gEnt->r.svFlags & ( SVF_CYLINDER | SVF_DISK ) ) )
 	{
 		model = SV_ClipHandleForEntity(gEnt);
 		CM_TransformedBoxTraceExternal(&trace, vec3_origin, vec3_origin, mins, maxs, model, -1, gEnt->r.currentOrigin, gEnt->r.currentAngles);
@@ -700,14 +700,14 @@ qboolean SV_EntityContact( const vec3_t mins, const vec3_t maxs, const gentity_t
 		return trace.startsolid;
 	}
 
-	if ( !(gEnt->r.svFlags & 0x20) )
+	if ( !( gEnt->r.svFlags & SVF_CYLINDER ) )
 	{
 		assert(gEnt->r.svFlags & SVF_DISK);
 
 		Vector2Add(mins, maxs, center);
 		Vec2Scale(center, 0.5, center);
 
-		dist = maxs[0] - center[0] + gEnt->r.maxs[0] - 64.0;
+		dist = maxs[0] - center[0] + gEnt->r.maxs[0] - 64;
 
 		return Vec2DistanceSq(gEnt->r.currentOrigin, center) >= Square(dist);
 	}

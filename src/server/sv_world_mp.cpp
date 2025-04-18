@@ -379,7 +379,7 @@ void SV_LinkEntity( gentity_t *gEnt )
 	ent->numClusters = 0;
 	ent->lastCluster = 0;
 
-	if ( !(gEnt->r.svFlags & 0x19) )
+	if ( !( gEnt->r.svFlags & ( SVF_NOCLIENT | SVF_BROADCAST | SVF_OBJECTIVE ) ) )
 	{
 		//get all leafs, including solids
 		num_leafs = CM_BoxLeafnums( gEnt->r.absmin, gEnt->r.absmax, leafs, MAX_TOTAL_ENT_LEAFS, &lastLeaf );
@@ -423,9 +423,9 @@ void SV_LinkEntity( gentity_t *gEnt )
 	clip = SV_ClipHandleForEntity(gEnt);
 	obj = Com_GetServerDObj(gEnt->s.number);
 
-	if ( obj && gEnt->r.svFlags & 6 )
+	if ( obj && gEnt->r.svFlags & ( SVF_BODY | SVF_MODEL ) )
 	{
-		if ( gEnt->r.svFlags & 2 )
+		if ( gEnt->r.svFlags & SVF_BODY )
 		{
 			VectorAdd(origin, actorLocationalMins, min);
 			VectorAdd(origin, actorLocationalMaxs, max);
@@ -472,7 +472,7 @@ DObj* SV_LocationalSightTraceDObj( const sightpointtrace_t *clip, const gentity_
 		return NULL;
 	}
 
-	if ( !(touch->r.svFlags & 4) )
+	if ( !(touch->r.svFlags & SVF_MODEL) )
 	{
 		return NULL;
 	}
@@ -608,12 +608,12 @@ DObj* SV_LocationalTraceDObj( const pointtrace_t *clip, const gentity_t *touch )
 		return NULL;
 	}
 
-	if ( !(touch->r.svFlags & 6) )
+	if ( !( touch->r.svFlags & ( SVF_BODY | SVF_MODEL ) ) )
 	{
 		return NULL;
 	}
 
-	if ( touch->r.svFlags & 2 && !clip->priorityMap )
+	if ( touch->r.svFlags & SVF_BODY && !clip->priorityMap )
 	{
 		return NULL;
 	}
@@ -674,7 +674,7 @@ void SV_PointTraceToEntity( pointtrace_t *clip, svEntity_t *check, trace_t *trac
 
 	if ( obj )
 	{
-		if ( touch->r.svFlags & 4 )
+		if ( touch->r.svFlags & SVF_MODEL )
 		{
 			if ( !DObjHasContents(obj, clip->contentmask) )
 			{
@@ -708,7 +708,7 @@ void SV_PointTraceToEntity( pointtrace_t *clip, svEntity_t *check, trace_t *trac
 
 		objTrace.fraction = trace->fraction;
 
-		if ( touch->r.svFlags & 4 )
+		if ( touch->r.svFlags & SVF_MODEL )
 		{
 			DObjGeomTraceline(obj, localStart, localEnd, clip->contentmask, &objTrace);
 		}

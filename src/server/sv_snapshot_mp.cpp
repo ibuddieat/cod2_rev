@@ -253,7 +253,7 @@ void SV_ArchiveSnapshot()
 
 				svEnt = SV_SvEntityForGentity(ent);
 
-				if ( !(ent->r.svFlags & 0x18) )
+				if ( !( ent->r.svFlags & ( SVF_BROADCAST | SVF_OBJECTIVE ) ) )
 				{
 					if ( !svEnt->numClusters )
 					{
@@ -402,7 +402,7 @@ void SV_ArchiveSnapshot()
 
 			svEnt = SV_SvEntityForGentity(ent);
 
-			if ( !(ent->r.svFlags & 0x18) )
+			if ( !( ent->r.svFlags & ( SVF_BROADCAST | SVF_OBJECTIVE ) ) )
 			{
 				if ( !svEnt->numClusters )
 				{
@@ -1128,7 +1128,7 @@ void SV_AddCachedEntitiesVisibleFromPoint( int from_num_entities, int from_first
 			continue;
 		}
 
-		if ( ent->r.svFlags & 0x18 )
+		if ( ent->r.svFlags & ( SVF_BROADCAST | SVF_OBJECTIVE ) )
 		{
 			SV_AddArchivedEntToSnapshot( e, eNums );
 			continue;
@@ -1246,7 +1246,7 @@ void SV_AddEntitiesVisibleFromPoint( vec3_t origin, int clientNum, snapshotEntit
 			ent->r.broadcastTime = 0;
 		}
 
-		if ( ent->r.svFlags & 0x18 )
+		if ( ent->r.svFlags & ( SVF_BROADCAST | SVF_OBJECTIVE ) )
 		{
 			SV_AddEntToSnapshot( e, eNums );
 			continue;
