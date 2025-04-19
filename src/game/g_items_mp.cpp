@@ -457,7 +457,7 @@ gentity_t* Drop_Item( gentity_t *ent, const gitem_t *item, float angle, qboolean
 	{
 		AngleVectors( angles, velocity, NULL, NULL );
 		VectorScale( velocity, g_dropForwardSpeed->current.decimal, velocity );
-		velocity[2] += G_crandom() * g_dropUpSpeedRand->current.decimal + g_dropUpSpeedBase->current.decimal;
+		velocity[2] += crandom() * g_dropUpSpeedRand->current.decimal + g_dropUpSpeedBase->current.decimal;
 	}
 
 	VectorCopy( ent->r.currentOrigin, vPos );
@@ -930,8 +930,8 @@ gentity_t *Drop_Weapon( gentity_t *ent, int iWeaponIndex, unsigned int tag )
 		}
 		else
 		{
-			iDropAmmo = Q_rint(BG_GetAmmoClipSize(clipIndex) - 1 * ((G_random() + 1.0) * 0.5)) + 1;
-			iDropClip = Q_rint((G_random() * 0.5 + 0.25) * iDropAmmo);
+			iDropAmmo = Q_rint(BG_GetAmmoClipSize(clipIndex) - 1 * ((randomf() + 1.0) * 0.5)) + 1;
+			iDropClip = Q_rint((randomf() * 0.5 + 0.25) * iDropAmmo);
 			iDropAmmo -= iDropClip;
 		}
 	}
@@ -980,7 +980,7 @@ gentity_t *Drop_Weapon( gentity_t *ent, int iWeaponIndex, unsigned int tag )
 		vAngles[2] += 90;
 		G_SetAngle(itemEnt, ent->r.currentAngles);
 
-		VectorSet(velocity, G_crandom() * 50, G_crandom() * 40, G_crandom() * 60);
+		VectorSet(velocity, crandom() * 50, crandom() * 40, crandom() * 60);
 
 		itemEnt->s.apos.trType = TR_LINEAR;
 		itemEnt->s.apos.trTime = level.time;
@@ -1606,7 +1606,7 @@ qboolean Pickup_Weapon( gentity_t *ent, gentity_t *other, int *pickupEvent, qboo
 			}
 			else
 			{
-				ent->count = Q_rint(BG_GetAmmoClipSize(BG_ClipForWeapon(weapIdx)) - 1 * (G_random() + 1.0) * 0.5) + 1;
+				ent->count = Q_rint(BG_GetAmmoClipSize(BG_ClipForWeapon(weapIdx)) - 1 * (randomf() + 1.0) * 0.5) + 1;
 			}
 		}
 

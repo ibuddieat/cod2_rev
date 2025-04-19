@@ -1381,3 +1381,8 @@ void Sys_UnimplementedFunctionInternal(const char *function)
 {
 	Com_Printf("FUNCTION NOT IMPLEMENTED!!! (%s)\n", function);
 }
+
+snd_alias_list_t* Com_FindSoundAlias(const char *name)
+{
+	return NULL; // Not supported
+}

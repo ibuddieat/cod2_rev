@@ -453,11 +453,11 @@ void G_MissileLandAngles( gentity_t *ent, trace_t *trace, vec3_t vAngles, qboole
 
 		if ( fAbsAngDelta >= 80.0 )
 		{
-			ent->s.apos.trDelta[0] = (G_random() * 0.30000001 + 0.85000002) * ent->s.apos.trDelta[0];
+			ent->s.apos.trDelta[0] = (randomf() * 0.30000001 + 0.85000002) * ent->s.apos.trDelta[0];
 		}
 		else
 		{
-			ent->s.apos.trDelta[0] = (G_random() * 0.30000001 + 0.85000002) * ent->s.apos.trDelta[0] * -1.0;
+			ent->s.apos.trDelta[0] = (randomf() * 0.30000001 + 0.85000002) * ent->s.apos.trDelta[0] * -1.0;
 		}
 	}
 

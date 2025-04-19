@@ -32,8 +32,6 @@ const char *g_he_alignx[] = { "left", "center", "right" };
 const char *g_he_aligny[] = { "top", "middle", "bottom" };
 const char *g_he_font[] =   { "default", "bigfixed", "smallfixed", };
 
-#define HEOFS( x ) ( (intptr_t)&( ( (game_hudelem_t *)0 )->x ) )
-
 game_hudelem_field_t g_hudelem_fields[] =
 {
 	{ "x", HEOFS( elem.x ), F_FLOAT, 0, 0, NULL, NULL },

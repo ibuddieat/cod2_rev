@@ -2,8 +2,6 @@
 #include "g_shared.h"
 #include "../script/script_public.h"
 
-#define FOFS( x ) ( (intptr_t)&( ( (gentity_t *)0 )->x ) )
-
 game_entity_field_t g_entity_fields[] =
 {
 	{ "classname", FOFS( classname ), F_STRING, Scr_ReadOnlyField },

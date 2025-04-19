@@ -247,8 +247,8 @@ qboolean StuckInClient( gentity_t *self )
 
 	Vector2Subtract(hit->r.currentOrigin, self->r.currentOrigin, vDelta);
 
-	vDelta[0] = G_crandom() + vDelta[0];
-	vDelta[1] = G_crandom() + vDelta[1];
+	vDelta[0] = crandom() + vDelta[0];
+	vDelta[1] = crandom() + vDelta[1];
 
 	Vec2Length(hit->client->ps.velocity);
 

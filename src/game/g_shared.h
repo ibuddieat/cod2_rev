@@ -20,6 +20,13 @@
 #define MAX_HUDELEMS_TOTAL MAX_GENTITIES // meh
 #define MAX_WEAPONS         128  // (SA) and yet more!
 #define MAX_TRIGGERS 256
+#define EVENT_PARM_MAX 2048
+#define MAX_PLAYER_CORPSES 8
+#define MAX_DROPPED_WEAPONS 32
+#define MAX_SOUNDALIASES 256 // configstring
+#define MAX_TAGS 32
+#define MAX_SHADERS 128
+#define MAX_LOCALIZED_STRINGS 256
 
 typedef struct gclient_s gclient_t;
 typedef struct gentity_s gentity_t;
@@ -492,6 +499,7 @@ struct gclient_s
 static_assert((sizeof(gclient_t) == 0x28A4 || sizeof(gclient_t) == 0x28A0), "ERROR: gclient_t size is invalid!");
 #endif
 
+#define CFOFS( x ) ( (intptr_t)&( ( (gclient_t *)0 )->x ) )
 extern gclient_t g_clients[];
 
 struct turretInfo_s
@@ -643,6 +651,7 @@ struct gentity_s
 static_assert((sizeof(gentity_t) == 560), "ERROR: gentity_t size is invalid!");
 #endif
 
+#define FOFS( x ) ( (intptr_t)&( ( (gentity_t *)0 )->x ) )
 extern gentity_t g_entities[];
 
 typedef struct
@@ -725,6 +734,7 @@ typedef struct game_hudelem_s
 	int archived;
 } game_hudelem_t;
 
+#define HEOFS( x ) ( (intptr_t)&( ( (game_hudelem_t *)0 )->x ) )
 extern game_hudelem_t g_hudelems[];
 
 typedef struct game_hudelem_field_s
@@ -799,7 +809,7 @@ typedef struct
 	int deletestruct;
 	int initstructs;
 	int createstruct;
-	corpseInfo_t playerCorpseInfo[8];
+	corpseInfo_t playerCorpseInfo[MAX_PLAYER_CORPSES];
 } scr_data_t;
 
 extern scr_data_t g_scr_data;
@@ -1205,6 +1215,8 @@ struct useList_t
 	float score;
 };
 
+typedef unsigned short modelNameIndex_t;
+
 enum cs_index_t
 {
 	CS_GAME_VERSION = 2,
@@ -1227,11 +1239,16 @@ enum cs_index_t
 	CS_MULTI_MAPWINNER = 22,
 	CS_STATUS_ICONS = 23,
 	CS_HEAD_ICONS = 31,
+	CS_TAGS = 110,
+	CS_MODELS = 334,
+	CS_SOUND_ALIASES = 590,
 	CS_EFFECT_NAMES = 846,
 	CS_EFFECT_TAGS = 910,
 	CS_SHELLSHOCKS = 1166,
 	CS_SCRIPT_MENUS = 1246,
-	CS_HINTSTRINGS = 1278
+	CS_HINTSTRINGS = 1278,
+	CS_LOCALIZED_STRINGS = 1310,
+	CS_SHADERS = 1566
 };
 
 enum
@@ -1437,7 +1454,7 @@ int G_EffectIndex(const char *name);
 XModel* G_GetModel(int modelIndex);
 void G_SafeDObjFree(gentity_s *ent);
 void G_DObjUpdate(gentity_s *ent);
-unsigned int G_ModelIndex(const char *name);
+int G_ModelIndex( const char *name );
 void G_OverrideModel(int modelIndex, const char *defaultModelName);
 void G_RunThink(gentity_s *ent);
 void G_CheckHitTriggerDamage( gentity_t *pActivator, const vec3_t vStart, const vec3_t vEnd, int iDamage, int iMOD );
@@ -1558,8 +1575,9 @@ void Weapon_Throw_Grenade(gentity_s *ent, int grenType, weaponParms *wp);
 void gunrandom(float *x, float *y);
 gentity_s* fire_rocket(gentity_s *parent, float *start, float *dir);
 void Weapon_RocketLauncher_Fire(gentity_s *ent, float spread, weaponParms *targetOffset);
-void G_SetOrigin(gentity_s *ent, const float *origin);
-void G_SetAngle(gentity_s *ent, const float *angle);
+void G_SetOrigin( gentity_t *ent, const vec3_t origin );
+void G_SetAngle( gentity_t *ent, const vec3_t angle );
+int G_EntLinkToInternal(gentity_t *ent, gentity_t *parent, unsigned int tagName);
 void G_PlayerEvent(int clientNum, int event);
 int GetFollowPlayerState(int clientNum, playerState_s *ps);
 clientState_t* G_GetClientState(int num);
@@ -1629,13 +1647,14 @@ void Scr_VoteCalled(gentity_s *self, const char *command, const char *param1, co
 
 void G_Damage(gentity_s *self, gentity_s *inflictor, gentity_s *ent, const float *vDir,const float *vPoint, int value, int dflags, int meansOfDeath, int hitLoc, int timeOffset);
 
-float G_random();
-float G_crandom();
+float randomf();
+float crandom();
 
-void G_AddEvent(gentity_s *ent, int event, unsigned int eventParm);
+void G_AddEvent( gentity_t *ent, int event, int eventParm );
 void TeleportPlayer(gentity_s *player, float *origin, float *angles);
 void G_EntUnlink(gentity_s *ent);
-void G_CorpseFree(gentity_s *ent);
+void PlayerCorpse_Free(gentity_s *ent);
+bool G_MaySpawnEntity(gentity_t *ent);
 void G_FreeEntity(gentity_s *ent);
 
 void G_EntDetachAll(gentity_s *ent);

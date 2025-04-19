@@ -352,6 +352,7 @@ struct DObjModel_s
 };
 
 #define DOBJ_MAX_SUBMODELS 8
+#define DOBJ_PART_BITS 4
 
 typedef struct DObj_s
 {

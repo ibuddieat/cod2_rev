@@ -1132,6 +1132,16 @@ int irand(int min, int max)
 	return ((holdrand >> 17) * (max - min) >> 15) + min;
 }
 
+float randomf()
+{
+	return (float)(int)rand() / (float)RAND_MAX;
+}
+
+float crandom()
+{
+	return randomf() * 2.0 - 1.0;
+}
+
 float RotationToYaw(const vec2_t rot)
 {
 	float r;

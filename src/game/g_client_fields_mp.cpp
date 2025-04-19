@@ -2,8 +2,6 @@
 #include "../server/server.h"
 #include "g_shared.h"
 
-#define CFOFS( x ) ( (intptr_t)&( ( (gclient_t *)0 )->x ) )
-
 game_client_field_t g_client_fields[] =
 {
 	{ "name", CFOFS( sess.cs.name ), F_LSTRING, ClientScr_ReadOnly, NULL },

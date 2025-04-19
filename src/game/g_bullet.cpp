@@ -152,8 +152,8 @@ void gunrandom(float *x, float *y)
 	float r;
 	float cosT;
 
-	theta = G_random() * 360.0;
-	r = G_random();
+	theta = randomf() * 360.0;
+	r = randomf();
 	v2 = (float)(theta * 0.017453292);
 	cosT = cos(v2);
 	sinT = sin(v2);

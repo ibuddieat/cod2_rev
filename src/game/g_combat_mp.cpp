@@ -348,9 +348,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker,
 	{
 		vec3_t launchvel, launchspot;
 
-		launchvel[0] = G_crandom();
-		launchvel[1] = G_crandom();
-		launchvel[2] = G_random();
+		launchvel[0] = crandom();
+		launchvel[1] = crandom();
+		launchvel[2] = randomf();
 		VectorScale( launchvel, 160, launchvel );
 		VectorCopy( self->r.currentOrigin, launchspot );
 		launchspot[2] += 40;

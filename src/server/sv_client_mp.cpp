@@ -1510,40 +1510,40 @@ void SV_BotUserMove( client_t *cl )
 
 	if ( !G_GetClientArchiveTime(cl - svs.clients) )
 	{
-		if ( G_random() < 0.5 )
+		if ( randomf() < 0.5 )
 			ucmd.buttons |= BUTTON_ATTACK;
 
-		if ( G_random() < 0.5 )
+		if ( randomf() < 0.5 )
 			ucmd.buttons |= (BUTTON_USE | BUTTON_USERELOAD);
 
-		if ( G_random() < 0.33000001 )
+		if ( randomf() < 0.33000001 )
 		{
 			ucmd.forwardmove = BUTTON_FORWARD;
 		}
 		else
 		{
-			if ( G_random() < 0.5 )
+			if ( randomf() < 0.5 )
 				ucmd.forwardmove = BUTTON_BACK;
 		}
 
-		if ( G_random() < 0.33000001 )
+		if ( randomf() < 0.33000001 )
 		{
 			ucmd.rightmove = BUTTON_FORWARD;
 		}
 		else
 		{
-			if ( G_random() < 0.5 )
+			if ( randomf() < 0.5 )
 				ucmd.rightmove = BUTTON_BACK;
 		}
 
-		if ( G_random() < 0.33000001 )
-			ucmd.angles[0] = (int)(G_crandom() * 360.0);
+		if ( randomf() < 0.33000001 )
+			ucmd.angles[0] = (int)(crandom() * 360.0);
 
-		if ( G_random() < 0.33000001 )
-			ucmd.angles[1] = (int)(G_crandom() * 360.0);
+		if ( randomf() < 0.33000001 )
+			ucmd.angles[1] = (int)(crandom() * 360.0);
 
-		if ( G_random() < 0.33000001 )
-			ucmd.angles[2] = (int)(G_crandom() * 360.0);
+		if ( randomf() < 0.33000001 )
+			ucmd.angles[2] = (int)(crandom() * 360.0);
 	}
 
 	cl->deltaMessage = cl->netchan.outgoingSequence - 1;
