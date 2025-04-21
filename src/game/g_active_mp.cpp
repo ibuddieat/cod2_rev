@@ -900,9 +900,9 @@ void ClientEvents( gentity_t *ent, int oldEventSequence )
 		case EV_FIRE_WEAPON_LASTSHOT:
 		case EV_FIRE_WEAPON_MG42:
 			if ( g_antilag->current.boolean )
-				FireWeapon(ent, client->lastServerTime);
+				FireWeaponAntiLag(ent, client->lastServerTime);
 			else
-				FireWeapon(ent, level.time);
+				FireWeaponAntiLag(ent, level.time);
 			break;
 		case EV_FIRE_MELEE:
 			FireWeaponMelee(ent);

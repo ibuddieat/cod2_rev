@@ -1,140 +1,444 @@
 #include "../qcommon/qcommon.h"
 #include "g_shared.h"
 
-extern dvar_t *g_friendlyNameDist;
-extern dvar_t *g_friendlyfireDist;
-
-gentity_s* G_FX_VisibilityTrace(trace_t *trace, const float *start, const float *end, int passentitynum, int contentmask, unsigned char *priorityMap, float *forwardAngles)
+/*
+===============
+Player_UpdateActivate
+===============
+*/
+void Player_UpdateActivate( gentity_t *ent )
 {
-#ifndef DEDICATED
-	float dist;
-	float visible;
-	vec3_t endPos;
-#endif
+	assert(ent);
+	assert(ent->client);
 
-	G_LocationalTrace(trace, start, end, passentitynum, contentmask, priorityMap);
+	ent->client->ps.pm_flags &= ~PMF_RELOAD;
 
-	if ( trace->entityNum > 1021 )
-		return 0;
+	// Using binoculars
+	if ( ent->client->ps.weaponstate >= WEAPON_BINOCULARS_INIT && ent->client->ps.weaponstate <= WEAPON_BINOCULARS_END )
+	{
+		return;
+	}
 
-#ifdef DEDICATED
-	return &g_entities[trace->entityNum];
-#else
-	dist = trace->fraction * 15000.0;
-	VectorMA(start, dist, forwardAngles, endPos);
+	bool useSucceeded = false;
 
-	visible = SV_FX_GetVisibility(start, endPos);
+	if ( ent->client->useHoldEntity != ENTITYNUM_NONE && ent->client->oldbuttons & BUTTON_USERELOAD && ent->client->buttons & BUTTON_USERELOAD )
+	{
+		ent->client->ps.pm_flags |= PMF_RELOAD;
+		return;
+	}
 
-	if ( visible >= 0.2 )
-		return &g_entities[trace->entityNum];
-	else
-		return 0;
-#endif
+	if ( ent->client->latched_buttons & ( BUTTON_USE | BUTTON_USERELOAD ) )
+	{
+		useSucceeded = Player_ActivateCmd(ent);
+	}
+
+	if ( ent->client->useHoldEntity != ENTITYNUM_NONE || useSucceeded )
+	{
+		if ( ent->client->buttons & ( BUTTON_USE | BUTTON_USERELOAD ) )
+		{
+			Player_ActivateHoldCmd(ent);
+		}
+	}
+	else if ( ent->client->latched_buttons & BUTTON_USERELOAD )
+	{
+		ent->client->ps.pm_flags |= PMF_RELOAD;
+	}
 }
 
-
-void Player_UpdateLookAtEntity(gentity_s *ent)
+/*
+===============
+Player_UpdateLookAtEntity
+===============
+*/
+void Player_UpdateLookAtEntity( gentity_t *ent )
 {
-	unsigned char *priorityMap;
-	vec3_t vPos;
-	vec3_t vForward;
-	vec3_t vEnd;
-	vec3_t vOrigin;
+	vec3_t vDelta, vForward, vEnd, vEyePosition;
 	trace_t trace;
-	gentity_s *lookAtEnt;
-	gclient_s *client;
-	WeaponDef *weaponDef;
+	unsigned char *priorityMap;
+	gentity_t *lookAtEnt;
+	WeaponDef *weapDef;
+	playerState_t *ps;
 
-	client = ent->client;
-	client->ps.pm_flags &= 0xFFCFFFFF;
-	ent->client->pLookatEnt = 0;
-	G_GetPlayerViewOrigin(ent, vOrigin);
-	G_GetPlayerViewDirection(ent, vForward, 0, 0);
+	assert(ent);
+	assert(ent->client);
+	ps = &ent->client->ps;
+	assert(ps);
 
-	if ( (client->ps.eFlags & 0x300) != 0 )
-		weaponDef = BG_GetWeaponDef(g_entities[client->ps.viewlocked_entNum].s.weapon);
+	ps->pm_flags &= ~( PMF_LOOKAT_FRIEND | PMF_LOOKAT_ENEMY );
+	ent->client->pLookatEnt = NULL;
+
+	G_GetPlayerViewOrigin(ent, vEyePosition);
+	G_GetPlayerViewDirection(ent, vForward, NULL, NULL);
+
+	if ( ps->eFlags & EF_TURRET_ACTIVE )
+		weapDef = BG_GetWeaponDef(g_entities[ps->viewlocked_entNum].s.weapon);
 	else
-		weaponDef = BG_GetWeaponDef(ent->client->ps.weapon);
+		weapDef = BG_GetWeaponDef(ent->client->ps.weapon);
 
-	if ( ent->client->ps.weapon && weaponDef->rifleBullet )
+	assert(weapDef);
+
+	if ( ent->client->ps.weapon && weapDef->rifleBullet )
 		priorityMap = riflePriorityMap;
 	else
 		priorityMap = bulletPriorityMap;
 
-	VectorMA(vOrigin, 15000.0, vForward, vEnd);
-	lookAtEnt = G_FX_VisibilityTrace(&trace, vOrigin, vEnd, ent->s.number, 578824193, priorityMap, vForward);
+	VectorMA(vEyePosition, 15000, vForward, vEnd);
 
-	if ( lookAtEnt )
+	lookAtEnt = Player_UpdateLookAtEntityTrace( &trace, vEyePosition, vEnd, ent->s.number,
+	            CONTENTS_SOLID | CONTENTS_SKY | CONTENTS_CLIPSHOT | CONTENTS_UNKNOWN | CONTENTS_BODY | CONTENTS_TRANSLUCENT,
+	            priorityMap, vForward );
+
+	if ( !lookAtEnt )
 	{
-		if ( lookAtEnt->classname != scr_const.trigger_lookat
-		        || (ent->client->pLookatEnt = lookAtEnt,
-		            G_Trigger(lookAtEnt, ent),
-		            (lookAtEnt = G_FX_VisibilityTrace(&trace, vOrigin, vEnd, ent->s.number, 41953281, priorityMap, vForward)) != 0) )
+		return;
+	}
+
+	if ( lookAtEnt->classname == scr_const.trigger_lookat )
+	{
+		ent->client->pLookatEnt = lookAtEnt;
+		G_Trigger(lookAtEnt, ent);
+
+		lookAtEnt = Player_UpdateLookAtEntityTrace( &trace, vEyePosition, vEnd, ent->s.number,
+		            CONTENTS_SOLID | CONTENTS_SKY | CONTENTS_CLIPSHOT | CONTENTS_UNKNOWN | CONTENTS_BODY,
+		            priorityMap, vForward );
+
+		if ( !lookAtEnt )
 		{
-			if ( lookAtEnt->s.eType == ET_PLAYER && (trace.surfaceFlags & 0x10) == 0 )
+			return;
+		}
+	}
+
+	if ( lookAtEnt->s.eType != ET_PLAYER )
+	{
+		return;
+	}
+
+	if ( trace.surfaceFlags & SURF_NOIMPACT )
+	{
+		return;
+	}
+
+	VectorSubtract(lookAtEnt->r.currentOrigin, vEyePosition, vDelta);
+
+	if ( OnSameTeam(lookAtEnt, ent) )
+	{
+		if ( Square(g_friendlyNameDist->current.decimal) > VectorLengthSquared(vDelta) )
+		{
+			if ( !ent->client->pLookatEnt )
 			{
-				VectorSubtract(lookAtEnt->r.currentOrigin, vOrigin, vPos);
-
-				if ( lookAtEnt->client->sess.cs.team == ent->client->sess.cs.team && ent->client->sess.cs.team )
-				{
-					if ( Square(g_friendlyNameDist->current.decimal) > VectorLengthSquared(vPos) && !ent->client->pLookatEnt )
-						ent->client->pLookatEnt = lookAtEnt;
-
-					if ( Square(g_friendlyfireDist->current.decimal) > VectorLengthSquared(vPos) )
-						client->ps.pm_flags |= 0x100000u;
-				}
-				else
-				{
-					if ( Square(weaponDef->enemyCrosshairRange) > VectorLengthSquared(vPos) )
-					{
-						if ( !ent->client->pLookatEnt )
-							ent->client->pLookatEnt = lookAtEnt;
-
-						client->ps.pm_flags |= 0x200000u;
-					}
-				}
+				ent->client->pLookatEnt = lookAtEnt;
 			}
+		}
+
+		if ( Square(g_friendlyfireDist->current.decimal) > VectorLengthSquared(vDelta) )
+		{
+			// looking at friend
+			ps->pm_flags |= PMF_LOOKAT_FRIEND;
+		}
+	}
+	else
+	{
+		if ( Square(weapDef->enemyCrosshairRange) > VectorLengthSquared(vDelta) )
+		{
+			if ( !ent->client->pLookatEnt )
+			{
+				ent->client->pLookatEnt = lookAtEnt;
+			}
+
+			// looking at enemy
+			ps->pm_flags |= PMF_LOOKAT_ENEMY;
 		}
 	}
 }
 
-bool Player_ActivateCmd(gentity_s *ent)
+/*
+===============
+Player_UpdateCursorHints
+===============
+*/
+void Player_UpdateCursorHints( gentity_t *ent )
+{
+	useList_t useList[MAX_GENTITIES];
+	gentity_t *traceEnt;
+	playerState_t *ps;
+	WeaponDef *weapDef;
+
+	assert(ent);
+	assert(ent->client);
+	ps = &ent->client->ps;
+	assert(ps);
+
+	ps->cursorHint = 0;
+	ps->cursorHintString = -1;
+	ps->cursorHintEntIndex = ENTITYNUM_NONE;
+
+	// dead
+	if ( ent->health <= 0 )
+	{
+		return;
+	}
+
+	// Using binoculars
+	if ( ent->client->ps.weaponstate >= WEAPON_BINOCULARS_INIT && ent->client->ps.weaponstate <= WEAPON_BINOCULARS_END )
+	{
+		return;
+	}
+
+	// using turret
+	if ( ent->active && ps->eFlags & EF_TURRET_ACTIVE )
+	{
+		Player_SetTurretDropHint(ent);
+		return;
+	}
+
+	// mantling
+	if ( ent->client->ps.pm_flags & PMF_MANTLE )
+	{
+		return;
+	}
+
+	int num = Player_GetUseList(ent, useList);
+
+	if ( !num )
+	{
+		return;
+	}
+
+	int hintString = -1;
+
+	for ( int i = 0; i < num; i++ )
+	{
+		traceEnt = useList[i].ent;
+		assert(traceEnt);
+		assert(traceEnt->r.inuse);
+
+		if ( traceEnt->s.eType == ET_GENERAL )
+		{
+			if ( traceEnt->classname == scr_const.trigger_use || traceEnt->classname == scr_const.trigger_use_touch )
+			{
+				// Team for trigger do not match
+				if ( traceEnt->team != TEAM_NONE && traceEnt->team != ent->client->sess.cs.team )
+				{
+					continue;
+				}
+
+				// user for trigger do not match
+				if ( traceEnt->trigger.singleUserEntIndex != ENTITYNUM_NONE && traceEnt->trigger.singleUserEntIndex != ent->client->ps.clientNum )
+				{
+					continue;
+				}
+
+				if ( traceEnt->s.hintType != HINT_NONE && traceEnt->s.hintString != -1 )
+				{
+					hintString = traceEnt->s.hintString;
+				}
+			}
+
+			ps->cursorHintEntIndex = traceEnt->s.number;
+			ps->cursorHint = traceEnt->s.hintType;
+			ps->cursorHintString = hintString;
+
+			if ( !ps->cursorHint )
+			{
+				ps->cursorHintEntIndex = ENTITYNUM_NONE;
+			}
+
+			return;
+		}
+
+		if ( traceEnt->s.eType == ET_ITEM )
+		{
+			int itemHint = Player_GetItemCursorHint(ent->client, traceEnt);
+
+			if ( !itemHint )
+			{
+				continue;
+			}
+
+			ps->cursorHintEntIndex = traceEnt->s.number;
+			ps->cursorHint = itemHint;
+			ps->cursorHintString = hintString;
+
+			if ( !ps->cursorHint )
+			{
+				ps->cursorHintEntIndex = ENTITYNUM_NONE;
+			}
+
+			return;
+		}
+
+		if ( traceEnt->s.eType == ET_TURRET )
+		{
+			if ( !G_IsTurretUsable(traceEnt, ent) )
+			{
+				continue;
+			}
+
+			weapDef = BG_GetWeaponDef(traceEnt->s.weapon);
+			assert(weapDef);
+
+			if ( weapDef->useHintString[0] )
+			{
+				hintString = weapDef->useHintStringIndex;
+			}
+
+			ps->cursorHintEntIndex = traceEnt->s.number;
+			ps->cursorHint = traceEnt->s.weapon + 4;
+			ps->cursorHintString = hintString;
+
+			if ( !ps->cursorHint )
+			{
+				ps->cursorHintEntIndex = ENTITYNUM_NONE;
+			}
+
+			return;
+		}
+	}
+}
+
+/*
+===============
+compare_use
+===============
+*/
+static signed int compare_use( const void *num1, const void *num2 )
+{
+	useList_t *a = (useList_t *)num1;
+	useList_t *b = (useList_t *)num2;
+
+	return a->score - b->score;
+}
+
+/*
+===============
+Player_ActivateCmd
+===============
+*/
+bool Player_ActivateCmd( gentity_t *ent )
 {
 	if ( !Scr_IsSystemActive() )
-		return 0;
+	{
+		return false;
+	}
 
-	ent->client->useHoldEntity = 1023;
+	assert(ent);
+	assert(ent->r.inuse);
+	assert(ent->client);
+
+	ent->client->useHoldEntity = ENTITYNUM_NONE;
 
 	if ( ent->active )
 	{
-		if ( (ent->client->ps.eFlags & 0x300) != 0 )
-			ent->active = 2;
+		if ( ent->client->ps.eFlags & EF_TURRET_ACTIVE )
+			ent->active = ACTIVE_TURRET;
 		else
-			ent->active = 0;
+			ent->active = qfalse;
 
-		return 1;
+		return true;
 	}
-	else if ( (ent->client->ps.pm_flags & 4) != 0 )
+
+	if ( ent->client->ps.pm_flags & PMF_MANTLE )
 	{
-		return 1;
+		return true;
 	}
-	else if ( ent->client->ps.cursorHintEntIndex == 1023 )
-	{
-		return 0;
-	}
-	else
+
+	if ( ent->client->ps.cursorHintEntIndex != ENTITYNUM_NONE )
 	{
 		ent->client->useHoldEntity = ent->client->ps.cursorHintEntIndex;
 		ent->client->useHoldTime = level.time;
 
-		return 1;
+		return true;
 	}
+
+	return false;
 }
 
-void Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
+/*
+===============
+Player_SetTurretDropHint
+===============
+*/
+void Player_SetTurretDropHint( gentity_t *ent )
 {
-	void (*touch)(struct gentity_s *, struct gentity_s *, int);
-	void (*use)(struct gentity_s *, struct gentity_s *, struct gentity_s *);
+	playerState_t *ps;
+	gentity_t *turret;
+	WeaponDef *weapDef;
+
+	assert(ent);
+	assert(ent->client);
+	assert(ent->active);
+
+	ps = &ent->client->ps;
+	assert(ps);
+	assert(ps->eFlags & EF_TURRET_ACTIVE);
+	assert(ps->viewlocked_entNum != ENTITYNUM_NONE);
+
+	turret = &level.gentities[ps->viewlocked_entNum];
+	assert(turret->s.eType == ET_TURRET);
+
+	weapDef = BG_GetWeaponDef(turret->s.weapon);
+	assert(weapDef);
+
+	if ( !weapDef->dropHintString[0] )
+	{
+		return;
+	}
+
+	ps->cursorHintEntIndex = ENTITYNUM_NONE;
+	ps->cursorHint = turret->s.weapon + 4;
+	ps->cursorHintString = weapDef->dropHintStringIndex;
+}
+
+/*
+===============
+Player_GetItemCursorHint
+===============
+*/
+int Player_GetItemCursorHint( gclient_t *client, gentity_t *traceEnt )
+{
+	assert(traceEnt);
+	assert(client);
+
+	int index = traceEnt->item.index;
+	assert(((0 <= index) && (index < (( MAX_WEAPONS ) ))));
+
+	gitem_t *item = &bg_itemlist[index];
+	assert(item->giType == IT_WEAPON);
+
+	if ( item->giType != IT_WEAPON )
+	{
+		return 0;
+	}
+
+	WeaponDef *weapDef = BG_GetWeaponDef(item->giTag);
+
+	if ( weapDef->weaponType == WEAPTYPE_GRENADE )
+	{
+		return 0;
+	}
+
+	if ( Com_BitCheck(client->ps.weapons, item->giTag))
+	{
+		return 0;
+	}
+
+	return item->giTag + 4;
+}
+
+/*
+===============
+Player_UseEntity
+===============
+*/
+void Player_UseEntity( gentity_t *playerEnt, gentity_t *useEnt )
+{
+	void (*touch)(gentity_t *, gentity_t *, int);
+	void (*use)(gentity_t *, gentity_t *, gentity_t *);
+
+	assert(playerEnt);
+	assert(playerEnt->client);
+	assert(useEnt);
+	assert(useEnt->r.inuse);
 
 	use = entityHandlers[useEnt->handler].use;
 	touch = entityHandlers[useEnt->handler].touch;
@@ -143,10 +447,13 @@ void Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
 	{
 		Scr_AddEntity(playerEnt);
 		Scr_Notify(useEnt, scr_const.touch, 1);
-		useEnt->active = 1;
+
+		useEnt->active = qtrue;
 
 		if ( touch )
+		{
 			touch(useEnt, playerEnt, 0);
+		}
 	}
 	else if ( useEnt->s.eType != ET_TURRET || G_IsTurretUsable(useEnt, playerEnt) )
 	{
@@ -154,312 +461,217 @@ void Player_UseEntity(gentity_s *playerEnt, gentity_s *useEnt)
 		Scr_Notify(useEnt, scr_const.trigger, 1);
 
 		if ( use )
-			use(useEnt, playerEnt, playerEnt);
-	}
-
-	playerEnt->client->useHoldEntity = 1023;
-}
-
-extern dvar_t *g_useholdspawndelay;
-extern dvar_t *g_useholdtime;
-void Player_ActivateHoldCmd(gentity_s *ent)
-{
-	if ( Scr_IsSystemActive()
-	        && ent->client->useHoldEntity != 1023
-	        && level.time - ent->client->lastSpawnTime >= g_useholdspawndelay->current.integer
-	        && level.time - ent->client->useHoldTime >= g_useholdtime->current.integer )
-	{
-		Player_UseEntity(ent, &g_entities[ent->client->useHoldEntity]);
-	}
-}
-
-void Player_UpdateActivate(gentity_s *ent)
-{
-	bool useSucceeded;
-
-	ent->client->ps.pm_flags &= ~8u;
-
-	if ( ent->client->ps.weaponstate < WEAPON_BINOCULARS_INIT || ent->client->ps.weaponstate > WEAPON_BINOCULARS_END )
-	{
-		useSucceeded = 0;
-
-		if ( ent->client->useHoldEntity == 1023
-		        || (ent->client->oldbuttons & 0x20) == 0
-		        || (ent->client->buttons & 0x20) != 0 )
 		{
-			if ( (ent->client->latched_buttons & 0x28) != 0 )
-				useSucceeded = Player_ActivateCmd(ent);
+			use(useEnt, playerEnt, playerEnt);
+		}
+	}
 
-			if ( ent->client->useHoldEntity != 1023 || useSucceeded )
+	playerEnt->client->useHoldEntity = ENTITYNUM_NONE;
+}
+
+/*
+===============
+Player_ActivateHoldCmd
+===============
+*/
+void Player_ActivateHoldCmd( gentity_t *ent )
+{
+	if ( !Scr_IsSystemActive() )
+	{
+		return;
+	}
+
+	assert(ent);
+	assert(ent->client);
+
+	if ( ent->client->useHoldEntity == ENTITYNUM_NONE )
+	{
+		return;
+	}
+
+	if ( level.time - ent->client->lastSpawnTime < g_useholdspawndelay->current.integer )
+	{
+		return;
+	}
+
+	if ( level.time - ent->client->useHoldTime < g_useholdtime->current.integer )
+	{
+		return;
+	}
+
+	Player_UseEntity(ent, &g_entities[ent->client->useHoldEntity]);
+}
+
+/*
+===============
+Player_UpdateLookAtEntityTrace
+===============
+*/
+gentity_t* Player_UpdateLookAtEntityTrace( trace_t *trace, const vec3_t start, const vec3_t end,
+        int passentitynum, int contentmask, unsigned char *priorityMap, vec3_t vForward )
+{
+	G_LocationalTrace(trace, start, end, passentitynum, contentmask, priorityMap);
+
+	if ( trace->entityNum >= ENTITYNUM_WORLD )
+	{
+		return NULL;
+	}
+
+	// Visibility code not supported
+	return &g_entities[trace->entityNum];
+}
+
+/*
+===============
+Player_GetUseList
+===============
+*/
+static vec3_t useRadius = { 192.0, 192.0, 96.0 };
+int Player_GetUseList( gentity_t *ent, useList_t *useList )
+{
+	vec3_t mins, maxs, absmin, absmax, origin, forward, midpoint, dest;
+	int itemEntCount = 0, otherEntCount = 0;
+	int i, useCount, num;
+	float dist;
+	int entityList[MAX_GENTITIES];
+	playerState_t *ps;
+	gentity_t *gEnt, *ent2;
+
+	assert(ent);
+	assert(ent->client);
+	ps = &ent->client->ps;
+	assert(ps);
+
+	G_GetPlayerViewOrigin(ent, origin);
+	G_GetPlayerViewDirection(ent, forward, NULL, NULL);
+
+	VectorAdd(ps->origin, ps->mins, absmin);
+	VectorAdd(ps->origin, ps->maxs, absmax);
+
+	VectorSubtract(origin, useRadius, mins);
+	VectorAdd(origin, useRadius, maxs);
+
+	num = CM_AreaEntities(mins, maxs, entityList, MAX_GENTITIES, CONTENTS_DONOTENTER);
+	useCount = 0;
+
+	for ( i = 0; i < num; i++ )
+	{
+		gEnt = &g_entities[entityList[i]];
+
+		if ( ent == gEnt )
+		{
+			continue;
+		}
+
+		if ( gEnt->s.eType != ET_ITEM && !( gEnt->r.contents & CONTENTS_DONOTENTER ) )
+		{
+			continue;
+		}
+
+		if ( gEnt->classname == scr_const.trigger_use_touch )
+		{
+			if ( gEnt->r.absmin[0] > absmax[0] )
 			{
-				if ( (ent->client->buttons & 0x28) != 0 )
-					Player_ActivateHoldCmd(ent);
+				continue;
 			}
-			else if ( (ent->client->latched_buttons & 0x20) != 0 )
+
+			if ( absmin[0] > gEnt->r.absmax[0] )
 			{
-				ent->client->ps.pm_flags |= 8u;
+				continue;
 			}
+
+			if ( gEnt->r.absmin[1] > absmax[1] )
+			{
+				continue;
+			}
+
+			if ( absmin[1] > gEnt->r.absmax[1] )
+			{
+				continue;
+			}
+
+			if ( gEnt->r.absmin[2] > absmax[2] )
+			{
+				continue;
+			}
+
+			if ( absmin[2] > gEnt->r.absmax[2] )
+			{
+				continue;
+			}
+
+			if ( !SV_EntityContact(absmin, absmax, gEnt) )
+			{
+				continue;
+			}
+
+			useList[useCount].score = -256;
+			useList[useCount].ent = gEnt;
+			useCount++;
 		}
 		else
 		{
-			ent->client->ps.pm_flags |= 8u;
-		}
-	}
-}
+			VectorAdd(gEnt->r.absmin, gEnt->r.absmax, midpoint);
+			VectorScale(midpoint, 0.5, midpoint);
+			VectorSubtract(midpoint, origin, dest);
 
-vec3_t useRadius = { 192.0, 192.0, 96.0 };
+			dist = Vec3Normalize(dest);
 
-static signed int compare_use(const void *num1, const void *num2)
-{
-	useList_t *a;
-	useList_t *b;
-
-	a = (useList_t *)num1;
-	b = (useList_t *)num2;
-
-	return (int)(a->score - b->score);
-}
-
-int Player_GetUseList(gentity_s *ent, useList_t *useList)
-{
-	float vLenSq;
-	int useCount;
-	vec3_t absmax;
-	vec3_t absmin;
-	int j;
-	int i;
-	int entityCount;
-	int entities;
-	int entityList[1024];
-	float vDist;
-	float vNorm;
-	vec3_t vAng;
-	vec3_t pos;
-	vec3_t vOrigin;
-	vec3_t maxs;
-	vec3_t mins;
-	vec3_t vForward;
-	gentity_s *areaEnt;
-	gclient_s *client;
-	gentity_s *other;
-
-	useCount = 0;
-	client = ent->client;
-	G_GetPlayerViewOrigin(ent, vOrigin);
-	G_GetPlayerViewDirection(ent, vForward, 0, 0);
-	VectorAdd(client->ps.origin, client->ps.mins, absmin);
-	VectorAdd(client->ps.origin, client->ps.maxs, absmax);
-	VectorSubtract(vOrigin, useRadius, mins);
-	VectorAdd(vOrigin, useRadius, maxs);
-	entities = CM_AreaEntities(mins, maxs, entityList, 1024, 0x200000);
-	entityCount = 0;
-
-	for ( i = 0; i < entities; ++i )
-	{
-		areaEnt = &g_entities[entityList[i]];
-
-		if ( ent != areaEnt && (areaEnt->s.eType == ET_ITEM || (areaEnt->r.contents & 0x200000) != 0) )
-		{
-			if ( areaEnt->classname == scr_const.trigger_use_touch )
+			if ( dist > 128 )
 			{
-				if ( areaEnt->r.absmin[0] <= absmax[0]
-				        && absmin[0] <= areaEnt->r.absmax[0]
-				        && areaEnt->r.absmin[1] <= absmax[1]
-				        && absmin[1] <= areaEnt->r.absmax[1]
-				        && areaEnt->r.absmin[2] <= absmax[2]
-				        && absmin[2] <= areaEnt->r.absmax[2] )
-				{
-					if ( SV_EntityContact(absmin, absmax, areaEnt) )
-					{
-						useList[entityCount].score = -256.0;
-						useList[entityCount].ent = areaEnt;
-						entityCount++;
-					}
-				}
+				continue;
 			}
-			else
+
+			useList[useCount].score = 1.0 - (DotProduct(dest, forward) + 1.0) * 0.5 * 256;
+
+			if ( gEnt->classname == scr_const.trigger_use )
 			{
-				VectorAdd(areaEnt->r.absmin, areaEnt->r.absmax, pos);
-				VectorScale(pos, 0.5, pos);
-				VectorSubtract(pos, vOrigin, vAng);
-				vNorm = Vec3Normalize(vAng);
-
-				if ( vNorm <= 128.0 )
-				{
-					vLenSq = DotProduct(vAng, vForward);
-					vDist = 1.0 - (vLenSq + 1.0) * 0.5;
-					useList[entityCount].score = vDist * 256.0;
-
-					if ( areaEnt->classname == scr_const.trigger_use )
-						useList[entityCount].score = useList[entityCount].score - 256.0;
-
-					if ( areaEnt->s.eType == ET_ITEM && !BG_CanItemBeGrabbed(&areaEnt->s, &ent->client->ps, 0) )
-					{
-						useList[entityCount].score = useList[entityCount].score + 10000.0;
-						++useCount;
-					}
-
-					useList[entityCount].ent = areaEnt;
-					useList[entityCount].score = useList[entityCount].score + vNorm;
-					++entityCount;
-				}
+				useList[useCount].score -= 256;
 			}
-		}
-	}
 
-	qsort(useList, entityCount, 8u, compare_use);
-	entityCount -= useCount;
-	j = 0;
-
-	for ( i = 0; i < entityCount; ++i )
-	{
-		other = useList[i].ent;
-
-		if ( other->classname != scr_const.trigger_use_touch )
-		{
-			VectorAdd(other->r.absmin, other->r.absmax, pos);
-			VectorScale(pos, 0.5, pos);
-
-			if ( other->s.eType == ET_TURRET )
-				G_DObjGetWorldTagPos(other, scr_const.tag_aim, pos);
-
-			if ( !G_TraceCapsuleComplete(vOrigin, vec3_origin, vec3_origin, pos, client->ps.clientNum, 17) )
+			if ( gEnt->s.eType == ET_ITEM && !BG_CanItemBeGrabbed(&gEnt->s, &ent->client->ps, qfalse) )
 			{
-				useList[i].score = useList[i].score + 10000.0;
-				++j;
+				useList[useCount].score += 10000;
+				itemEntCount++;
 			}
+
+			useList[useCount].ent = gEnt;
+			useList[useCount].score += dist;
+			useCount++;
 		}
 	}
 
-	qsort(useList, entityCount, 8u, compare_use);
-	return entityCount - j;
-}
+	qsort(useList, useCount, sizeof(useList_t), compare_use);
+	useCount -= itemEntCount;
 
-void Player_SetTurretDropHint(gentity_s *ent)
-{
-	gclient_s *client;
-	gentity_s *other;
-
-	client = ent->client;
-	other = &level.gentities[client->ps.viewlocked_entNum];
-
-	if ( *BG_GetWeaponDef(other->s.weapon)->dropHintString )
+	for ( i = 0; i < useCount; i++ )
 	{
-		client->ps.cursorHintEntIndex = 1023;
-		client->ps.cursorHint = other->s.weapon + 4;
-		client->ps.cursorHintString = BG_GetWeaponDef(other->s.weapon)->dropHintStringIndex;
-	}
-}
+		ent2 = useList[i].ent;
 
-int Player_GetItemCursorHint(gclient_s *client, gentity_s *traceEnt)
-{
-	int index;
-	gitem_s *item;
-
-	item = &bg_itemlist[traceEnt->item.index];
-	index = 0;
-
-	if ( item->giType == IT_WEAPON
-	        && BG_GetWeaponDef(item->giTag)->weaponType != WEAPTYPE_GRENADE
-	        && !Com_BitCheck(client->ps.weapons, item->giTag) )
-	{
-		return item->giTag + 4;
-	}
-
-	return index;
-}
-
-void Player_UpdateCursorHints(gentity_s *ent)
-{
-	int type;
-	int i;
-	int entiytCount;
-	int useHint;
-	int hint;
-	int item;
-	gentity_s *useEnt;
-	gclient_s *client;
-	useList_t useList[1024];
-
-	client = ent->client;
-	client->ps.cursorHint = 0;
-	client->ps.cursorHintString = -1;
-	client->ps.cursorHintEntIndex = 1023;
-
-	if ( ent->health > 0
-	        && (ent->client->ps.weaponstate < WEAPON_BINOCULARS_INIT || ent->client->ps.weaponstate > WEAPON_BINOCULARS_END) )
-	{
-		if ( ent->active )
+		if ( ent2->classname == scr_const.trigger_use_touch )
 		{
-			if ( (client->ps.eFlags & 0x300) != 0 )
-				Player_SetTurretDropHint(ent);
+			continue;
 		}
-		else if ( (ent->client->ps.pm_flags & 4) == 0 )
+
+		VectorAdd(ent2->r.absmin, ent2->r.absmax, midpoint);
+		VectorScale(midpoint, 0.5, midpoint);
+
+		if ( ent2->s.eType == ET_TURRET )
 		{
-			entiytCount = Player_GetUseList(ent, useList);
-
-			if ( entiytCount )
-			{
-				item = 0;
-				useHint = -1;
-
-				for ( i = 0; ; ++i )
-				{
-					if ( i >= entiytCount )
-						return;
-
-					useEnt = useList[i].ent;
-					type = useEnt->s.eType;
-
-					if ( type == ET_ITEM )
-					{
-						hint = Player_GetItemCursorHint(ent->client, useEnt);
-
-						if ( hint )
-						{
-							item = hint;
-setstring:
-							client->ps.cursorHintEntIndex = useEnt->s.number;
-							client->ps.cursorHint = item;
-							client->ps.cursorHintString = useHint;
-
-							if ( !client->ps.cursorHint )
-								client->ps.cursorHintEntIndex = 1023;
-
-							return;
-						}
-					}
-					else if ( type > ET_ITEM )
-					{
-						if ( type == ET_TURRET && G_IsTurretUsable(useEnt, ent) )
-						{
-							item = useEnt->s.weapon + 4;
-
-							if ( *BG_GetWeaponDef(useEnt->s.weapon)->useHintString )
-								useHint = BG_GetWeaponDef(useEnt->s.weapon)->useHintStringIndex;
-
-							goto setstring;
-						}
-					}
-					else if ( type == ET_GENERAL )
-					{
-						if ( useEnt->classname != scr_const.trigger_use && useEnt->classname != scr_const.trigger_use_touch )
-							goto setstring;
-
-						if ( (!useEnt->team || useEnt->team == ent->client->sess.cs.team)
-						        && (useEnt->trigger.singleUserEntIndex == 1023
-						            || useEnt->trigger.singleUserEntIndex == ent->client->ps.clientNum) )
-						{
-							item = useEnt->s.hintType;
-
-							if ( item && useEnt->s.hintString != -1 )
-								useHint = useEnt->s.hintString;
-
-							goto setstring;
-						}
-					}
-				}
-			}
+			G_DObjGetWorldTagPos(ent2, scr_const.tag_aim, midpoint);
 		}
+
+		if ( G_TraceCapsuleComplete(origin, vec3_origin, vec3_origin, midpoint, ps->clientNum, CONTENTS_SOLID | CONTENTS_GLASS) )
+		{
+			continue;
+		}
+
+		useList[i].score += 10000;
+		otherEntCount++;
 	}
+
+	qsort(useList, useCount, sizeof(useList_t), compare_use);
+	useCount -= otherEntCount;
+
+	return useCount;
 }

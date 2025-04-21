@@ -1196,11 +1196,10 @@ enum hintType_t
 	HINT_FRIENDLY
 };
 
-
 struct AntilagClientStore
 {
-	vec3_t realClientPositions[64];
-	bool clientMoved[64];
+	vec3_t realClientPositions[MAX_CLIENTS];
+	bool clientMoved[MAX_CLIENTS];
 };
 
 struct spawn_t
@@ -1348,6 +1347,8 @@ inline vec3_t playerMaxs = { 15.0, 15.0, 70.0 };
 #define SAY_TEAM 1
 #define SAY_TELL 2
 
+#define ACTIVE_TURRET 2
+
 extern dvar_t *g_maxclients;
 extern dvar_t *g_password;
 extern dvar_t *g_playerCollisionEjectSpeed;
@@ -1383,6 +1384,16 @@ extern dvar_t *voice_deadChat;
 extern dvar_t *voice_localEcho;
 
 extern dvar_t *g_dedicated;
+
+extern dvar_t *player_meleeRange;
+extern dvar_t *player_meleeWidth;
+extern dvar_t *player_meleeHeight;
+
+extern dvar_t *g_friendlyNameDist;
+extern dvar_t *g_friendlyfireDist;
+
+extern dvar_t *g_useholdspawndelay;
+extern dvar_t *g_useholdtime;
 
 void HudElem_SetFontScale(game_hudelem_t *hud, int offset);
 void HudElem_SetFont(game_hudelem_t *hud, int offset);
@@ -1569,9 +1580,9 @@ void G_InitGentity(gentity_s *ent);
 void G_PrintEntities();
 gentity_s* G_Spawn(void);
 gentity_s* G_TempEntity(vec3_t origin, int event);
-void Bullet_Fire(gentity_s *attacker, float spread, weaponParms *wp, const gentity_s *ent, int gameTime);
+void Bullet_Fire( gentity_t *attacker, float spread, weaponParms *wp, gentity_t *weaponEnt, int gametime );
 gentity_s* fire_grenade(gentity_s *parent, float *start, float *dir, int grenadeWPID, int time);
-void Weapon_Throw_Grenade(gentity_s *ent, int grenType, weaponParms *wp);
+void weapon_grenadelauncher_fire(gentity_s *ent, int grenType, weaponParms *wp);
 void gunrandom(float *x, float *y);
 gentity_s* fire_rocket(gentity_s *parent, float *start, float *dir);
 void Weapon_RocketLauncher_Fire(gentity_s *ent, float spread, weaponParms *targetOffset);
@@ -1605,7 +1616,7 @@ DObjAnimMat* G_DObjGetLocalTagMatrix(gentity_s *ent, unsigned int tagName);
 int G_DObjGetWorldTagPos(gentity_s *ent, unsigned int tagName, float *pos);
 void G_GetPlayerViewDirection(const gentity_s *ent, float *forward, float *right, float *up);
 void G_GetPlayerViewOrigin(gentity_s *ent, float *origin);
-void FireWeapon(gentity_s *ent, int gametime);
+void FireWeaponAntiLag(gentity_s *ent, int gametime);
 void Weapon_Melee(gentity_s *ent, weaponParms *wp, float range, float width, float height);
 
 float G_GetWeaponHitLocationMultiplier(int hitLoc, int weapon);
@@ -2146,3 +2157,17 @@ void ScrCmd_PlayLocalSound(scr_entref_t entref);
 void PlayerCmd_IsTalking(scr_entref_t entref);
 void PlayerCmd_AllowSpectateTeam(scr_entref_t entref);
 void PlayerCmd_GetGuid(scr_entref_t entref);
+
+int Bullet_GetDamage( const weaponParms *wp, float dist );
+void Bullet_Endpos( float spread, float *end, const weaponParms *wp, float maxRange, int shot );
+void CalcMuzzlePoints( gentity_t *ent, weaponParms *wp );
+bool Melee_Trace(gentity_t *ent, weaponParms *wp, int damage, float range, float width, float height, trace_t *traceResult, float *hitOrigin);
+void G_BulletFireSpread(const gentity_s *weaponEnt, gentity_s *attacker, const weaponParms *wp, int gameTime, float spread);
+void Bullet_Fire_Extended( const gentity_t *source, gentity_t *attacker, vec3_t start, vec3_t end, float spread, int resursion, const weaponParms *wp, const gentity_t *weaponEnt, int gameTime );
+
+bool Player_ActivateCmd(gentity_s *ent);
+void Player_ActivateHoldCmd(gentity_s *ent);
+gentity_s* Player_UpdateLookAtEntityTrace(trace_t *trace, const float *start, const float *end, int passentitynum, int contentmask, unsigned char *priorityMap, float *forwardAngles);
+void Player_SetTurretDropHint(gentity_s *ent);
+int Player_GetUseList(gentity_s *ent, useList_t *useList);
+int Player_GetItemCursorHint(gclient_s *client, gentity_s *traceEnt);

@@ -3,6 +3,11 @@
 
 scr_const_t scr_const;
 
+/*
+===============
+GScr_LoadConsts
+===============
+*/
 void GScr_LoadConsts()
 {
 	scr_const.emptystring = GScr_AllocString("");
