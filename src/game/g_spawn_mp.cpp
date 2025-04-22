@@ -1072,7 +1072,7 @@ void G_ParseEntityFields( gentity_t *ent )
 
 	for ( int i = 0; i < level.spawnVars.numSpawnVars; i++ )
 	{
-		G_ParseEntityField(level.spawnVars.spawnVars[i].key, level.spawnVars.spawnVars[i].value, ent);
+		G_ParseEntityField(level.spawnVars.spawnVars[i][0], level.spawnVars.spawnVars[i][1], ent);
 	}
 
 	G_SetOrigin(ent, ent->r.currentOrigin);
@@ -1098,7 +1098,7 @@ void G_SpawnStruct()
 
 	for ( i = 0; i < level.spawnVars.numSpawnVars; i++ )
 	{
-		index = G_SetEntityScriptVariableInternal(level.spawnVars.spawnVars[i].key, level.spawnVars.spawnVars[i].value);
+		index = G_SetEntityScriptVariableInternal(level.spawnVars.spawnVars[i][0], level.spawnVars.spawnVars[i][1]);
 
 		if ( index )
 		{

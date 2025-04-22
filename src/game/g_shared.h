@@ -27,23 +27,19 @@
 #define MAX_TAGS 32
 #define MAX_SHADERS 128
 #define MAX_LOCALIZED_STRINGS 256
+#define MAX_SPAWN_VARS 64
+#define MAX_SPAWN_VARS_CHARS 2048
 
 typedef struct gclient_s gclient_t;
 typedef struct gentity_s gentity_t;
 
 typedef struct
 {
-	const char *key;
-	const char *value;
-} keyValueStr_t;
-
-typedef struct
-{
-	byte spawnVarsValid;
+	bool spawnVarsValid;
 	int numSpawnVars;
-	keyValueStr_t spawnVars[64];
+	char *spawnVars[MAX_SPAWN_VARS][2]; // key / value pairs
 	int numSpawnVarChars;
-	char spawnVarChars[2048];
+	char spawnVarChars[MAX_SPAWN_VARS_CHARS];
 } SpawnVar;
 
 typedef struct
@@ -430,7 +426,7 @@ typedef struct
 	usercmd_s oldcmd;
 	int localClient;
 	int predictItemPickup;
-	char name[32];
+	char name[MAX_NAME_LENGTH];
 	int maxHealth;
 	int enterTime;
 	int voteCount;
@@ -665,7 +661,7 @@ typedef struct
 	fileHandle_t logFile;
 	int initializing;
 	int clientIsSpawning;
-	objective_t objectives[16];
+	objective_t objectives[MAX_OBJECTIVES];
 	int maxclients;
 	int framenum;
 	int time;
@@ -688,7 +684,7 @@ typedef struct
 	byte gap[2072];
 	SpawnVar spawnVars;
 	int savePersist;
-	struct gentity_s *droppedWeaponCue[32];
+	struct gentity_s *droppedWeaponCue[MAX_DROPPED_WEAPONS];
 	float fFogOpaqueDist;
 	float fFogOpaqueDistSqrd;
 	int remapCount;
@@ -924,7 +920,7 @@ struct entityHandler_t
 	int splashMethodOfDeath;
 };
 
-inline unsigned char riflePriorityMap[] = { 1,9,9,9,8,7,6,6,6,6,5,5,4,4,4,4,3,3,0 };
+inline unsigned char riflePriorityMap[] =  { 1,9,9,9,8,7,6,6,6,6,5,5,4,4,4,4,3,3,0 };
 inline unsigned char bulletPriorityMap[] = { 1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,0 };
 
 typedef enum
@@ -1547,7 +1543,7 @@ void Scr_StartupGameType();
 
 void G_LoadStructs();
 int G_GetEntityToken(char *buffer, int bufferSize);
-char* G_AddSpawnVarToken(char *string, SpawnVar *spawnVar);
+char *G_AddSpawnVarToken( const char *string, SpawnVar *spawnVar );
 int G_ParseSpawnVars(SpawnVar *spawnVar);
 void G_SpawnEntitiesFromString();
 
