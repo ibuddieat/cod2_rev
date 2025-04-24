@@ -1,11 +1,9 @@
 #include "../qcommon/qcommon.h"
 #include "script_public.h"
 
-#define MAX_SCRIPT_VARIABLES 65536
-
 typedef struct __attribute__((aligned(64))) scrVarGlob_s
 {
-	VariableValueInternal variableList[MAX_SCRIPT_VARIABLES];
+	VariableValueInternal variableList[SL_MAX_STRING_INDEX];
 } scrVarGlob_t;
 #if defined(__i386__)
 static_assert((sizeof(scrVarGlob_t) == 0x100000), "ERROR: scrVarGlob_t size is invalid!");
@@ -15,7 +13,6 @@ scrVarGlob_t scrVarGlob;
 scrVarPub_t scrVarPub;
 
 #define VARIABLELIST_SIZE 0xFFFE
-#define SL_MAX_STRING_INDEX 0x10000
 #define MAX_ARRAYINDEX 0x800000
 
 #define VAR_MASK 0x1F
@@ -67,7 +64,7 @@ struct scr_classStruct_t scrClassMap[] =
 
 #define CLASS_NUM_COUNT 4
 
-unsigned int Scr_GetObjectType(int varIndex)
+unsigned int GetValueType(int varIndex)
 {
 	return scrVarGlob.variableList[varIndex].w.type & VAR_MASK;
 }
@@ -79,7 +76,7 @@ qboolean IsObject(VariableValueInternal *var)
 
 qboolean IsObjectVal(int varIndex)
 {
-	return Scr_GetObjectType(varIndex) > VAR_THREAD_LIST;
+	return GetValueType(varIndex) > VAR_THREAD_LIST;
 }
 
 unsigned int FindNextSibling(unsigned int id)
@@ -518,6 +515,17 @@ void Scr_EvalVariable(VariableValue *val, unsigned int index)
 	AddRefToValue(val);
 }
 
+VariableValue Scr_EvalVariable(unsigned int index)
+{
+	VariableValue value;
+
+	value.type = scrVarGlob.variableList[index].w.type & VAR_MASK;
+	value.u = scrVarGlob.variableList[index].u.u;
+	AddRefToValue(&value);
+
+	return value;
+}
+
 unsigned int GetNewVariable(unsigned int parentId, unsigned int name)
 {
 	return scrVarGlob.variableList[GetNewVariableIndexInternal(parentId, name)].hash.id;
@@ -554,9 +562,14 @@ void Scr_GetEntityIdRef(scr_entref_t *entRef, unsigned int entId)
 	entRef->classnum = scrVarGlob.variableList[entId].w.classnum >> VAR_NAME_BITS;
 }
 
-union VariableValueInternal_u* GetVariableValueAddress(unsigned int id)
+union VariableValueInternal_u* GetVariableValueAddress_Bad(unsigned int id)
 {
 	return &scrVarGlob.variableList[id].u;
+}
+
+union VariableUnion* GetVariableValueAddress(unsigned int id)
+{
+	return &scrVarGlob.variableList[id].u.u;
 }
 
 unsigned int GetVariableKeyObject(unsigned int id)
@@ -1176,7 +1189,7 @@ void Scr_KillThread(unsigned int parentId)
 				break;
 
 			startLocalId = (unsigned short)(scrVarGlob.variableList[notifyListEntry].w.type >> VAR_NAME_BITS);
-			threadvar = GetVariableValueAddress(FindObjectVariable(selfNameId, startLocalId));
+			threadvar = GetVariableValueAddress_Bad(FindObjectVariable(selfNameId, startLocalId));
 			VM_CancelNotify(threadvar->u.pointerValue, startLocalId);
 			Scr_KillEndonThread(startLocalId);
 		}
@@ -1581,7 +1594,7 @@ void Scr_CastDebugString(VariableValue *value)
 	switch ( value->type )
 	{
 	case VAR_OBJECT:
-		stringValue = SL_GetString_(var_typename[Scr_GetObjectType(value->u.pointerValue)], 0);
+		stringValue = SL_GetString_(var_typename[GetValueType(value->u.pointerValue)], 0);
 		break;
 
 	case VAR_STRING:

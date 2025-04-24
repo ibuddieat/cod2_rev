@@ -234,7 +234,7 @@ int Scr_GetPointerType(unsigned int index)
 		Scr_Error(va("type %s is not a pointer", var_typename[Scr_GetValue(index)->type]));
 	}
 
-	return Scr_GetObjectType(Scr_GetValue(index)->u.pointerValue);
+	return GetValueType(Scr_GetValue(index)->u.pointerValue);
 }
 
 void Scr_GetEntityRef(scr_entref_t *entRef, unsigned int index)
@@ -250,14 +250,14 @@ void Scr_GetEntityRef(scr_entref_t *entRef, unsigned int index)
 		{
 			entId = entryValue->u.pointerValue;
 
-			if ( Scr_GetObjectType(entryValue->u.pointerValue) == VAR_ENTITY )
+			if ( GetValueType(entryValue->u.pointerValue) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(entRef, entId);
 				return;
 			}
 
 			scrVarPub.error_index = index + 1;
-			Scr_Error(va("type %s is not an entity", var_typename[Scr_GetObjectType(entId)]));
+			Scr_Error(va("type %s is not an entity", var_typename[GetValueType(entId)]));
 		}
 
 		scrVarPub.error_index = index + 1;
@@ -844,7 +844,7 @@ void Scr_CancelWaittill(unsigned int startLocalId)
 	localId = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
 	selfNameId = FindObject(localId);
 	parentId = FindObjectVariable(selfNameId, startLocalId);
-	adr = GetVariableValueAddress(parentId);
+	adr = GetVariableValueAddress_Bad(parentId);
 	VM_CancelNotify(adr->u.stringValue, startLocalId);
 	RemoveObjectVariable(selfNameId, startLocalId);
 
@@ -887,9 +887,9 @@ void Scr_CancelNotifyList(unsigned int notifyListOwnerId)
 
 		startLocalId = GetVariableKeyObject(stackId);
 
-		if ( Scr_GetObjectType(stackId) == VAR_STACK )
+		if ( GetValueType(stackId) == VAR_STACK )
 		{
-			stackValue = GetVariableValueAddress(stackId)->u.stackValue;
+			stackValue = GetVariableValueAddress_Bad(stackId)->u.stackValue;
 			Scr_CancelWaittill(startLocalId);
 			VM_TrimStack(startLocalId, stackValue, 0);
 		}
@@ -903,7 +903,7 @@ void Scr_CancelNotifyList(unsigned int notifyListOwnerId)
 
 			if ( parentLocalId )
 			{
-				stackBuf = GetVariableValueAddress(parentLocalId)->u.stackValue;
+				stackBuf = GetVariableValueAddress_Bad(parentLocalId)->u.stackValue;
 				VM_TrimStack(localId, stackBuf, 1);
 			}
 
@@ -929,7 +929,7 @@ void VM_TerminateTime(unsigned int timeId)
 			break;
 
 		startLocalId = GetVariableKeyObject(stackId);
-		stackValue = GetVariableValueAddress(stackId)->u.stackValue;
+		stackValue = GetVariableValueAddress_Bad(stackId)->u.stackValue;
 		RemoveObjectVariable(timeId, startLocalId);
 		Scr_ClearWaitTime(startLocalId);
 		VM_TerminateStack(startLocalId, startLocalId, stackValue);
@@ -964,13 +964,13 @@ void Scr_TerminateWaittillThread(unsigned int localId, unsigned int startLocalId
 		object = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
 		selfNameId = FindObject(object);
 		ObjectVariable = FindObjectVariable(selfNameId, startLocalId);
-		notifyListOwnerId = GetVariableValueAddress(ObjectVariable)->u.pointerValue;
+		notifyListOwnerId = GetVariableValueAddress_Bad(ObjectVariable)->u.pointerValue;
 		variable = FindVariable(notifyListOwnerId, 0x1FFFEu);
 		notifyListId = FindObject(variable);
 		var = FindVariable(notifyListId, stringValue);
 		notifyNameListId = FindObject(var);
 		stackId = FindObjectVariable(notifyNameListId, startLocalId);
-		stackValue = GetVariableValueAddress(stackId)->u.stackValue;
+		stackValue = GetVariableValueAddress_Bad(stackId)->u.stackValue;
 		VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
 		RemoveObjectVariable(selfNameId, startLocalId);
 
@@ -980,7 +980,7 @@ void Scr_TerminateWaittillThread(unsigned int localId, unsigned int startLocalId
 	else
 	{
 		var2 = FindVariable(startLocalId, 0x1FFFFu);
-		stackValue = GetVariableValueAddress(var2)->u.stackValue;
+		stackValue = GetVariableValueAddress_Bad(var2)->u.stackValue;
 		RemoveVariable(startLocalId, 0x1FFFFu);
 	}
 
@@ -1000,7 +1000,7 @@ void Scr_TerminateWaitThread(unsigned int localId, unsigned int startLocalId)
 	variable = FindVariable(scrVarPub.timeArrayId, time);
 	parentId = FindObject(variable);
 	object = FindObjectVariable(parentId, startLocalId);
-	stackValue = GetVariableValueAddress(object)->u.stackValue;
+	stackValue = GetVariableValueAddress_Bad(object)->u.stackValue;
 	RemoveObjectVariable(parentId, startLocalId);
 
 	if ( !GetArraySize(parentId) && time != scrVarPub.time )
@@ -1041,7 +1041,7 @@ void Scr_TerminateThread(unsigned int localId)
 	int startLocalId;
 
 	startLocalId = GetStartLocalId(localId);
-	type = Scr_GetObjectType(startLocalId);
+	type = GetValueType(startLocalId);
 
 	if ( type == VAR_NOTIFY_THREAD )
 	{
@@ -1236,9 +1236,9 @@ next:
 				localId = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
 				selfNameId = FindObject(localId);
 
-				if ( Scr_GetObjectType(notifyListEntry) )
+				if ( GetValueType(notifyListEntry) )
 				{
-					stackId = GetVariableValueAddress(notifyListEntry);
+					stackId = GetVariableValueAddress_Bad(notifyListEntry);
 					newStackBuf = stackId->u.stackValue;
 
 					if ( *((byte *)newStackBuf->pos - 1) == OP_waittillmatch )
@@ -1295,7 +1295,7 @@ next:
 					array = GetArray(variable);
 					newObject = GetNewObjectVariable(array, startLocalId);
 					SetNewVariableValue(newObject, &stackValue);
-					stackId = GetVariableValueAddress(newObject);
+					stackId = GetVariableValueAddress_Bad(newObject);
 					VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
 					RemoveObjectVariable(selfNameId, startLocalId);
 
@@ -2133,7 +2133,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = Scr_GetSelf(localId);
 			if ( IsFieldObject(objectId) )
 				continue;
-			Scr_Error(va("%s is not an object", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an object", var_typename[GetValueType(objectId)]));
 
 		case OP_EvalLevelFieldVariable:
 			objectId = scrVarPub.levelId;
@@ -2163,7 +2163,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			++top;
 			Scr_ReadUnsignedShort(&pos);
-			Scr_Error(va("%s is not an object", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an object", var_typename[GetValueType(objectId)]));
 
 		case OP_EvalFieldVariable:
 			++top;
@@ -2522,7 +2522,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				Scr_Error(va("%s is not an entity", var_typename[top->type]));
 			}
 			objectId = top->u.pointerValue;
-			if ( Scr_GetObjectType(objectId) == VAR_ENTITY )
+			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(&entref, objectId);
 				RemoveRefToObject(objectId);
@@ -2555,7 +2555,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			RemoveRefToObject(objectId);
 			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
 
 		case OP_CallBuiltinMethod1:
 			scrVmPub.outparamcount = 1;
@@ -2568,7 +2568,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				Scr_Error(va("%s is not an entity", var_typename[top->type]));
 			}
 			objectId = top->u.pointerValue;
-			if ( Scr_GetObjectType(objectId) == VAR_ENTITY )
+			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(&entref, objectId);
 				RemoveRefToObject(objectId);
@@ -2601,7 +2601,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			RemoveRefToObject(objectId);
 			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
 
 		case OP_CallBuiltinMethod2:
 			scrVmPub.outparamcount = 2;
@@ -2614,7 +2614,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				Scr_Error(va("%s is not an entity", var_typename[top->type]));
 			}
 			objectId = top->u.pointerValue;
-			if ( Scr_GetObjectType(objectId) == VAR_ENTITY )
+			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(&entref, objectId);
 				RemoveRefToObject(objectId);
@@ -2647,7 +2647,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			RemoveRefToObject(objectId);
 			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
 
 		case OP_CallBuiltinMethod3:
 			scrVmPub.outparamcount = 3;
@@ -2660,7 +2660,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				Scr_Error(va("%s is not an entity", var_typename[top->type]));
 			}
 			objectId = top->u.pointerValue;
-			if ( Scr_GetObjectType(objectId) == VAR_ENTITY )
+			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(&entref, objectId);
 				RemoveRefToObject(objectId);
@@ -2693,7 +2693,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			RemoveRefToObject(objectId);
 			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
 
 		case OP_CallBuiltinMethod4:
 			scrVmPub.outparamcount = 4;
@@ -2706,7 +2706,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				Scr_Error(va("%s is not an entity", var_typename[top->type]));
 			}
 			objectId = top->u.pointerValue;
-			if ( Scr_GetObjectType(objectId) == VAR_ENTITY )
+			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(&entref, objectId);
 				RemoveRefToObject(objectId);
@@ -2739,7 +2739,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			RemoveRefToObject(objectId);
 			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
 
 		case OP_CallBuiltinMethod5:
 			scrVmPub.outparamcount = 5;
@@ -2752,7 +2752,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				Scr_Error(va("%s is not an entity", var_typename[top->type]));
 			}
 			objectId = top->u.pointerValue;
-			if ( Scr_GetObjectType(objectId) == VAR_ENTITY )
+			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(&entref, objectId);
 				RemoveRefToObject(objectId);
@@ -2785,7 +2785,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			RemoveRefToObject(objectId);
 			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
 
 		case OP_CallBuiltinMethod:
 			scrVmPub.outparamcount = *(unsigned char *)pos++;
@@ -2798,7 +2798,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				Scr_Error(va("%s is not an entity", var_typename[top->type]));
 			}
 			objectId = top->u.pointerValue;
-			if ( Scr_GetObjectType(objectId) == VAR_ENTITY )
+			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
 				Scr_GetEntityIdRef(&entref, objectId);
 				RemoveRefToObject(objectId);
@@ -2831,7 +2831,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			RemoveRefToObject(objectId);
 			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[Scr_GetObjectType(objectId)]));
+			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
 
 		case OP_wait: // VoroN: use sv_fps here??
 			if ( top->type == VAR_FLOAT )
@@ -3403,7 +3403,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			if ( !IsFieldObject(top->u.pointerValue) )
 			{
 				scrVarPub.error_index = 2;
-				Scr_Error(va("%s is not an object", var_typename[Scr_GetObjectType(top->u.pointerValue)]));
+				Scr_Error(va("%s is not an object", var_typename[GetValueType(top->u.pointerValue)]));
 			}
 			tempValue.u = top->u;
 			--top;
@@ -3450,7 +3450,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			if ( !IsFieldObject(id) )
 			{
 				scrVarPub.error_index = 2;
-				Scr_Error(va("%s is not an object", var_typename[Scr_GetObjectType(top->u.pointerValue)]));
+				Scr_Error(va("%s is not an object", var_typename[GetValueType(top->u.pointerValue)]));
 			}
 			--top;
 			if ( top->type != VAR_STRING )
@@ -3480,7 +3480,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			if ( !IsFieldObject(top->u.pointerValue) )
 			{
 				scrVarPub.error_index = 1;
-				Scr_Error(va("%s is not an object", var_typename[Scr_GetObjectType(top->u.pointerValue)]));
+				Scr_Error(va("%s is not an object", var_typename[GetValueType(top->u.pointerValue)]));
 			}
 			if ( top[-1].type == VAR_STRING )
 			{
@@ -3705,7 +3705,7 @@ void VM_Resume(unsigned int timeId)
 			break;
 
 		parentId = GetVariableKeyObject(localId);
-		stackBuf = GetVariableValueAddress(localId)->u.stackValue;
+		stackBuf = GetVariableValueAddress_Bad(localId)->u.stackValue;
 		RemoveObjectVariable(timeId, parentId);
 		VM_UnarchiveStack(parentId, &stack, stackBuf);
 		id = VM_ExecuteInternal(stack.pos, stack.localId, stack.localVarCount, stack.top, stack.startTop);
@@ -3792,7 +3792,7 @@ void Scr_ShutdownSystem(unsigned char sys, qboolean bComplete)
 
 			parentId = FindObject(nextId);
 			localId = FindNextSibling(parentId);
-			notifyListOwnerId = *GetVariableValueAddress(localId);
+			notifyListOwnerId = *GetVariableValueAddress_Bad(localId);
 			AddRefToObject(notifyListOwnerId.u.pointerValue);
 			Scr_CancelNotifyList(notifyListOwnerId.u.pointerValue);
 			RemoveRefToObject(notifyListOwnerId.u.pointerValue);

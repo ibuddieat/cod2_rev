@@ -531,7 +531,9 @@ void XAnimShutdown();
 unsigned short* XModelBoneNames(XModel *model);
 int XModelGetContents(const XModel *model);
 DObjAnimMat* XModelGetBasePose(const XModel *model);
-XAnim* Scr_GetAnims(unsigned int index);
+
+XAnim* Scr_GetAnims(int index);
+int Scr_CreateAnimationTree(unsigned int parentNode, unsigned int names, XAnim_s *anims, unsigned int childIndex, const char *parentName, unsigned int parentIndex, unsigned int filename, int treeIndex);
 
 void XAnimCloneAnimTree(const XAnimTree_s *from, XAnimTree_s *to);
 float XAnimGetAverageRateFrequency(const XAnimTree_s *tree, unsigned int infoIndex);

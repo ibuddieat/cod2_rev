@@ -5,69 +5,6 @@
 #pragma GCC optimize ("O0")
 
 scrCompilePub_t scrCompilePub;
-
-struct CaseStatementInfo
-{
-	unsigned int name;
-	const char *codePos;
-	unsigned int sourcePos;
-	CaseStatementInfo *next;
-};
-
-struct BreakStatementInfo
-{
-	const char *codePos;
-	const char *nextCodePos;
-	BreakStatementInfo *next;
-};
-
-struct ContinueStatementInfo
-{
-	const char *codePos;
-	const char *nextCodePos;
-	ContinueStatementInfo *next;
-};
-
-struct PrecacheEntry
-{
-	unsigned short filename;
-	bool include;
-	unsigned int sourcePos;
-	PrecacheEntry *next;
-};
-
-typedef struct scrCompileGlob_s
-{
-	char *codePos;
-	char *prevOpcodePos;
-	unsigned int filePosId;
-	unsigned int fileCountId;
-	int cumulOffset;
-	int maxOffset;
-	int maxCallOffset;
-	bool bConstRefCount;
-	bool in_developer_thread;
-	unsigned int developer_thread_sourcePos;
-	bool firstThread[3];
-	CaseStatementInfo *currentCaseStatement;
-	bool bCanBreak[2];
-	BreakStatementInfo *currentBreakStatement;
-	bool bCanContinue[2];
-	ContinueStatementInfo *currentContinueStatement;
-	scr_block_s **breakChildBlocks;
-	int *breakChildCount;
-	scr_block_s *breakBlock;
-	scr_block_s **continueChildBlocks;
-	int *continueChildCount;
-	bool forceNotCreate;
-	PrecacheEntry *precachescriptList;
-	PrecacheEntry *precachescriptListHead;
-	VariableCompileValue value_start[32];
-} scrCompileGlob_t;
-#if defined(__i386__)
-static_assert((sizeof(scrCompileGlob_t) == 0x1DC), "ERROR: scrCompileGlob_t size is invalid!");
-#endif
-
 scrCompileGlob_t scrCompileGlob;
 
 int GetExpressionCount(sval_u exprlist)
@@ -519,8 +456,8 @@ void LinkThread(unsigned int threadCountId, VariableValue *pos, bool allowFarCal
 		for ( i = 0; i < tempValue.u.intValue; ++i )
 		{
 			valueId = FindVariable(threadCountId, i + 2);
-			value = GetVariableValueAddress(valueId);
-			type = Scr_GetObjectType(valueId);
+			value = GetVariableValueAddress_Bad(valueId);
+			type = GetValueType(valueId);
 
 			if ( pos->type == VAR_DEVELOPER_CODEPOS && type == VAR_CODEPOS )
 				CompileError2(value->u.codePosValue, "normal script cannot reference a function in a /# ... #/ comment");
@@ -2184,7 +2121,7 @@ void EmitObject(sval_u expr, sval_u sourcePos)
 		{
 			if ( idValue <= 0xFFFD && !IsObjectFree((unsigned short)idValue) )
 			{
-				type = Scr_GetObjectType((unsigned short)idValue);
+				type = GetValueType((unsigned short)idValue);
 
 				if ( type >= VAR_THREAD && (type <= VAR_CHILD_THREAD || type == VAR_REMOVED_THREAD) )
 				{
@@ -3824,7 +3761,7 @@ void EmitFunction(sval_u func, sval_u sourcePos)
 		{
 			threadName = FindVariable(fileId, func.node[2].idValue);
 
-			if ( !threadName || Scr_GetObjectType(threadName) != VAR_OBJECT )
+			if ( !threadName || GetValueType(threadName) != VAR_OBJECT )
 			{
 				CompileError(sourcePos.sourcePosValue, "unknown function");
 				return;
@@ -3999,7 +3936,7 @@ void SetThreadPosition(unsigned int posId)
 	VariableValueInternal_u *value;
 
 	nextPosId = FindVariable(posId, 1u);
-	value = GetVariableValueAddress(nextPosId);
+	value = GetVariableValueAddress_Bad(nextPosId);
 	value->u.codePosValue = (const char *)TempMalloc(0);
 }
 
@@ -4197,7 +4134,7 @@ void ScriptCompile(sval_u val, unsigned int filePosId, unsigned int scriptId)
 
 			for ( id = FindNextSibling(includeFilePosId); id; id = FindNextSibling(id) )
 			{
-				if ( Scr_GetObjectType(id) == VAR_OBJECT )
+				if ( GetValueType(id) == VAR_OBJECT )
 				{
 					posId = FindObject(id);
 					index = FindVariable(posId, 1);
@@ -4211,8 +4148,8 @@ void ScriptCompile(sval_u val, unsigned int filePosId, unsigned int scriptId)
 							name = GetVariableName(id);
 							threadCountId = GetObjectA(GetVariable(filePosId, name));
 							includePosId = SpecifyThreadPosition(threadCountId, name, precachescript->sourcePos, VAR_INCLUDE_CODEPOS);
-							pos = GetVariableValueAddress(includePosId);
-							*pos = *GetVariableValueAddress(index);
+							pos = GetVariableValueAddress_Bad(includePosId);
+							*pos = *GetVariableValueAddress_Bad(index);
 							LinkThread(threadCountId, &includePos, 0);
 						}
 					}

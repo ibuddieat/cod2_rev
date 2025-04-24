@@ -2064,18 +2064,19 @@ loadAnim_t* BG_LoadAnimForAnimIndex( unsigned int index )
 BG_FindAnimTree
 ===============
 */
-void BG_FindAnimTree( scr_animtree_t *pAnimTree, const char *filename, qboolean bEnforceExists )
+scr_animtree_t BG_FindAnimTree( const char *filename, qboolean bEnforceExists )
 {
-	scr_animtree_t localTree;
+	scr_animtree_t tree = Scr_FindAnimTree(filename);
 
-	Scr_FindAnimTree(&localTree, filename);
-	pAnimTree->anims = localTree.anims;
-
-	if ( !pAnimTree->anims )
+	if ( !tree.anims )
 	{
 		if ( bEnforceExists )
+		{
 			Com_Error(ERR_DROP, "Could not find animation tree %s", filename);
+		}
 	}
+
+	return tree;
 }
 
 /*
@@ -2221,11 +2222,7 @@ BG_FindAnimTrees
 */
 void BG_FindAnimTrees()
 {
-	scr_animtree_t loadAnimTree;
-
-	BG_FindAnimTree(&loadAnimTree, DEFAULT_ANIM_TREE_NAME, qtrue);
-
-	level_bgs.animData.generic_human.tree = loadAnimTree;
+	level_bgs.animData.generic_human.tree = BG_FindAnimTree( DEFAULT_ANIM_TREE_NAME, qtrue );
 
 	level_bgs.animData.animScriptData.animTree = level_bgs.animData.generic_human.tree;
 	level_bgs.animData.animScriptData.torsoAnim = level_bgs.animData.generic_human.torso.index;

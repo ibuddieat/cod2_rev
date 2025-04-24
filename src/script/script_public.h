@@ -17,6 +17,8 @@ typedef struct scr_method_s
 	qboolean       developer;
 } scr_method_t;
 
+#define SL_MAX_STRING_INDEX  0x10000
+
 #pragma pack(push)
 #pragma pack(1)
 struct VariableStackBuffer
@@ -265,6 +267,21 @@ static_assert((sizeof(scrVmGlob_t) == 0x201C), "ERROR: scrVmGlob_t size is inval
 
 extern scrVmGlob_t scrVmGlob;
 
+#define MAX_XANIMTREE_NUM 128
+
+enum
+{
+	SCR_XANIM_CLIENT,
+	SCR_XANIM_SERVER,
+	SCR_XANIM_COUNT
+};
+
+enum
+{
+	ANIMTREE_NAMES,
+	ANIMTREE_XANIM
+};
+
 struct scr_animtree_t
 {
 	struct XAnim_s *anims;
@@ -275,8 +292,8 @@ typedef struct scrAnimPub_s
 	unsigned int animtrees;
 	unsigned int animtree_node;
 	unsigned int animTreeNames;
-	scr_animtree_t xanim_lookup[2][128];
-	unsigned int xanim_num[2];
+	scr_animtree_t xanim_lookup[SCR_XANIM_COUNT][MAX_XANIMTREE_NUM];
+	unsigned int xanim_num[SCR_XANIM_COUNT];
 	unsigned int animTreeIndex;
 	bool animtree_loading;
 } scrAnimPub_t;
@@ -285,6 +302,19 @@ static_assert((sizeof(scrAnimPub_t) == 0x41C), "ERROR: scrAnimPub_t size is inva
 #endif
 
 extern scrAnimPub_t scrAnimPub;
+
+typedef struct scrAnimGlob_s
+{
+	const char *start;
+	const char *pos;
+	unsigned short using_xanim_lookup[SCR_XANIM_COUNT][MAX_XANIMTREE_NUM];
+	int bAnimCheck;
+} scrAnimGlob_t;
+#if defined(__i386__)
+static_assert((sizeof(scrAnimGlob_t) == 0x20C), "ERROR: scrAnimGlob_t size is invalid!");
+#endif
+
+extern scrAnimGlob_t scrAnimGlob;
 
 typedef struct scrCompilePub_s
 {
@@ -677,6 +707,68 @@ struct ThreadDebugInfo
 	float endonUsage;
 };
 
+struct CaseStatementInfo
+{
+	unsigned int name;
+	const char *codePos;
+	unsigned int sourcePos;
+	CaseStatementInfo *next;
+};
+
+struct BreakStatementInfo
+{
+	const char *codePos;
+	const char *nextCodePos;
+	BreakStatementInfo *next;
+};
+
+struct ContinueStatementInfo
+{
+	const char *codePos;
+	const char *nextCodePos;
+	ContinueStatementInfo *next;
+};
+
+struct PrecacheEntry
+{
+	unsigned short filename;
+	bool include;
+	unsigned int sourcePos;
+	PrecacheEntry *next;
+};
+
+typedef struct scrCompileGlob_s
+{
+	char *codePos;
+	char *prevOpcodePos;
+	unsigned int filePosId;
+	unsigned int fileCountId;
+	int cumulOffset;
+	int maxOffset;
+	int maxCallOffset;
+	bool bConstRefCount;
+	bool in_developer_thread;
+	unsigned int developer_thread_sourcePos;
+	bool firstThread[3];
+	CaseStatementInfo *currentCaseStatement;
+	bool bCanBreak[2];
+	BreakStatementInfo *currentBreakStatement;
+	bool bCanContinue[2];
+	ContinueStatementInfo *currentContinueStatement;
+	scr_block_s **breakChildBlocks;
+	int *breakChildCount;
+	scr_block_s *breakBlock;
+	scr_block_s **continueChildBlocks;
+	int *continueChildCount;
+	bool forceNotCreate;
+	PrecacheEntry *precachescriptList;
+	PrecacheEntry *precachescriptListHead;
+	VariableCompileValue value_start[32];
+} scrCompileGlob_t;
+#if defined(__i386__)
+static_assert((sizeof(scrCompileGlob_t) == 0x1DC), "ERROR: scrCompileGlob_t size is invalid!");
+#endif
+
 extern const char *var_typename[];
 
 void Scr_Error(const char *error);
@@ -840,6 +932,7 @@ unsigned int GetNewObjectVariable(unsigned int parentId, unsigned int id);
 unsigned int GetObjectVariable(unsigned int parentId, unsigned int id);
 unsigned int GetVariable(unsigned int parentId, unsigned int name);
 void Scr_EvalVariable(VariableValue *val, unsigned int index);
+VariableValue Scr_EvalVariable(unsigned int index);
 unsigned int GetNewArrayVariableIndex(unsigned int parentId, unsigned int index);
 unsigned int GetNewArrayVariable(unsigned int parentId, unsigned int index);
 void FreeVariable(unsigned int id);
@@ -863,7 +956,7 @@ unsigned int FindArrayVariable(unsigned int parentId, unsigned int index);
 unsigned int GetParentLocalId(unsigned int threadId);
 unsigned int GetSafeParentLocalId(unsigned int threadId);
 unsigned int GetStartLocalId(unsigned int threadId);
-unsigned int Scr_GetObjectType(int varIndex);
+unsigned int GetValueType(int varIndex);
 unsigned int AllocVariable();
 unsigned int AllocValue();
 unsigned int AllocEntity(unsigned int classnum, unsigned short entnum);
@@ -879,7 +972,8 @@ void Scr_FreeEntityNum(int entnum, unsigned int classnum);
 unsigned int GetVariableKeyObject(unsigned int id);
 unsigned int Scr_EvalFieldObject(unsigned int tempVariable, VariableValue *value);
 unsigned int Scr_EvalVariableObject(unsigned int id);
-union VariableValueInternal_u* GetVariableValueAddress(unsigned int id);
+union VariableValueInternal_u* GetVariableValueAddress_Bad(unsigned int id);
+union VariableUnion* GetVariableValueAddress(unsigned int id);
 unsigned int Scr_GetThreadWaitTime(unsigned int startLocalId);
 void Scr_KillEndonThread(unsigned int threadId);
 void Scr_ClearWaitTime(unsigned int startLocalId);
@@ -962,10 +1056,10 @@ void SetAnimCheck(int bAnimCheck);
 void Scr_UsingTree(const char *filename, unsigned int sourcePos);
 void Scr_EmitAnimation(char *pos, unsigned int animName, unsigned int sourcePos);
 void Scr_FindAnim(const char *filename, const char *animName, scr_anim_s *anim, int user);
-void Scr_LoadAnimTreeAtIndex(unsigned int index, void *(*Alloc)(int), int user);
+void Scr_LoadAnimTreeAtIndex(int index, void *(*Alloc)(int), int user);
 void Scr_EndLoadAnimTrees();
 void Scr_PrecacheAnimTrees(void *(*Alloc)(int), int user);
-void Scr_FindAnimTree(scr_animtree_t *pTree, const char *filename);
+scr_animtree_t Scr_FindAnimTree( const char *filename );
 
 qboolean Scr_IsInOpcodeMemory(const char *pos);
 void Scr_GetGenericField( byte *b, int type, int ofs );
@@ -1034,3 +1128,11 @@ void EmitThread(sval_u val);
 void ScriptCompile(sval_u val, unsigned int filePosId, unsigned int scriptId);
 
 void Scr_AddExecEntThreadNum(int entnum, unsigned int classnum, int handle, int paramcount);
+
+unsigned int Scr_UsingTreeInternal(const char *filename, unsigned int *index, int user);
+void Scr_EmitAnimationInternal(char *pos, unsigned int animName, unsigned int names);
+bool Scr_LoadAnimTreeInternal(const char *filename, unsigned int parentNode, unsigned int names);
+int Scr_GetAnimTreeSize(unsigned int parentNode);
+void ConnectScriptToAnim( unsigned int names, int index, unsigned int filename, unsigned int name, int treeIndex );
+void Scr_PrecacheAnimationTree(unsigned int parentNode);
+void Scr_CheckAnimsDefined(unsigned int names, unsigned int filename);

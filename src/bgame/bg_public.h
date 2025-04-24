@@ -247,6 +247,10 @@ typedef struct
 	char name[MAX_QPATH];
 } loadAnim_t;
 
+#define ANIM_FLAG_LOOPSYNC 1
+#define ANIM_FLAG_NONLOOPSYNC 2
+#define ANIM_FLAG_COMPLETE 8
+
 struct lerpFrame_t
 {
 	float yawAngle;
