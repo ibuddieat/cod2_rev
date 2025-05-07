@@ -74,7 +74,7 @@ int Scr_GetFunctionHandle(const char *filename, const char *name)
 	if ( !filePosId )
 		return 0;
 
-	if ( GetValueType(filePosId) != VAR_OBJECT )
+	if ( GetValueType(filePosId) != VAR_POINTER )
 		return 0;
 
 	object = FindObject(filePosId);

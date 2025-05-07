@@ -115,9 +115,9 @@ typedef struct scrVarPub_s
 	const char *fieldBuffer;
 	int canonicalStrMark;
 	uint16_t canonicalStrCount;
-	byte developer;
-	byte developer_script;
-	byte evaluate;
+	bool developer;
+	bool developer_script;
+	bool evaluate;
 	const char *error_message;
 	int error_index;
 	unsigned int time;
@@ -128,7 +128,7 @@ typedef struct scrVarPub_s
 	unsigned int animId;
 	unsigned int freeEntList;
 	unsigned int tempVariable;
-	byte bInited;
+	bool bInited;
 	uint16_t savecount;
 	unsigned int checksum;
 	unsigned int entId;
@@ -142,10 +142,30 @@ static_assert((sizeof(scrVarPub_t) == 0x50), "ERROR: scrVarPub_t size is invalid
 
 extern scrVarPub_t scrVarPub;
 
+enum
+{
+	FUNC_SCOPE_LOCAL,
+	FUNC_SCOPE_FAR
+};
+
+enum
+{
+	SCR_DEV_NO,
+	SCR_DEV_YES,
+	SCR_DEV_IGNORE,
+	SCR_DEV_EVALUATE
+};
+
+enum
+{
+	MAX_VM_STACK_DEPTH = 0x20,
+	MAX_VM_OPERAND_STACK = 0x800,
+};
+
 enum var_type_t
 {
 	VAR_UNDEFINED,
-	VAR_OBJECT,
+	VAR_POINTER,
 	VAR_STRING,
 	VAR_ISTRING,
 	VAR_VECTOR,
@@ -171,9 +191,20 @@ enum var_type_t
 	VAR_COUNT
 };
 
+#define VAR_BEGIN_REF VAR_POINTER
+#define VAR_END_REF VAR_FLOAT
+
 #define FIRST_OBJECT VAR_THREAD
 #define FIRST_NONFIELD_OBJECT VAR_ARRAY
 #define FIRST_DEAD_OBJECT VAR_REMOVED_THREAD
+
+#define VARIABLELIST_CHILD_SIZE 0xFFFE
+#define VARIABLELIST_PARENT_SIZE 0x8000
+
+#define MAX_ARRAYINDEX 0x800000
+
+#define VAR_MASK 0x1F
+#define VAR_TYPE(var) (var->w.type & VAR_MASK)
 
 enum var_bits_t
 {
@@ -239,13 +270,13 @@ typedef struct __attribute__((aligned(128))) scrVmPub_s
 	int function_count;
 	function_frame_t *function_frame;
 	VariableValue *top;
-	byte debugCode;
-	byte abort_on_error;
-	byte terminal_error;
+	bool debugCode;
+	bool abort_on_error;
+	bool terminal_error;
 	unsigned int inparamcount;
 	unsigned int outparamcount;
-	function_frame_t function_frame_start[32];
-	VariableValue stack[2048];
+	function_frame_t function_frame_start[MAX_VM_STACK_DEPTH];
+	VariableValue stack[MAX_VM_OPERAND_STACK];
 } scrVmPub_t;
 #if defined(__i386__)
 static_assert((sizeof(scrVmPub_t) == 0x4380), "ERROR: scrVmPub_t size is invalid!");
@@ -259,7 +290,7 @@ typedef struct scrVmGlob_s
 	const char *dialog_error_message;
 	int loading;
 	int starttime;
-	unsigned int localVarsStack[2048];
+	unsigned int localVarsStack[MAX_VM_OPERAND_STACK];
 } scrVmGlob_t;
 #if defined(__i386__)
 static_assert((sizeof(scrVmGlob_t) == 0x201C), "ERROR: scrVmGlob_t size is invalid!");
@@ -316,6 +347,8 @@ static_assert((sizeof(scrAnimGlob_t) == 0x20C), "ERROR: scrAnimGlob_t size is in
 
 extern scrAnimGlob_t scrAnimGlob;
 
+#define SCR_FUNC_TABLE_SIZE 1024
+
 typedef struct scrCompilePub_s
 {
 	int value_count;
@@ -327,13 +360,13 @@ typedef struct scrCompilePub_s
 	uint16_t *canonicalStrings;
 	const char *in_ptr;
 	const char *parseBuf;
-	byte script_loading;
-	byte allowedBreakpoint;
+	bool script_loading;
+	bool allowedBreakpoint;
 	int developer_statement;
-	char *opcodePos;
+	byte *opcodePos;
 	unsigned int programLen;
 	int func_table_size;
-	int func_table[1024];
+	intptr_t func_table[SCR_FUNC_TABLE_SIZE];
 } scrCompilePub_t;
 #if defined(__i386__)
 static_assert((sizeof(scrCompilePub_t) == 0x1038), "ERROR: scrCompilePub_t size is invalid!");
@@ -660,14 +693,23 @@ enum scr_builtin_type_t
 	BUILTIN_DEVELOPER_ONLY = 0x1,
 };
 
+struct scr_localVar_t
+{
+	unsigned int name;
+	// unsigned int sourcePos;
+};
+
+#define LOCAL_VAR_STACK_SIZE 64
+#define MAX_SWITCH_CASES 1024
+
 struct scr_block_s
 {
 	int abortLevel;
 	int localVarsCreateCount;
 	int localVarsPublicCount;
 	int localVarsCount;
-	int localVarsInitBits[2];
-	unsigned int localVars[64];
+	byte localVarsInitBits[8];
+	scr_localVar_t localVars[LOCAL_VAR_STACK_SIZE];
 };
 #if defined(__i386__)
 static_assert((sizeof(scr_block_s) == 280), "ERROR: scr_block_s size is invalid!");
@@ -737,23 +779,28 @@ struct PrecacheEntry
 	PrecacheEntry *next;
 };
 
+#define VALUE_STACK_SIZE 32
+
 typedef struct scrCompileGlob_s
 {
-	char *codePos;
-	char *prevOpcodePos;
-	unsigned int filePosId;
-	unsigned int fileCountId;
+	byte *codePos;
+	byte *prevOpcodePos;
+	unsigned int fileId;
+	unsigned int threadId;
 	int cumulOffset;
 	int maxOffset;
 	int maxCallOffset;
 	bool bConstRefCount;
 	bool in_developer_thread;
 	unsigned int developer_thread_sourcePos;
-	bool firstThread[3];
+	bool firstThread[2];
+	bool bCanIgnoreCase;
 	CaseStatementInfo *currentCaseStatement;
-	bool bCanBreak[2];
+	bool bCanBreak;
+	bool bCanIgnoreBreak;
 	BreakStatementInfo *currentBreakStatement;
-	bool bCanContinue[2];
+	bool bCanContinue;
+	bool bCanIgnoreContinue;
 	ContinueStatementInfo *currentContinueStatement;
 	scr_block_s **breakChildBlocks;
 	int *breakChildCount;
@@ -763,7 +810,7 @@ typedef struct scrCompileGlob_s
 	bool forceNotCreate;
 	PrecacheEntry *precachescriptList;
 	PrecacheEntry *precachescriptListHead;
-	VariableCompileValue value_start[32];
+	VariableCompileValue value_start[VALUE_STACK_SIZE];
 } scrCompileGlob_t;
 #if defined(__i386__)
 static_assert((sizeof(scrCompileGlob_t) == 0x1DC), "ERROR: scrCompileGlob_t size is invalid!");
@@ -943,6 +990,7 @@ unsigned int GetNewVariable(unsigned int parentId, unsigned int name);
 void RemoveRefToEmptyObject(unsigned int id);
 void AddRefToObject(unsigned int id);
 void AddRefToValue(VariableValue *val);
+void AddRefToValueInternal(int type, VariableUnion u);
 void FreeChildValue(unsigned int id);
 void ClearObject(unsigned int parentId);
 void RemoveVariable(unsigned int parentId, unsigned int index);
@@ -952,6 +1000,7 @@ void RemoveObjectVariable(unsigned int parentId, unsigned int id);
 void RemoveRefToObject(unsigned int id);
 void RemoveRefToValueInternal(int type, VariableUnion u);
 void RemoveRefToValue(VariableValue *value);
+void RemoveRefToValueInternal(int type, VariableUnion u);
 unsigned int FindArrayVariable(unsigned int parentId, unsigned int index);
 unsigned int GetParentLocalId(unsigned int threadId);
 unsigned int GetSafeParentLocalId(unsigned int threadId);
@@ -1136,3 +1185,14 @@ int Scr_GetAnimTreeSize(unsigned int parentNode);
 void ConnectScriptToAnim( unsigned int names, int index, unsigned int filename, unsigned int name, int treeIndex );
 void Scr_PrecacheAnimationTree(unsigned int parentNode);
 void Scr_CheckAnimsDefined(unsigned int names, unsigned int filename);
+
+void EmitIncludeList(sval_u val);
+void EmitThreadList(sval_u val);
+void LinkThread(unsigned int threadCountId, VariableValue *pos, bool allowFarCall);
+unsigned int SpecifyThreadPosition(unsigned int posId, unsigned int name, unsigned int sourcePos, int type);
+void LinkFile(unsigned int filePosId);
+void Scr_CalcLocalVarsVariableExpressionRef(sval_u expr, scr_block_s *block);
+void Scr_CalcLocalVarsStatementList(sval_u val, scr_block_s *block);
+bool EmitOrEvalPrimitiveExpression(sval_u expr, VariableCompileValue *constValue, scr_block_s *block);
+void EmitVariableExpressionRef(sval_u expr, scr_block_s *block);
+void EmitBreakOn(sval_u expr, sval_u param, sval_u sourcePos);

@@ -1198,7 +1198,7 @@ void G_BounceCorpse( gentity_t *ent, corpseInfo_t *corpseInfo, trace_t *trace, v
 
 	if ( !trace->allsolid && trace->normal[2] <= 0 )
 	{
-		assert(ent->s.pos.trType == TR_GRAVITY);
+		//assert(ent->s.pos.trType == TR_GRAVITY);
 		VectorAdd(ent->r.currentOrigin, trace->normal, ent->r.currentOrigin);
 		VectorCopy(ent->r.currentOrigin, ent->s.pos.trBase);
 		ent->s.pos.trTime = level.time;

@@ -139,7 +139,7 @@ void Scr_AddAnim(scr_anim_t value)
 void Scr_AddObject(unsigned int id)
 {
 	IncInParam();
-	scrVmPub.top->type = VAR_OBJECT;
+	scrVmPub.top->type = VAR_POINTER;
 	scrVmPub.top->u.pointerValue = id;
 	AddRefToObject(id);
 }
@@ -184,7 +184,7 @@ void Scr_AddVector(const float *value)
 void Scr_MakeArray()
 {
 	IncInParam();
-	scrVmPub.top->type = VAR_OBJECT;
+	scrVmPub.top->type = VAR_POINTER;
 	scrVmPub.top->u.pointerValue = Scr_AllocArray();
 }
 
@@ -229,7 +229,7 @@ int Scr_GetPointerType(unsigned int index)
 		return 0;
 	}
 
-	if ( Scr_GetValue(index)->type != VAR_OBJECT )
+	if ( Scr_GetValue(index)->type != VAR_POINTER )
 	{
 		Scr_Error(va("type %s is not a pointer", var_typename[Scr_GetValue(index)->type]));
 	}
@@ -246,7 +246,7 @@ void Scr_GetEntityRef(scr_entref_t *entRef, unsigned int index)
 	{
 		entryValue = Scr_GetValue(index);
 
-		if ( entryValue->type == VAR_OBJECT )
+		if ( entryValue->type == VAR_POINTER )
 		{
 			entId = entryValue->u.pointerValue;
 
@@ -530,7 +530,7 @@ unsigned int Scr_GetObject(unsigned int paramnum)
 
 	var = Scr_GetValue(paramnum);
 
-	if (var->type == VAR_OBJECT)
+	if (var->type == VAR_POINTER)
 	{
 		return var->u.pointerValue;
 	}
@@ -1977,14 +1977,14 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_GetSelf:
 			++top;
-			top->type = VAR_OBJECT;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = Scr_GetSelf(localId);
 			AddRefToObject(top->u.pointerValue);
 			continue;
 
 		case OP_GetLevel:
 			++top;
-			top->type = VAR_OBJECT;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = scrVarPub.levelId;
 			AddRefToObject(scrVarPub.levelId);
 			continue;
@@ -1998,7 +1998,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_GetAnim:
 			++top;
-			top->type = VAR_OBJECT;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = scrVarPub.animId;
 			AddRefToObject(scrVarPub.animId);
 			continue;
@@ -2125,7 +2125,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_EmptyArray:
 			++top;
-			top->type = VAR_OBJECT;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = Scr_AllocArray();
 			continue;
 
@@ -2515,7 +2515,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_CallBuiltinMethod0:
 			scrVmPub.top = top - 1;
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				RemoveRefToValue(top);
 				scrVarPub.error_index = -1;
@@ -2561,7 +2561,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			scrVmPub.outparamcount = 1;
 			scrVmPub.top = top - 1;
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				RemoveRefToValue(top);
 				scrVarPub.error_index = -1;
@@ -2607,7 +2607,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			scrVmPub.outparamcount = 2;
 			scrVmPub.top = top - 1;
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				RemoveRefToValue(top);
 				scrVarPub.error_index = -1;
@@ -2653,7 +2653,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			scrVmPub.outparamcount = 3;
 			scrVmPub.top = top - 1;
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				RemoveRefToValue(top);
 				scrVarPub.error_index = -1;
@@ -2699,7 +2699,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			scrVmPub.outparamcount = 4;
 			scrVmPub.top = top - 1;
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				RemoveRefToValue(top);
 				scrVarPub.error_index = -1;
@@ -2745,7 +2745,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			scrVmPub.outparamcount = 5;
 			scrVmPub.top = top - 1;
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				RemoveRefToValue(top);
 				scrVarPub.error_index = -1;
@@ -2791,7 +2791,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			scrVmPub.outparamcount = *(unsigned char *)pos++;
 			scrVmPub.top = top - 1;
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				RemoveRefToValue(top);
 				scrVarPub.error_index = -1;
@@ -2977,7 +2977,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			Scr_Error("script stack overflow (too many embedded function calls)");
 
 		case OP_ScriptMethodCall:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 1;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
@@ -3002,7 +3002,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			{
 				tempCodePos = top->u.codePosValue;
 				--top;
-				if ( top->type != VAR_OBJECT )
+				if ( top->type != VAR_POINTER )
 				{
 					scrVarPub.error_index = 2;
 					Scr_Error(va("%s is not an object", var_typename[top->type]));
@@ -3081,7 +3081,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			Scr_Error(va("%s is not a function pointer", var_typename[top->type]));
 
 		case OP_ScriptMethodThreadCall:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
@@ -3116,7 +3116,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			}
 			tempCodePos = top->u.codePosValue;
 			--top;
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
@@ -3395,7 +3395,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_waittillmatch:
 		case OP_waittill:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
@@ -3416,7 +3416,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				id = GetArray(GetVariable(GetArray(GetVariable(tempValue.u.stringValue, 0x1FFFEu)), stringValue));
 				stackId = GetNewObjectVariable(id, localId);
 				SetNewVariableValue(stackId, &stackValue);
-				tempValue.type = VAR_OBJECT;
+				tempValue.type = VAR_POINTER;
 				SetNewVariableValue(GetNewObjectVariable(GetArray(GetObjectVariable(scrVarPub.pauseArrayId, Scr_GetSelf(localId))), localId), &tempValue);
 				Scr_SetThreadNotifyName(localId, stringValue);
 				startTop[1].type = VAR_UNDEFINED;
@@ -3441,7 +3441,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			Scr_Error("first parameter of waittill must evaluate to a string");
 
 		case OP_notify:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
@@ -3472,7 +3472,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			continue;
 
 		case OP_endon:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 1;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
@@ -3489,7 +3489,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 				threadId = AllocThread(localId);
 				GetObjectVariable(GetArray(GetVariable(GetArray(GetVariable(top->u.stringValue, 0x1FFFEu)), stringValue)), threadId);
 				RemoveRefToObject(threadId);
-				tempValue.type = VAR_OBJECT;
+				tempValue.type = VAR_POINTER;
 				tempValue.u = top->u;
 				SetNewVariableValue(GetNewObjectVariable(GetArray(GetObjectVariable(scrVarPub.pauseArrayId, localId)), threadId), &tempValue);
 				Scr_SetThreadNotifyName(threadId, stringValue);
@@ -3577,14 +3577,14 @@ loop_dec_top:
 				top->type = VAR_UNDEFINED;
 				Scr_Error("unknown object");
 			}
-			top->type = VAR_OBJECT;
+			top->type = VAR_POINTER;
 			AddRefToObject(top->u.pointerValue);
 			continue;
 
 		case OP_thread_object:
 			++top;
 			top->u.pointerValue = Scr_ReadUnsignedShort(&pos);
-			top->type = VAR_OBJECT;
+			top->type = VAR_POINTER;
 			AddRefToObject(top->u.pointerValue);
 			continue;
 

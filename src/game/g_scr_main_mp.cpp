@@ -259,7 +259,7 @@ void (*Scr_GetMethod( const char **pName, int *type ))( scr_entref_t )
 	void (*hud_meth)(scr_entref_t);
 	void (*meth)(scr_entref_t);
 
-	*type = 0;
+	*type = BUILTIN_ANY;
 
 	meth = Player_GetMethod(pName);
 	scriptent_meth = ScriptEnt_GetMethod(pName);
@@ -920,7 +920,7 @@ void Scr_ConstructMessageString( int firstParmIndex, int lastParmIndex, const ch
 
 			wasString = true;
 		}
-		else if ( type == VAR_OBJECT && Scr_GetPointerType(firstParmIndex) == VAR_ENTITY )
+		else if ( type == VAR_POINTER && Scr_GetPointerType(firstParmIndex) == VAR_ENTITY )
 		{
 			ent = Scr_GetEntity(firstParmIndex);
 
@@ -1196,7 +1196,7 @@ void Scr_SightTracePassed()
 		iClipMask &= ~CONTENTS_BODY;
 	}
 
-	if ( Scr_GetType(3) == VAR_OBJECT && Scr_GetPointerType(3) == VAR_ENTITY )
+	if ( Scr_GetType(3) == VAR_POINTER && Scr_GetPointerType(3) == VAR_ENTITY )
 	{
 		pIgnoreEnt = Scr_GetEntity(3);
 		iIgnoreEntNum = pIgnoreEnt->s.number;
@@ -2863,7 +2863,7 @@ GScr_IsPlayer
 */
 void GScr_IsPlayer()
 {
-	Scr_AddBool( Scr_GetType(0) == VAR_OBJECT && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->client != NULL );
+	Scr_AddBool( Scr_GetType(0) == VAR_POINTER && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->client != NULL );
 }
 
 /*
@@ -3960,7 +3960,7 @@ GScr_IsAlive
 */
 void GScr_IsAlive()
 {
-	Scr_AddBool( Scr_GetType(0) == VAR_OBJECT && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->health > 0 );
+	Scr_AddBool( Scr_GetType(0) == VAR_POINTER && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->health > 0 );
 }
 
 /*
@@ -3982,7 +3982,7 @@ void GScr_IsDefined()
 {
 	int type = Scr_GetType(0);
 
-	if ( type == VAR_OBJECT )
+	if ( type == VAR_POINTER )
 	{
 		type = Scr_GetPointerType(0);
 		assert( type >= FIRST_OBJECT );
@@ -5251,7 +5251,7 @@ void GScr_Obituary()
 	gentity_t *tempEnt = G_TempEntity(vec3_origin, EV_OBITUARY);
 	tempEnt->s.otherEntityNum = pOtherEnt->s.number;
 
-	if ( Scr_GetType(1) == VAR_OBJECT && Scr_GetPointerType(1) == VAR_ENTITY )
+	if ( Scr_GetType(1) == VAR_POINTER && Scr_GetPointerType(1) == VAR_ENTITY )
 	{
 		tempEnt->s.attackerEntityNum = Scr_GetEntity(1)->s.number;
 	}
@@ -5542,7 +5542,7 @@ void ScrCmd_LinkTo( scr_entref_t entref )
 
 	gentity_t *ent = GetEntity(entref);
 
-	if ( Scr_GetType(0) != VAR_OBJECT || Scr_GetPointerType(0) != VAR_ENTITY )
+	if ( Scr_GetType(0) != VAR_POINTER || Scr_GetPointerType(0) != VAR_ENTITY )
 	{
 		Scr_ParamError(0, "not an entity");
 	}
@@ -5716,7 +5716,7 @@ void Scr_BulletTracePassed()
 		iClipMask = CONTENTS_SOLID | CONTENTS_GLASS | CONTENTS_WATER | CONTENTS_SKY | CONTENTS_CLIPSHOT | CONTENTS_UNKNOWN;
 	}
 
-	if ( Scr_GetType(3) == VAR_OBJECT && Scr_GetPointerType(3) == VAR_ENTITY )
+	if ( Scr_GetType(3) == VAR_POINTER && Scr_GetPointerType(3) == VAR_ENTITY )
 	{
 		iIgnoreEntNum = Scr_GetEntity(3)->s.number;
 	}
@@ -5749,7 +5749,7 @@ void Scr_BulletTrace()
 		iClipMask &= ~CONTENTS_BODY;
 	}
 
-	if ( Scr_GetType(3) == VAR_OBJECT && Scr_GetPointerType(3) == VAR_ENTITY )
+	if ( Scr_GetType(3) == VAR_POINTER && Scr_GetPointerType(3) == VAR_ENTITY )
 	{
 		pIgnoreEnt = Scr_GetEntity(3);
 		iIgnoreEntNum = pIgnoreEnt->s.number;

@@ -10,7 +10,7 @@ typedef struct scrParserGlob_s
 	unsigned int sourcePosLookupMaxLen;
 	unsigned int sourcePosLookupLen;
 	unsigned int sourceBufferLookupMaxLen;
-	const char *currentCodePos;
+	const byte *currentCodePos;
 	unsigned int currentSourcePosCount;
 	SaveSourceBufferInfo *saveSourceBufferLookup;
 	unsigned int saveSourceBufferLookupLen;
@@ -232,10 +232,10 @@ void AddOpcodePos(unsigned int sourcePos, int type)
 		else
 		{
 			scrParserGlob.currentSourcePosCount = 0;
-			scrParserGlob.currentCodePos = scrCompilePub.opcodePos;
+			scrParserGlob.currentCodePos = (byte*)scrCompilePub.opcodePos;
 			sourcePosLookup = &scrParserGlob.opcodeLookup[scrParserGlob.opcodeLookupLen];
 			sourcePosLookup->sourcePosIndex = scrParserGlob.sourcePosLookupLen;
-			sourcePosLookup->codePos = scrParserGlob.currentCodePos;
+			sourcePosLookup->codePos = (char*)scrParserGlob.currentCodePos;
 		}
 
 		sourcePosLookupIndex = sourcePosLookup->sourcePosIndex + scrParserGlob.currentSourcePosCount;

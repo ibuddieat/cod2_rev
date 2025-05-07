@@ -368,7 +368,7 @@ void Hunk_ClearTempMemoryHigh()
 	Hunk_ClearTempMemoryHighInternal();
 }
 
-void* TempMalloc(int size)
+char* TempMalloc(int size)
 {
 	int pos;
 	char *buf;
@@ -390,10 +390,10 @@ char* TempMallocAlignStrict(int size)
 	return (char *)TempMalloc(size);
 }
 
-void* TempMemorySetPos(char *pos)
+void TempMemorySetPos(char *pos)
 {
 	currentPos -= (char *)TempMalloc(0) - pos;
-	return Hunk_ReallocateTempMemoryInternal(currentPos);
+	Hunk_ReallocateTempMemoryInternal(currentPos);
 }
 
 void TempMemoryReset()
