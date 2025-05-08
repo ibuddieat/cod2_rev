@@ -598,7 +598,7 @@ void G_ShutdownGame( qboolean freeScripts )
 	{
 		Mantle_ShutdownAnims();
 		GScr_FreeScripts();
-		Scr_FreeScripts();
+		Scr_FreeScripts(SCR_SYS_GAME);
 		G_FreeAnimTreeInstances();
 		Hunk_ClearLow(0);
 	}

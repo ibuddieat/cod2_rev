@@ -162,6 +162,11 @@ enum
 	MAX_VM_OPERAND_STACK = 0x800,
 };
 
+enum
+{
+	SCR_SYS_GAME = 0x1,
+};
+
 enum var_type_t
 {
 	VAR_UNDEFINED,
@@ -1110,14 +1115,14 @@ void Scr_EndLoadAnimTrees();
 void Scr_PrecacheAnimTrees(void *(*Alloc)(int), int user);
 scr_animtree_t Scr_FindAnimTree( const char *filename );
 
-qboolean Scr_IsInOpcodeMemory(const char *pos);
+qboolean Scr_IsInScriptMemory(const char *pos);
 void Scr_GetGenericField( byte *b, int type, int ofs );
 void Scr_SetGenericField(byte *data, int fieldtype, int offset);
-unsigned int Scr_GetCanonicalStringIndex(unsigned int index);
+unsigned int SL_TransferToCanonicalString(unsigned int index);
 unsigned int SL_GetCanonicalString(const char *str);
 
 void Scr_ClearStrings();
-void Scr_AllocAnims(int num);
+void Scr_BeginLoadAnimTrees(int num);
 void Scr_AllocStrings();
 
 bool Scr_IsIdentifier(const char *token);
@@ -1131,7 +1136,7 @@ unsigned int Scr_LoadScript(const char *filename);
 void Scr_BeginLoadScripts();
 void Scr_PostCompileScripts();
 void Scr_EndLoadScripts();
-void Scr_FreeScripts();
+void Scr_FreeScripts(unsigned char sys);
 
 void Scr_RunCurrentThreads();
 void Scr_ClearOutParams();

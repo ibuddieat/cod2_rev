@@ -173,7 +173,7 @@ void Scr_PrintPrevCodePos(conChannel_t channel, const char *codePos, unsigned in
 	{
 		if ( scrVarPub.developer )
 		{
-			if ( scrVarPub.programBuffer && Scr_IsInOpcodeMemory(codePos) )
+			if ( scrVarPub.programBuffer && Scr_IsInScriptMemory(codePos) )
 			{
 				bufferIndex = Scr_GetSourceBuffer(codePos - 1);
 				Scr_PrintSourcePos(
@@ -184,7 +184,7 @@ void Scr_PrintPrevCodePos(conChannel_t channel, const char *codePos, unsigned in
 				return;
 			}
 		}
-		else if ( Scr_IsInOpcodeMemory(codePos - 1) )
+		else if ( Scr_IsInScriptMemory(codePos - 1) )
 		{
 			Com_PrintMessage(channel, va("@ %d\n", codePos - scrVarPub.programBuffer));
 			return;

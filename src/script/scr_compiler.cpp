@@ -1212,7 +1212,7 @@ void EmitCanonicalString( unsigned int stringValue )
 		SL_AddRefToString(stringValue);
 	}
 
-	*(unsigned short *)scrCompileGlob.codePos = Scr_GetCanonicalStringIndex(stringValue);
+	*(unsigned short *)scrCompileGlob.codePos = SL_TransferToCanonicalString(stringValue);
 }
 
 /*

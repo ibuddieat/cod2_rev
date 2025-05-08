@@ -460,7 +460,7 @@ void Scr_CheckAnimsDefined( unsigned int names, unsigned int filename )
 			continue;
 		}
 
-		if ( Scr_IsInOpcodeMemory(value->codePosValue) )
+		if ( Scr_IsInScriptMemory(value->codePosValue) )
 		{
 			CompileError2(value->codePosValue, "%s", va("animation '%s' not defined in anim tree '%s'", SL_ConvertToString(name), SL_ConvertToString(filename)));
 		}

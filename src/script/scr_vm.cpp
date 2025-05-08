@@ -1069,7 +1069,7 @@ unsigned short Scr_ExecThread(int callbackHook, unsigned int numArgs)
 	if ( !scrVmPub.function_count )
 		Scr_ResetTimeout();
 
-	Scr_IsInOpcodeMemory(codePos);
+	Scr_IsInScriptMemory(codePos);
 	AddRefToObject(scrVarPub.levelId);
 	selfId = AllocThread(scrVarPub.levelId);
 	callback = VM_Execute(selfId, codePos, numArgs);
@@ -3835,16 +3835,6 @@ void Scr_ClearStrings()
 {
 	scrCompilePub.canonicalStrings = 0;
 	Hunk_ClearHigh(scrVarPub.canonicalStrMark);
-}
-
-void Scr_AllocAnims(int num)
-{
-	scrAnimPub.animtree_loading = 1;
-	scrAnimPub.xanim_num[num] = 0;
-	scrAnimPub.xanim_lookup[num][0].anims = 0;
-	scrAnimPub.animtrees = Scr_AllocArray();
-	scrAnimPub.animtree_node = 0;
-	scrCompilePub.developer_statement = 0;
 }
 
 void Scr_AllocStrings()
