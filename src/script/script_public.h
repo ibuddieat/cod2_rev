@@ -17,6 +17,34 @@ typedef struct scr_method_s
 	qboolean       developer;
 } scr_method_t;
 
+enum
+{
+	MEMORY_NODE_BITS = 0x10,
+	MEMORY_NODE_COUNT = 0x10000,
+	MT_SIZE = 0x100000,
+	REFSTRING_STRING_OFFSET = 0x4,
+};
+
+struct __attribute__((aligned(8))) MemoryNode
+{
+	uint16_t prev;
+	uint16_t next;
+};
+
+typedef struct __attribute__((aligned(128))) scrMemTreeGlob_s
+{
+	MemoryNode nodes[MEMORY_NODE_COUNT];
+	char leftBits[256];
+	char numBits[256];
+	char logBits[256];
+	uint16_t head[MEMORY_NODE_BITS + 1];
+	int totalAlloc;
+	int totalAllocBuckets;
+} scrMemTreeGlob_t;
+#if defined(__i386__)
+static_assert((sizeof(scrMemTreeGlob_t) == 0x80380), "ERROR: scrMemTreeGlob_t size is invalid!");
+#endif
+
 #define SL_MAX_STRING_INDEX  0x10000
 
 #pragma pack(push)
@@ -901,7 +929,7 @@ unsigned short MT_AllocIndex(int numBytes);
 void MT_FreeIndex(unsigned int nodeNum, int numBytes);
 void* MT_Alloc(int numBytes);
 void MT_Free(void* p, int numBytes);
-bool MT_Realloc(int oldNumBytes, int newNumbytes);
+int MT_Realloc(int oldNumBytes, int newNumbytes);
 byte* MT_GetRefByIndex(int index);
 int MT_GetIndexByRef(byte* p);
 void MT_DumpTree();
@@ -1201,3 +1229,12 @@ void Scr_CalcLocalVarsStatementList(sval_u val, scr_block_s *block);
 bool EmitOrEvalPrimitiveExpression(sval_u expr, VariableCompileValue *constValue, scr_block_s *block);
 void EmitVariableExpressionRef(sval_u expr, scr_block_s *block);
 void EmitBreakOn(sval_u expr, sval_u param, sval_u sourcePos);
+
+int MT_GetSubTreeSize(int nodeNum);
+void MT_InitBits();
+void MT_AddMemoryNode(int newNode, int size);
+void MT_SafeFreeIndex( unsigned int nodeNum );
+int MT_GetSize(int numBytes);
+bool MT_RemoveMemoryNode(int oldNode, int size);
+void MT_Error(const char *funcName, int numBytes);
+void MT_RemoveHeadMemoryNode(int size);
