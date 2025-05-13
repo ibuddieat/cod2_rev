@@ -408,7 +408,7 @@ void G_SpawnTurret( gentity_t *self, const char *weaponinfoname )
 	else
 		turretInfo->stopSndPlayer = 0;
 
-	if ( !level.spawnVars.spawnVarsValid || !G_SpawnFloat("rightarc", "", &turretInfo->arcmin[1]) )
+	if ( !level.spawnVar.spawnVarsValid || !G_SpawnFloat("rightarc", "", &turretInfo->arcmin[1]) )
 	{
 		turretInfo->arcmin[1] = weapDef->rightArc;
 	}
@@ -420,7 +420,7 @@ void G_SpawnTurret( gentity_t *self, const char *weaponinfoname )
 		turretInfo->arcmin[1] = 0;
 	}
 
-	if ( !level.spawnVars.spawnVarsValid || !G_SpawnFloat("leftarc", "", &turretInfo->arcmax[1]) )
+	if ( !level.spawnVar.spawnVarsValid || !G_SpawnFloat("leftarc", "", &turretInfo->arcmax[1]) )
 	{
 		turretInfo->arcmax[1] = weapDef->leftArc;
 	}
@@ -430,7 +430,7 @@ void G_SpawnTurret( gentity_t *self, const char *weaponinfoname )
 		turretInfo->arcmax[1] = 0;
 	}
 
-	if ( !level.spawnVars.spawnVarsValid || !G_SpawnFloat("toparc", "", turretInfo->arcmin) )
+	if ( !level.spawnVar.spawnVarsValid || !G_SpawnFloat("toparc", "", turretInfo->arcmin) )
 	{
 		turretInfo->arcmin[0] = weapDef->topArc;
 	}
@@ -442,7 +442,7 @@ void G_SpawnTurret( gentity_t *self, const char *weaponinfoname )
 		turretInfo->arcmin[0] = 0;
 	}
 
-	if ( !level.spawnVars.spawnVarsValid || !G_SpawnFloat("bottomarc", "", turretInfo->arcmax) )
+	if ( !level.spawnVar.spawnVarsValid || !G_SpawnFloat("bottomarc", "", turretInfo->arcmax) )
 	{
 		turretInfo->arcmax[0] = weapDef->bottomArc;
 	}
@@ -459,7 +459,7 @@ void G_SpawnTurret( gentity_t *self, const char *weaponinfoname )
 		self->health = 100;
 	}
 
-	if ( !level.spawnVars.spawnVarsValid || !G_SpawnInt("damage", "0", &self->dmg) )
+	if ( !level.spawnVar.spawnVarsValid || !G_SpawnInt("damage", "0", &self->dmg) )
 	{
 		self->dmg = weapDef->damage;
 	}
@@ -469,7 +469,7 @@ void G_SpawnTurret( gentity_t *self, const char *weaponinfoname )
 		self->dmg = 0;
 	}
 
-	if ( !level.spawnVars.spawnVarsValid || !G_SpawnFloat("playerSpread", "1", &turretInfo->playerSpread) )
+	if ( !level.spawnVar.spawnVarsValid || !G_SpawnFloat("playerSpread", "1", &turretInfo->playerSpread) )
 	{
 		turretInfo->playerSpread = weapDef->playerSpread;
 	}

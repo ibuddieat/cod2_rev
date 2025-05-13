@@ -98,7 +98,7 @@ InitScriptMover
 */
 void InitScriptMover( gentity_t *pSelf )
 {
-	if ( level.spawnVars.spawnVarsValid )
+	if ( level.spawnVar.spawnVarsValid )
 	{
 		float light;
 		vec3_t color;

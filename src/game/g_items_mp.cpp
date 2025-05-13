@@ -403,7 +403,7 @@ void G_SpawnItem( gentity_t *ent, const gitem_t *item )
 	ent->s.clientNum = ENTITYNUM_WORLD;
 	ent->flags |= FL_SUPPORTS_LINKTO;
 
-	if ( level.spawnVars.spawnVarsValid )
+	if ( level.spawnVar.spawnVarsValid )
 	{
 		G_SetAngle(ent, ent->r.currentAngles);
 		// some movers spawn on the second frame, so delay item

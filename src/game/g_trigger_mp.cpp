@@ -168,7 +168,7 @@ void SP_trigger_radius( gentity_t *ent )
 {
 	float radius, height;
 
-	if ( level.spawnVars.spawnVarsValid )
+	if ( level.spawnVar.spawnVarsValid )
 	{
 		if ( !G_SpawnFloat("radius", "", &radius) )
 		{
@@ -616,7 +616,7 @@ void InitTriggerWait( gentity_t *ent, int spawnflag )
 {
 	float wait;
 
-	if ( level.spawnVars.spawnVarsValid && G_SpawnFloat("wait", "", &wait) && wait <= 0 )
+	if ( level.spawnVar.spawnVarsValid && G_SpawnFloat("wait", "", &wait) && wait <= 0 )
 	{
 		ent->spawnflags |= spawnflag;
 	}

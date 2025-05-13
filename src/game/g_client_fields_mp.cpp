@@ -16,7 +16,7 @@ game_client_field_t g_client_fields[] =
 	{ "spectatorclient", CFOFS( sess.forceSpectatorClient ), F_INT, ClientScr_SetSpectatorClient, NULL },
 	{ "archivetime", CFOFS( sess.archiveTime ), F_FLOAT, ClientScr_SetArchiveTime, ClientScr_GetArchiveTime },
 	{ "psoffsettime", CFOFS( sess.psOffsetTime ), F_INT, ClientScr_SetPSOffsetTime, ClientScr_GetPSOffsetTime },
-	{ "pers", CFOFS( sess.pers ), F_OBJECT, ClientScr_ReadOnly, NULL },
+	{ "pers", CFOFS( sess.scriptPersId ), F_OBJECT, ClientScr_ReadOnly, NULL },
 	{ NULL, 0, F_INT, NULL, NULL } // field terminator
 };
 
@@ -278,7 +278,7 @@ void ClientScr_SetStatusIcon( gclient_t *pSelf, const game_client_field_t *pFiel
 
 	assert(pSelf);
 	pszIcon = Scr_GetString(0);
-	pSelf->sess.statusIcon = GScr_GetStatusIconIndex(pszIcon);
+	pSelf->sess.status_icon = GScr_GetStatusIconIndex(pszIcon);
 }
 
 /*
@@ -414,15 +414,15 @@ void ClientScr_GetStatusIcon( gclient_t *pSelf, const game_client_field_t *pFiel
 	char szConfigString[MAX_STRING_CHARS];
 
 	assert(pSelf);
-	assert(pSelf->sess.statusIcon >= 0 && pSelf->sess.statusIcon <= MAX_STATUS_ICONS);
+	assert(pSelf->sess.status_icon >= 0 && pSelf->sess.status_icon <= MAX_STATUS_ICONS);
 
-	if ( !pSelf->sess.statusIcon )
+	if ( !pSelf->sess.status_icon )
 	{
 		Scr_AddString("");
 		return;
 	}
 
-	SV_GetConfigstring(CS_STATUS_ICONS - 1 + pSelf->sess.statusIcon, szConfigString, sizeof(szConfigString));
+	SV_GetConfigstring(CS_STATUS_ICONS - 1 + pSelf->sess.status_icon, szConfigString, sizeof(szConfigString));
 	Scr_AddString(szConfigString);
 }
 

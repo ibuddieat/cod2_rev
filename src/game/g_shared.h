@@ -412,26 +412,31 @@ typedef struct
 	char name[32];
 } clientState_t;
 
+typedef struct playerTeamState_s
+{
+	int location;
+} playerTeamState_t;
+
 typedef struct
 {
 	sessionState_t sessionState;
 	int forceSpectatorClient;
-	int statusIcon;
+	int status_icon;
 	int archiveTime;
 	int score;
 	int deaths;
-	uint16_t pers;
-	int connected;
-	usercmd_s cmd;
-	usercmd_s oldcmd;
+	uint16_t scriptPersId;
+	clientConnected_t connected;
+	usercmd_t cmd;
+	usercmd_t oldcmd;
 	int localClient;
 	int predictItemPickup;
-	char name[MAX_NAME_LENGTH];
+	char newnetname[32];
 	int maxHealth;
 	int enterTime;
+	playerTeamState_t teamState;
 	int voteCount;
 	int teamVoteCount;
-	float moveSpeedScaleMultiplier;
 	int viewmodelIndex;
 	int noSpectate;
 	int teamInfo;
@@ -676,13 +681,16 @@ typedef struct
 	int sortedClients[MAX_CLIENTS];
 	char voteString[1024];
 	char voteDisplayString[1024];
-	int voteTime; // 711
+	int voteTime;
 	int voteExecuteTime;
 	int voteYes;
 	int voteNo;
 	int numVotingClients;
-	byte gap[2072];
-	SpawnVar spawnVars;
+	char teamVoteString[1024][2];
+	int teamVoteTime[2];
+	int teamVoteYes[2];
+	int teamVoteNo[2];
+	SpawnVar spawnVar;
 	int savePersist;
 	struct gentity_s *droppedWeaponCue[MAX_DROPPED_WEAPONS];
 	float fFogOpaqueDist;
@@ -2089,10 +2097,6 @@ void ScriptEntCmd_RotateRoll(scr_entref_t entref);
 void ScriptEntCmd_RotateVelocity(scr_entref_t entref);
 void ScriptEntCmd_Solid(scr_entref_t entRef);
 void ScriptEntCmd_NotSolid(scr_entref_t entRef);
-
-
-
-
 
 void PlayerCmd_giveWeapon(scr_entref_t entRef);
 void PlayerCmd_takeWeapon(scr_entref_t entref);

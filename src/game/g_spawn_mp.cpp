@@ -51,7 +51,7 @@ G_SpawnString
 */
 qboolean G_SpawnString( const char *key, const char *defaultString, const char **out )
 {
-	return G_SpawnStringInternal(&level.spawnVars, key, defaultString, out);
+	return G_SpawnStringInternal(&level.spawnVar, key, defaultString, out);
 }
 
 /*
@@ -675,7 +675,7 @@ qboolean G_CallSpawnEntity( gentity_t *ent )
 {
 	spawn_t *s;
 
-	assert(!level.spawnVars.spawnVarsValid);
+	assert(!level.spawnVar.spawnVarsValid);
 
 	if ( !ent->classname )
 	{
@@ -723,7 +723,7 @@ void G_CallSpawn(void)
 	gentity_t *ent;
 	const char *classname;
 
-	assert(level.spawnVars.spawnVarsValid);
+	assert(level.spawnVar.spawnVarsValid);
 
 	G_SpawnString("classname", "", &classname);
 
@@ -780,14 +780,14 @@ void G_SpawnEntitiesFromString( void )
 	// the worldspawn is not an actual entity, but it still
 	// has a "spawn" function to perform any global setup
 	// needed by a level (setting configstrings or cvars, etc)
-	if ( !G_ParseSpawnVars( &level.spawnVars ) )
+	if ( !G_ParseSpawnVars( &level.spawnVar ) )
 	{
 		Com_Error( ERR_DROP, "SpawnEntities: no entities" );
 	}
 	SP_worldspawn();
 
 	// parse ents
-	while ( G_ParseSpawnVars( &level.spawnVars ) )
+	while ( G_ParseSpawnVars( &level.spawnVar ) )
 	{
 		G_CallSpawn();
 	}
@@ -841,7 +841,7 @@ void G_LoadStructs()
 	Scr_FreeThread(hThread);
 
 	// parse structs
-	while ( G_ParseSpawnVars(&level.spawnVars) )
+	while ( G_ParseSpawnVars(&level.spawnVar) )
 	{
 		G_SpawnString("classname", "", &classname);
 
@@ -1068,11 +1068,11 @@ G_ParseEntityFields
 */
 void G_ParseEntityFields( gentity_t *ent )
 {
-	assert(level.spawnVars.spawnVarsValid);
+	assert(level.spawnVar.spawnVarsValid);
 
-	for ( int i = 0; i < level.spawnVars.numSpawnVars; i++ )
+	for ( int i = 0; i < level.spawnVar.numSpawnVars; i++ )
 	{
-		G_ParseEntityField(level.spawnVars.spawnVars[i][0], level.spawnVars.spawnVars[i][1], ent);
+		G_ParseEntityField(level.spawnVar.spawnVars[i][0], level.spawnVar.spawnVars[i][1], ent);
 	}
 
 	G_SetOrigin(ent, ent->r.currentOrigin);
@@ -1090,15 +1090,15 @@ void G_SpawnStruct()
 	unsigned int index;
 	int i;
 
-	assert(level.spawnVars.spawnVarsValid);
+	assert(level.spawnVar.spawnVarsValid);
 	assert(g_scr_data.createstruct);
 
 	Scr_AddExecThread(g_scr_data.createstruct, 0);
 	structId = Scr_GetObject(0);
 
-	for ( i = 0; i < level.spawnVars.numSpawnVars; i++ )
+	for ( i = 0; i < level.spawnVar.numSpawnVars; i++ )
 	{
-		index = G_SetEntityScriptVariableInternal(level.spawnVars.spawnVars[i][0], level.spawnVars.spawnVars[i][1]);
+		index = G_SetEntityScriptVariableInternal(level.spawnVar.spawnVars[i][0], level.spawnVar.spawnVars[i][1]);
 
 		if ( index )
 		{
