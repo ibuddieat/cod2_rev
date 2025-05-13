@@ -379,3 +379,47 @@ unsigned int Scr_LoadScript( const char *filename )
 
 	return filePosId;
 }
+
+/*
+============
+Scr_ScanFile
+============
+*/
+int Scr_ScanFile( char *buf, int max_size )
+{
+	int c, n;
+
+	c = '*';
+
+	for ( n = 0; n < max_size; n++ )
+	{
+		c = *scrCompilePub.in_ptr++;
+
+		if ( !c || c == 10 )
+		{
+			break;
+		}
+
+		buf[n] = c;
+	}
+
+	if ( c == 10 )
+	{
+		buf[n] = 10;
+		n++;
+	}
+	else if ( !c )
+	{
+		if ( scrCompilePub.parseBuf )
+		{
+			scrCompilePub.in_ptr = scrCompilePub.parseBuf;
+			scrCompilePub.parseBuf = NULL;
+		}
+		else
+		{
+			scrCompilePub.in_ptr--;
+		}
+	}
+
+	return n;
+}

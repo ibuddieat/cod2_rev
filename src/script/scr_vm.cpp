@@ -1268,7 +1268,7 @@ next:
 
 							if ( scrVarPub.error_message )
 							{
-								scriptError(
+								RuntimeError(
 								    newStackBuf->pos,
 								    *newStackBuf->pos - size + 3,
 								    scrVarPub.error_message,
@@ -1408,82 +1408,9 @@ void Scr_ResetTimeout()
 	scrVmGlob.starttime = Sys_MilliSeconds();
 }
 
-void runtimeError(conChannel_t channel, const char *codePos, unsigned int index, const char *errorMessage)
-{
-	int i;
 
-	Com_PrintMessage(channel, va("\n******* script runtime error *******\n%s: ", errorMessage));
-	Scr_PrintPrevCodePos(channel, codePos, index);
 
-	if ( scrVmPub.function_count )
-	{
-		for ( i = scrVmPub.function_count - 1; i > 0; --i )
-		{
-			Com_PrintMessage(channel, "called from:\n");
-			Scr_PrintPrevCodePos(
-			    channel,
-			    scrVmPub.function_frame_start[i].fs.pos,
-			    scrVmPub.function_frame_start[i].fs.localId == 0);
-		}
 
-		Com_PrintMessage(channel, "started from:\n");
-		Scr_PrintPrevCodePos(channel, scrVmPub.function_frame_start[0].fs.pos, 1u);
-	}
-
-	Com_PrintMessage(channel, "************************************\n");
-}
-
-void scriptError(const char *codePos, unsigned int index, const char *errorMsg, const char *format)
-{
-	const char *line;
-	const char *fmt;
-	bool drop;
-
-	if ( scrVarPub.developer || scrVmPub.terminal_error )
-	{
-		if ( scrVmPub.debugCode )
-		{
-			Com_Printf("%s\n", errorMsg);
-
-			if ( scrVmPub.terminal_error )
-				goto drop;
-		}
-		else
-		{
-			drop = 0;
-
-			if ( scrVmPub.abort_on_error || scrVmPub.terminal_error )
-				drop = 1;
-
-			if ( drop )
-				runtimeError(CON_CHANNEL_DONT_FILTER, codePos, index, errorMsg);
-			else
-				runtimeError(CON_CHANNEL_LOGFILEONLY, codePos, index, errorMsg);
-#ifdef LIBCOD
-			if (com_developer->current.integer == 2)
-				drop = 0;
-#endif
-			if ( drop )
-			{
-drop:
-				fmt = format;
-
-				if ( !format )
-					fmt = "";
-
-				if ( format )
-					line = "\n";
-				else
-					line = "";
-
-				if ( scrVmPub.terminal_error )
-					Com_Error(ERR_SCRIPT_DROP, "script runtime error\n(see console for details)\n", errorMsg, line, fmt);
-
-				Com_Error(ERR_SCRIPT, "script runtime error\n(see console for details)\n", errorMsg, line, fmt);
-			}
-		}
-	}
-}
 
 const char* Scr_ReadCodePos(const char **pos)
 {
@@ -1620,7 +1547,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			break;
 		}
 
-		scriptError(pos, scrVarPub.error_index, scrVarPub.error_message, scrVmGlob.dialog_error_message);
+		RuntimeError(pos, scrVarPub.error_index, scrVarPub.error_message, scrVmGlob.dialog_error_message);
 		Scr_ClearErrorMessage();
 
 		switch ( gOpcode )
@@ -3619,7 +3546,7 @@ loop_dec_top:
 
 		default:
 			scrVmPub.terminal_error = 1;
-			runtimeError(CON_CHANNEL_DONT_FILTER, pos, 0, va("CODE ERROR: unknown opcode %d", gOpcode));
+			RuntimeErrorInternal(CON_CHANNEL_DONT_FILTER, pos, 0, va("CODE ERROR: unknown opcode %d", gOpcode));
 			continue;
 		}
 	}
@@ -3650,7 +3577,7 @@ unsigned int VM_Execute(unsigned int localId, const char *pos, unsigned int para
 
 		++scrVmPub.top;
 		scrVmPub.top->type = VAR_UNDEFINED;
-		scriptError(pos, 0, "script stack overflow (too many embedded function calls)", 0);
+		RuntimeError(pos, 0, "script stack overflow (too many embedded function calls)", 0);
 
 		return localId;
 	}

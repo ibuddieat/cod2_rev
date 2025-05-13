@@ -406,7 +406,7 @@ static_assert((sizeof(scrCompilePub_t) == 0x1038), "ERROR: scrCompilePub_t size 
 #endif
 
 extern scrCompilePub_t scrCompilePub;
-extern char g_EndPos;
+inline char g_EndPos;
 
 struct SourceLookup
 {
@@ -460,6 +460,26 @@ static_assert((sizeof(scrParserPub_t) == 0x10), "ERROR: scrParserPub_t size is i
 #endif
 
 extern scrParserPub_t scrParserPub;
+
+typedef struct scrParserGlob_s
+{
+	OpcodeLookup *opcodeLookup;
+	unsigned int opcodeLookupMaxLen;
+	unsigned int opcodeLookupLen;
+	SourceLookup *sourcePosLookup;
+	unsigned int sourcePosLookupMaxLen;
+	unsigned int sourcePosLookupLen;
+	unsigned int sourceBufferLookupMaxLen;
+	const byte *currentCodePos;
+	unsigned int currentSourcePosCount;
+	SaveSourceBufferInfo *saveSourceBufferLookup;
+	unsigned int saveSourceBufferLookupLen;
+	int delayedSourceIndex;
+	int threadStartSourceIndex;
+} scrParserGlob_t;
+#if defined(__i386__)
+static_assert((sizeof(scrParserGlob_t) == 0x34), "ERROR: scrParserGlob_t size is invalid!");
+#endif
 
 enum scr_opcode_t
 {
@@ -718,6 +738,16 @@ enum Scr_SourceType_t
 	SOURCE_TYPE_NONE = 0x0,
 	SOURCE_TYPE_BREAKPOINT = 0x1,
 	SOURCE_TYPE_CALL = 0x2,
+	SOURCE_TYPE_THREAD_START = 0x4,
+	SOURCE_TYPE_BUILTIN_CALL = 0x8,
+	SOURCE_TYPE_NOTIFY = 0x10,
+};
+
+enum
+{
+	INITIAL_OPCODE_LOOKUP_LEN = 0x10000,
+	INITIAL_SOURCEPOS_LOOKUP_LEN = 0x10000,
+	INITIAL_SOURCEBUFFER_LOOKUP_LEN = 0x10,
 };
 
 enum scr_builtin_type_t
@@ -730,6 +760,13 @@ struct scr_localVar_t
 {
 	unsigned int name;
 	// unsigned int sourcePos;
+};
+
+struct Scr_SourcePos_t
+{
+	unsigned int bufferIndex;
+	int lineNum;
+	unsigned int sourcePos;
 };
 
 #define LOCAL_VAR_STACK_SIZE 64
@@ -902,8 +939,8 @@ void Scr_DecTime();
 
 void VM_TerminateTime(unsigned int timeId);
 void Scr_TerminateThread(unsigned int localId);
-void runtimeError(conChannel_t channel, const char *codePos, unsigned int index, const char *errorMessage);
-void scriptError(const char *codePos, unsigned int index, const char *errorMsg, const char *format);
+void RuntimeErrorInternal(conChannel_t channel, const char *codePos, unsigned int index, const char *errorMessage);
+void RuntimeError(const char *codePos, unsigned int index, const char *errorMsg, const char *format);
 void Scr_ResetTimeout();
 void Scr_TerminateRunningThread(unsigned int localId);
 void Scr_SetLoading(int bLoading);
@@ -1238,3 +1275,11 @@ int MT_GetSize(int numBytes);
 bool MT_RemoveMemoryNode(int oldNode, int size);
 void MT_Error(const char *funcName, int numBytes);
 void MT_RemoveHeadMemoryNode(int size);
+
+unsigned int Scr_GetLineNumInternal(const char *buf, unsigned int sourcePos, const char **startLine, int *col);
+OpcodeLookup* Scr_GetPrevSourcePosOpcodeLookup(const char *codePos);
+unsigned int Scr_GetLineInfo(const char *buf, unsigned int sourcePos, int *col, char *line);
+OpcodeLookup* Scr_GetSourcePosOpcodeLookup( const char *codePos );
+void Scr_PrintSourcePos(conChannel_t channel, const char *filename, const char *buf, unsigned int sourcePos);
+char* Scr_ReadFile(const char *filename, const char *extFilename, const char *codePos, bool archive);
+void Scr_AddSourceBufferInternal(const char *extFilename, const char *codePos, char *sourceBuf, int len, bool doEolFixup, bool archive);
