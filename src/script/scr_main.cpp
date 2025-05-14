@@ -178,10 +178,8 @@ void Scr_EndLoadAnimTrees()
 Scr_FreeScripts
 ============
 */
-void Scr_FreeScripts( unsigned char sys )
+void Scr_FreeScripts( void )
 {
-	assert(sys == SCR_SYS_GAME);
-
 	if ( scrCompilePub.script_loading )
 	{
 		scrCompilePub.script_loading = 0;

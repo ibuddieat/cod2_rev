@@ -25,10 +25,20 @@ enum
 	REFSTRING_STRING_OFFSET = 0x4,
 };
 
+enum
+{
+	MT_NODE_SIZE = 0x10
+};
+
 struct __attribute__((aligned(8))) MemoryNode
 {
 	uint16_t prev;
 	uint16_t next;
+};
+
+struct scrMemTreePub_t
+{
+	char *mt_buffer;
 };
 
 typedef struct __attribute__((aligned(128))) scrMemTreeGlob_s
@@ -265,6 +275,8 @@ enum hash_stat_t
 	HASH_STAT_HEAD = 0x8000,
 	HASH_STAT_MASK = 0xC000,
 };
+
+#define HASH_NEXT_MASK 0x3FFF
 
 extern const char *var_typename[];
 
@@ -1001,21 +1013,42 @@ struct RefVector
 	vec3_t vec;
 };
 
+#define HASH_TABLE_SIZE 16384
+
+struct HashEntry
+{
+	uint16_t status_next;
+	union
+	{
+		uint16_t prev;
+		uint16_t str;
+	};
+};
+
+typedef struct __attribute__((aligned(128))) scrStringGlob_s
+{
+	HashEntry hashTable[HASH_TABLE_SIZE];
+	bool inited;
+	HashEntry *nextFreeEntry;
+} scrStringGlob_t;
+#if defined(__i386__)
+static_assert((sizeof(scrStringGlob_t) == 0x10080), "ERROR: scrStringGlob_t size is invalid!");
+#endif
+
 const char* SL_ConvertToString(unsigned int index);
-unsigned int SL_ConvertToLowercase(unsigned int stringValue, unsigned char user);
+unsigned int SL_ConvertToLowercase(unsigned int stringValue, unsigned int user);
 unsigned int SL_ConvertFromString(const char *str);
-unsigned int SL_GetLowercaseStringOfLen(const char *upperstring, unsigned char user, unsigned int len);
-unsigned int SL_GetLowercaseString_(const char *str, unsigned char user);
+unsigned int SL_GetLowercaseStringOfLen(const char *upperstring, unsigned int user, unsigned int len);
+unsigned int SL_GetLowercaseString_(const char *str, unsigned int user);
 unsigned int GetHashCode(const char *str, unsigned int len);
 void SL_FreeString(unsigned int stringValue, RefString *refStr, unsigned int len);
-void SL_AddUserInternal(RefString *refStr, unsigned char user);
-unsigned int SL_GetStringOfLen(const char *str, unsigned char user, unsigned int len);
-unsigned int SL_GetStringOfSize(const char *str, unsigned char user, unsigned int len, int type);
+void SL_AddUserInternal(RefString *refStr, unsigned int user);
+unsigned int SL_GetStringOfLen(const char *str, unsigned int user, unsigned int len);
 unsigned int SL_FindStringOfLen(const char *str, unsigned int len);
 unsigned int SL_FindLowercaseString(const char *upperstring);
 unsigned int SL_FindString(const char *string);
-unsigned int SL_GetString_(const char *str, unsigned char user);
-unsigned int SL_GetString(const char *str, unsigned char user);
+unsigned int SL_GetString_(const char *str, unsigned int user);
+unsigned int SL_GetString(const char *str, unsigned int user);
 unsigned int SL_GetStringForInt(int i);
 unsigned int SL_GetStringForFloat(float f);
 unsigned int SL_GetStringForVector(const float *v);
@@ -1023,13 +1056,13 @@ int SL_GetStringLen(unsigned int stringValue);
 void Scr_SetString(uint16_t *to, unsigned int from);
 void SL_RemoveRefToStringOfLen(unsigned int stringValue, unsigned int len);
 void SL_RemoveRefToString(unsigned int stringValue);
-void SL_TransferRefToUser(unsigned int stringIndex, unsigned char user);
-void SL_ChangeUser(unsigned char from, unsigned char to);
+void SL_TransferRefToUser(unsigned int stringIndex, unsigned int user);
 void SL_AddRefToString(unsigned int stringValue);
-void SL_ShutdownSystem(unsigned char user);
+void SL_ShutdownSystem(unsigned int user);
 void SL_Shutdown();
-void SL_Restart();
+void SL_Clear();
 void SL_Init();
+void SL_Restart();
 
 unsigned int Scr_CreateCanonicalFilename(const char *name);
 void Scr_CopyEntityNum( int fromEntnum, int toEntnum, unsigned int classnum );
@@ -1201,7 +1234,7 @@ unsigned int Scr_LoadScript(const char *filename);
 void Scr_BeginLoadScripts();
 void Scr_PostCompileScripts();
 void Scr_EndLoadScripts();
-void Scr_FreeScripts(unsigned char sys);
+void Scr_FreeScripts();
 
 void Scr_RunCurrentThreads();
 void Scr_ClearOutParams();
@@ -1283,3 +1316,10 @@ OpcodeLookup* Scr_GetSourcePosOpcodeLookup( const char *codePos );
 void Scr_PrintSourcePos(conChannel_t channel, const char *filename, const char *buf, unsigned int sourcePos);
 char* Scr_ReadFile(const char *filename, const char *extFilename, const char *codePos, bool archive);
 void Scr_AddSourceBufferInternal(const char *extFilename, const char *codePos, char *sourceBuf, int len, bool doEolFixup, bool archive);
+
+RefString *GetRefString(unsigned int stringValue);
+RefString *GetRefString(const char* string);
+int SL_ConvertFromRefString(RefString *refString);
+int SL_GetRefStringLen(RefString *refString);
+void CreateCanonicalFilename(char *newFilename, const char *filename, int count);
+void SL_RemoveAllRefToString(unsigned int stringValue);

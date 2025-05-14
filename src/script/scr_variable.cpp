@@ -50,13 +50,11 @@ struct scr_classStruct_t
 
 struct scr_classStruct_t scrClassMap[] =
 {
-	{ 0u, 0u, 'e', "entity" },
-	{ 0u, 0u, 'h', "hudelem" },
-	{ 0u, 0u, 'p', "pathnode" },
-	{ 0u, 0u, 'v', "vehiclenode" }
+	{ 0, 0, 'e', "entity" },
+	{ 0, 0, 'h', "hudelem" },
+	{ 0, 0, 'p', "pathnode" },
+	{ 0, 0, 'v', "vehiclenode" }
 };
-
-#define CLASS_NUM_COUNT 4
 
 unsigned int GetValueType(int varIndex)
 {

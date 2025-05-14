@@ -654,7 +654,7 @@ byte* MT_GetRefByIndex( int index )
 		return NULL;
 	}
 
-	return (byte*)&scrMemTreeGlob.nodes[index];
+	return (byte *)&scrMemTreeGlob.nodes[index];
 }
 
 /*

@@ -3800,7 +3800,7 @@ void Scr_Init()
 	if ( scrVarPub.bInited )
 		return;
 
-	SL_Init();
+	SL_Restart();
 	Var_Init();
 	Scr_VM_Init();
 	scrCompilePub.script_loading = 0;
