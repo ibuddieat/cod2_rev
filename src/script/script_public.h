@@ -55,8 +55,6 @@ typedef struct __attribute__((aligned(128))) scrMemTreeGlob_s
 static_assert((sizeof(scrMemTreeGlob_t) == 0x80380), "ERROR: scrMemTreeGlob_t size is invalid!");
 #endif
 
-#define SL_MAX_STRING_INDEX  0x10000
-
 #pragma pack(push)
 #pragma pack(1)
 struct VariableStackBuffer
@@ -92,13 +90,12 @@ union ObjectInfo_u
 
 struct ObjectInfo
 {
-	uint16_t status;
+	uint16_t refCount;
 	union ObjectInfo_u u;
 };
 
 union VariableValueInternal_u
 {
-	uint16_t refCount;
 	uint16_t next;
 	union VariableUnion u;
 	struct ObjectInfo o;
@@ -230,7 +227,7 @@ enum var_type_t
 	VAR_REMOVED_ENTITY,
 	VAR_ENTITY,
 	VAR_ARRAY,
-	VAR_REMOVED_THREAD,
+	VAR_DEAD_THREAD,
 	VAR_COUNT
 };
 
@@ -239,7 +236,7 @@ enum var_type_t
 
 #define FIRST_OBJECT VAR_THREAD
 #define FIRST_NONFIELD_OBJECT VAR_ARRAY
-#define FIRST_DEAD_OBJECT VAR_REMOVED_THREAD
+#define FIRST_DEAD_OBJECT VAR_DEAD_THREAD
 
 #define VARIABLELIST_CHILD_SIZE 0xFFFE
 #define VARIABLELIST_PARENT_SIZE 0x8000
@@ -248,6 +245,8 @@ enum var_type_t
 
 #define VAR_MASK 0x1F
 #define VAR_TYPE(var) (var->w.type & VAR_MASK)
+
+#define IsObject(var) ((var->w.type & VAR_MASK) >= VAR_THREAD)
 
 enum var_bits_t
 {
@@ -277,8 +276,6 @@ enum hash_stat_t
 };
 
 #define HASH_NEXT_MASK 0x3FFF
-
-extern const char *var_typename[];
 
 struct function_stack_t
 {
@@ -898,7 +895,59 @@ typedef struct scrCompileGlob_s
 static_assert((sizeof(scrCompileGlob_t) == 0x1DC), "ERROR: scrCompileGlob_t size is invalid!");
 #endif
 
-extern const char *var_typename[];
+struct scr_classStruct_t
+{
+	uint16_t id;
+	uint16_t entArrayId;
+	char charId;
+	const char *name;
+};
+
+inline struct scr_classStruct_t scrClassMap[] =
+{
+	{ 0, 0, 'e', "entity" },
+	{ 0, 0, 'h', "hudelem" },
+	{ 0, 0, 'p', "pathnode" },
+	{ 0, 0, 'v', "vehiclenode" }
+};
+
+#define SL_MAX_STRING_INDEX 0x10000
+
+typedef struct __attribute__((aligned(64))) scrVarGlob_s
+{
+	VariableValueInternal variableList[SL_MAX_STRING_INDEX];
+} scrVarGlob_t;
+#if defined(__i386__)
+static_assert((sizeof(scrVarGlob_t) == 0x100000), "ERROR: scrVarGlob_t size is invalid!");
+#endif
+
+inline const char *var_typename[] =
+{
+	"undefined",
+	"object",
+	"string",
+	"localized string",
+	"vector",
+	"float",
+	"int",
+	"codepos",
+	"precodepos",
+	"function",
+	"stack",
+	"animation",
+	"developer codepos",
+	"include codepos",
+	"thread list",
+	"thread",
+	"thread",
+	"thread",
+	"thread",
+	"struct",
+	"removed entity",
+	"entity",
+	"array",
+	"removed thread"
+};
 
 void Scr_Error(const char *error);
 void Scr_ErrorInternal();
@@ -1069,7 +1118,7 @@ void Scr_CopyEntityNum( int fromEntnum, int toEntnum, unsigned int classnum );
 
 VariableValue* Scr_GetValue(unsigned int param);
 unsigned int FindNextSibling(unsigned int id);
-unsigned int FindLastSibling(unsigned int id);
+unsigned int FindPrevSibling(unsigned int id);
 unsigned int FindVariable(unsigned int parentId, unsigned int name);
 unsigned int FindVariableIndex(unsigned int parentId, unsigned int name);
 unsigned int FindObjectVariable(unsigned int parentId, unsigned int id);
@@ -1119,7 +1168,7 @@ void Scr_RemoveThreadNotifyName(unsigned int startLocalId);
 void Scr_KillThread(unsigned int parentId);
 unsigned int GetArraySize(unsigned int id);
 unsigned int Scr_GetSelf(unsigned int id);
-void Scr_GetEntityIdRef(scr_entref_t *entRef, unsigned int entId);
+scr_entref_t Scr_GetEntityIdRef( unsigned int entId );
 void Scr_FreeEntityNum(int entnum, unsigned int classnum);
 unsigned int GetVariableKeyObject(unsigned int id);
 unsigned int Scr_EvalFieldObject(unsigned int tempVariable, VariableValue *value);

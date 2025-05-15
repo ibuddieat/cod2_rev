@@ -10,7 +10,7 @@ SL_Shutdown
 */
 void SL_Shutdown()
 {
-	assert( scrStringGlob.inited );
+	assert(scrStringGlob.inited);
 	scrStringGlob.inited = false;
 }
 

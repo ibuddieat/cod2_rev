@@ -252,7 +252,7 @@ void Scr_GetEntityRef(scr_entref_t *entRef, unsigned int index)
 
 			if ( GetValueType(entryValue->u.pointerValue) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(entRef, entId);
+				*entRef = Scr_GetEntityIdRef(entId);
 				return;
 			}
 
@@ -1107,7 +1107,7 @@ int Scr_AddLocalVars(unsigned int localId)
 
 	count = 0;
 
-	for ( fieldIndex = FindLastSibling(localId); fieldIndex; fieldIndex = FindLastSibling(fieldIndex) )
+	for ( fieldIndex = FindPrevSibling(localId); fieldIndex; fieldIndex = FindPrevSibling(fieldIndex) )
 	{
 		*++scrVmPub.localVars = fieldIndex;
 		++count;
@@ -1226,7 +1226,7 @@ void VM_Notify(unsigned int notifyListOwnerId, unsigned int stringValue, Variabl
 next:
 			while ( 1 )
 			{
-				notifyListEntry = FindLastSibling(notifyListEntry);
+				notifyListEntry = FindPrevSibling(notifyListEntry);
 
 				if ( !notifyListEntry )
 					break;
@@ -2451,7 +2451,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = top->u.pointerValue;
 			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(&entref, objectId);
+				entref = Scr_GetEntityIdRef(objectId);
 				RemoveRefToObject(objectId);
 				scrVmPub.function_frame->fs.pos = pos;
 				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
@@ -2497,7 +2497,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = top->u.pointerValue;
 			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(&entref, objectId);
+				entref = Scr_GetEntityIdRef(objectId);
 				RemoveRefToObject(objectId);
 				scrVmPub.function_frame->fs.pos = pos;
 				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
@@ -2543,7 +2543,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = top->u.pointerValue;
 			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(&entref, objectId);
+				entref = Scr_GetEntityIdRef(objectId);
 				RemoveRefToObject(objectId);
 				scrVmPub.function_frame->fs.pos = pos;
 				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
@@ -2589,7 +2589,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = top->u.pointerValue;
 			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(&entref, objectId);
+				entref = Scr_GetEntityIdRef(objectId);
 				RemoveRefToObject(objectId);
 				scrVmPub.function_frame->fs.pos = pos;
 				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
@@ -2635,7 +2635,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = top->u.pointerValue;
 			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(&entref, objectId);
+				entref = Scr_GetEntityIdRef(objectId);
 				RemoveRefToObject(objectId);
 				scrVmPub.function_frame->fs.pos = pos;
 				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
@@ -2681,7 +2681,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = top->u.pointerValue;
 			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(&entref, objectId);
+				entref = Scr_GetEntityIdRef(objectId);
 				RemoveRefToObject(objectId);
 				scrVmPub.function_frame->fs.pos = pos;
 				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
@@ -2727,7 +2727,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			objectId = top->u.pointerValue;
 			if ( GetValueType(objectId) == VAR_ENTITY )
 			{
-				Scr_GetEntityIdRef(&entref, objectId);
+				entref = Scr_GetEntityIdRef(objectId);
 				RemoveRefToObject(objectId);
 				scrVmPub.function_frame->fs.pos = pos;
 				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);

@@ -3010,7 +3010,7 @@ void EmitObject( sval_u expr, sval_u sourcePos )
 
 		type = GetValueType((unsigned short)idValue);
 
-		if ( type != VAR_THREAD && type != VAR_NOTIFY_THREAD && type != VAR_TIME_THREAD && type != VAR_CHILD_THREAD && type != VAR_REMOVED_THREAD )
+		if ( type != VAR_THREAD && type != VAR_NOTIFY_THREAD && type != VAR_TIME_THREAD && type != VAR_CHILD_THREAD && type != VAR_DEAD_THREAD )
 		{
 			CompileError(sourcePos.sourcePosValue, "bad expression");
 			return;
