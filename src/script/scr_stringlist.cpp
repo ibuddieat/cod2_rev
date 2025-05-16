@@ -867,7 +867,7 @@ unsigned int SL_GetStringOfLen( const char *str, unsigned int user, unsigned int
 		if ( !newIndex )
 		{
 			Scr_DumpScriptThreads();
-			Scr_DumpScriptVariables();
+			Scr_DumpScriptVariablesDefault();
 			Com_Error(ERR_DROP, "exceeded maximum number of script strings");
 		}
 
@@ -923,7 +923,7 @@ unsigned int SL_GetStringOfLen( const char *str, unsigned int user, unsigned int
 		if ( !newIndex )
 		{
 			Scr_DumpScriptThreads();
-			Scr_DumpScriptVariables();
+			Scr_DumpScriptVariablesDefault();
 			Com_Error(ERR_DROP, "exceeded maximum number of script strings");
 		}
 

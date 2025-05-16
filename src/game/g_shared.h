@@ -769,10 +769,11 @@ typedef struct game_client_field_s
 	void (*getter)(gclient_s *, const game_client_field_s *);
 } game_client_field_t;
 
-enum g_class_num_t
+enum scr_class_num_t
 {
 	CLASS_NUM_ENTITY,
 	CLASS_NUM_HUDELEM,
+	CLASS_NUM_PATHNODE,
 	CLASS_NUM_VEHICLENODE,
 	CLASS_NUM_COUNT
 };

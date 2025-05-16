@@ -14,7 +14,7 @@ AddRefToValue
 */
 void AddRefToValue( VariableValue *value )
 {
-	AddRefToValueInternal(value->type, value->u);
+	AddRefToValue(value->type, value->u);
 }
 
 /*

@@ -1918,7 +1918,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_GetGame:
 			++top;
-			Scr_EvalVariable(&tempValue, scrVarPub.gameId);
+			tempValue = Scr_EvalVariable(scrVarPub.gameId);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
@@ -1965,49 +1965,49 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_EvalLocalVariableCached0:
 			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[0]);
+			tempValue = Scr_EvalVariable(scrVmPub.localVars[0]);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
 
 		case OP_EvalLocalVariableCached1:
 			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-1]);
+			tempValue = Scr_EvalVariable(scrVmPub.localVars[-1]);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
 
 		case OP_EvalLocalVariableCached2:
 			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-2]);
+			tempValue = Scr_EvalVariable(scrVmPub.localVars[-2]);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
 
 		case OP_EvalLocalVariableCached3:
 			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-3]);
+			tempValue = Scr_EvalVariable(scrVmPub.localVars[-3]);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
 
 		case OP_EvalLocalVariableCached4:
 			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-4]);
+			tempValue = Scr_EvalVariable(scrVmPub.localVars[-4]);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
 
 		case OP_EvalLocalVariableCached5:
 			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-5]);
+			tempValue = Scr_EvalVariable(scrVmPub.localVars[-5]);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
 
 		case OP_EvalLocalVariableCached:
 			++top;
-			Scr_EvalVariable(&tempValue, Scr_GetLocalVar(pos));
+			tempValue = Scr_EvalVariable(Scr_GetLocalVar(pos));
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			++pos;
@@ -2015,7 +2015,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_EvalLocalArrayCached:
 			++top;
-			Scr_EvalVariable(&tempValue, Scr_GetLocalVar(pos));
+			tempValue = Scr_EvalVariable(Scr_GetLocalVar(pos));
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			++pos;
@@ -2065,7 +2065,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_EvalLevelFieldVariable:
 			objectId = scrVarPub.levelId;
 			++top;
-			Scr_EvalVariable(&tempValue, FindVariable(objectId, Scr_ReadUnsignedShort(&pos)));
+			tempValue = Scr_EvalVariable(FindVariable(objectId, Scr_ReadUnsignedShort(&pos)));
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
@@ -2073,7 +2073,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_EvalAnimFieldVariable:
 			objectId = scrVarPub.animId;
 			++top;
-			Scr_EvalVariable(&tempValue, FindVariable(objectId, Scr_ReadUnsignedShort(&pos)));
+			tempValue = Scr_EvalVariable(FindVariable(objectId, Scr_ReadUnsignedShort(&pos)));
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
@@ -3517,7 +3517,7 @@ loop_dec_top:
 
 		case OP_EvalLocalVariable:
 			++top;
-			Scr_EvalVariable(&tempValue, FindVariable(localId, Scr_ReadUnsignedShort(&pos)));
+			tempValue = Scr_EvalVariable(FindVariable(localId, Scr_ReadUnsignedShort(&pos)));
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
@@ -3677,7 +3677,7 @@ void Scr_Settings(int developer, int developer_script, int abort_on_error)
 void Scr_TerminalError(const char *error)
 {
 	Scr_DumpScriptThreads();
-	Scr_DumpScriptVariables();
+	Scr_DumpScriptVariablesDefault();
 	scrVmPub.terminal_error = 1;
 	Scr_Error(error);
 }

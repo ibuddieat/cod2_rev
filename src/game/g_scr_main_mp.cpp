@@ -3986,7 +3986,7 @@ void GScr_IsDefined()
 	{
 		type = Scr_GetPointerType(0);
 		assert( type >= FIRST_OBJECT );
-		Scr_AddBool( type < VAR_DEAD_THREAD && type != VAR_REMOVED_ENTITY );
+		Scr_AddBool( type < VAR_DEAD_THREAD && type != VAR_DEAD_ENTITY );
 		return;
 	}
 

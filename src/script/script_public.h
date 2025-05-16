@@ -223,8 +223,8 @@ enum var_type_t
 	VAR_NOTIFY_THREAD,
 	VAR_TIME_THREAD,
 	VAR_CHILD_THREAD,
-	VAR_STRUCT,
-	VAR_REMOVED_ENTITY,
+	VAR_OBJECT,
+	VAR_DEAD_ENTITY,
 	VAR_ENTITY,
 	VAR_ARRAY,
 	VAR_DEAD_THREAD,
@@ -1120,7 +1120,7 @@ VariableValue* Scr_GetValue(unsigned int param);
 unsigned int FindNextSibling(unsigned int id);
 unsigned int FindPrevSibling(unsigned int id);
 unsigned int FindVariable(unsigned int parentId, unsigned int name);
-unsigned int FindVariableIndex(unsigned int parentId, unsigned int name);
+unsigned int FindVariableIndexInternal(unsigned int parentId, unsigned int name);
 unsigned int FindObjectVariable(unsigned int parentId, unsigned int id);
 unsigned int FindObject(unsigned int id);
 void AddRefToVector(const float *vectorValue);
@@ -1130,8 +1130,7 @@ unsigned int GetNewObjectVariableReverse(unsigned int parentId, unsigned int id)
 unsigned int GetNewObjectVariable(unsigned int parentId, unsigned int id);
 unsigned int GetObjectVariable(unsigned int parentId, unsigned int id);
 unsigned int GetVariable(unsigned int parentId, unsigned int name);
-void Scr_EvalVariable(VariableValue *val, unsigned int index);
-VariableValue Scr_EvalVariable(unsigned int index);
+VariableValue Scr_EvalVariable( unsigned int id );
 unsigned int GetNewArrayVariableIndex(unsigned int parentId, unsigned int index);
 unsigned int GetNewArrayVariable(unsigned int parentId, unsigned int index);
 void FreeVariable(unsigned int id);
@@ -1142,7 +1141,7 @@ unsigned int GetNewVariable(unsigned int parentId, unsigned int name);
 void RemoveRefToEmptyObject(unsigned int id);
 void AddRefToObject(unsigned int id);
 void AddRefToValue(VariableValue *val);
-void AddRefToValueInternal(int type, VariableUnion u);
+void AddRefToValue(int type, VariableUnion u);
 void FreeChildValue(unsigned int id);
 void ClearObject(unsigned int parentId);
 void RemoveVariable(unsigned int parentId, unsigned int index);
@@ -1203,7 +1202,7 @@ void Scr_CastVector(VariableValue *value);
 unsigned int GetObjectA(unsigned int id);
 unsigned int FreeTempVariableObject();
 unsigned int FreeTempVariable();
-unsigned int FindEntityId(int entnum, unsigned int classnum);
+unsigned int FindEntityId(int entnum, int classnum);
 unsigned int AllocObject();
 unsigned int AllocThread(unsigned int self);
 unsigned int AllocChildThread(unsigned int self, unsigned int parentLocalId);
@@ -1245,10 +1244,10 @@ unsigned int Scr_FindField(const char *name, int *type);
 void Scr_AddFields(const char *path, const char *extension);
 void Scr_AddClassField(unsigned int classnum, const char *name, unsigned short offset);
 bool Scr_CastString(VariableValue *value);
-void Scr_SetClassMap(unsigned int classnum);
+void Scr_SetClassMap(int classnum);
 void Scr_AllocGameVariable();
 void Scr_DumpScriptThreads();
-void Scr_DumpScriptVariables();
+void Scr_DumpScriptVariablesDefault();
 void Var_Shutdown();
 void Var_FreeTempVariables();
 void Var_Init();
@@ -1372,3 +1371,14 @@ int SL_ConvertFromRefString(RefString *refString);
 int SL_GetRefStringLen(RefString *refString);
 void CreateCanonicalFilename(char *newFilename, const char *filename, int count);
 void SL_RemoveAllRefToString(unsigned int stringValue);
+
+void Var_ResetAll();
+void Var_InitClassMap();
+
+unsigned int FindArrayVariableIndex(unsigned int parentId, unsigned int index);
+float Scr_GetThreadUsage(VariableStackBuffer *stackBuf, float *endonUsage);
+int ThreadInfoCompare(const void *ainfo1, const void *ainfo2);
+unsigned int GetNewVariableIndexReverseInternal(unsigned int parentId, unsigned int name);
+unsigned int GetNewVariableIndexInternal(unsigned int parentId, unsigned int name);
+unsigned int GetVariableIndexInternal(unsigned int parentId, unsigned int name);
+unsigned int GetArrayVariableIndex(unsigned int parentId, unsigned int index);
