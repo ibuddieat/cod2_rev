@@ -24,7 +24,7 @@ AddRefToValue
 */
 void RemoveRefToValue( VariableValue *value )
 {
-	RemoveRefToValueInternal(value->type, value->u);
+	RemoveRefToValue(value->type, value->u);
 }
 
 /*

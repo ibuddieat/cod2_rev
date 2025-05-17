@@ -1420,20 +1420,570 @@ void RemoveRefToVector( const vec3_t vectorValue )
 	MT_Free( refVec, sizeof( *refVec ) );
 }
 
+/*
+==============
+Scr_EvalArrayIndex
+==============
+*/
+unsigned int Scr_EvalArrayIndex( unsigned int parentId, VariableValue *index )
+{
+	unsigned int stringValue;
 
+	switch ( index->type )
+	{
+	case VAR_INTEGER:
+		if ( IsValidArrayIndex(index->u.pointerValue) )
+			return GetArrayVariable(parentId, index->u.pointerValue);
+		Scr_Error(va("array index %d out of range", index->u.pointerValue));
+		return 0;
 
+	case VAR_STRING:
+		stringValue = GetVariable(parentId, index->u.stringValue);
+		SL_RemoveRefToString(index->u.stringValue);
+		return stringValue;
 
+	default:
+		Scr_Error(va("%s is not an array index", var_typename[index->type]));
+		return 0;
+	}
+}
 
+/*
+==============
+Scr_GetEntityId
+==============
+*/
+unsigned int Scr_GetEntityId( int entnum, int classnum )
+{
+	VariableValueInternal *entryValue;
+	unsigned int entId, id, entArrayId;
 
+	assert((unsigned)entnum < (1 << 16));
 
+	entArrayId = scrClassMap[classnum].entArrayId;
+	assert(entArrayId);
 
+	id = GetArrayVariable(entArrayId, entnum);
+	assert(id);
 
+	entryValue = &scrVarGlob.variableList[id];
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 
+	if ( (entryValue->w.status & VAR_MASK) )
+	{
+		assert((entryValue->w.type & VAR_MASK) == VAR_POINTER);
+		return entryValue->u.u.pointerValue;
+	}
 
+	entId = AllocEntity(classnum, entnum);
+	assert(!(entryValue->w.type & VAR_MASK));
 
+	entryValue->w.type |= VAR_POINTER;
+	entryValue->u.u.pointerValue = entId;
 
+	return entId;
+}
 
+/*
+==============
+Scr_AddClassField
+==============
+*/
+void Scr_AddClassField( int classnum, const char *name, unsigned int offset )
+{
+	unsigned int str, classId, fieldId;
+	VariableValueInternal *entryValue;
+	const char *namePos;
 
+	assert(offset < (1 << 16));
+	for ( namePos = name; *namePos; namePos++ )
+	{
+		assert((*namePos < 'A' || *namePos > 'Z'));
+	}
+
+	classId = scrClassMap[classnum].id;
+	str = SL_GetCanonicalString(name);
+	assert(!FindArrayVariable(classId, (unsigned)str));
+
+	entryValue = &scrVarGlob.variableList[GetNewArrayVariable(classId, str)];
+
+	entryValue->w.type &= ~VAR_MASK;
+	entryValue->w.type |= VAR_INTEGER;
+	entryValue->u.u.intValue = (unsigned short)offset;
+
+	str = SL_GetString_(name, 0);
+	assert(!FindVariable(classId, str));
+
+	fieldId = GetNewVariable(classId, str);
+	SL_RemoveRefToString(str);
+
+	entryValue = &scrVarGlob.variableList[fieldId];
+
+	entryValue->w.type &= ~VAR_MASK;
+	entryValue->w.type |= VAR_INTEGER;
+	entryValue->u.u.intValue = (unsigned short)offset;
+}
+
+/*
+==============
+RemoveRefToValue
+==============
+*/
+void RemoveRefToValue( int type, VariableUnion u )
+{
+	switch ( type )
+	{
+	case VAR_POINTER:
+		RemoveRefToObject(u.pointerValue);
+		break;
+
+	case VAR_STRING:
+	case VAR_ISTRING:
+		SL_RemoveRefToString(u.stringValue);
+		break;
+
+	case VAR_VECTOR:
+		assert(type - 1 == VAR_VECTOR - VAR_BEGIN_REF);
+		RemoveRefToVector(u.vectorValue);
+		break;
+	}
+}
+
+/*
+==============
+Scr_AllocVector
+==============
+*/
+float* Scr_AllocVector( const vec3_t v )
+{
+	float* av = Scr_AllocVectorInternal();
+	VectorCopy(v, av);
+
+	return av;
+}
+
+/*
+==============
+FreeValue
+==============
+*/
+void FreeValue( unsigned int id )
+{
+	VariableValueInternal *entryValue = &scrVarGlob.variableList[id];
+
+	assert(((entryValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL));
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(!IsObject( entryValue ));
+	assert(scrVarGlob.variableList[entryValue->v.index].hash.id == id);
+
+	RemoveRefToValue(entryValue->w.type & VAR_MASK, entryValue->u.u);
+	FreeVariable(id);
+}
+
+/*
+==============
+Scr_RemoveThreadNotifyName
+==============
+*/
+void Scr_RemoveThreadNotifyName( unsigned int startLocalId )
+{
+	unsigned short stringValue;
+	VariableValueInternal *entryValue;
+
+	entryValue = &scrVarGlob.variableList[startLocalId];
+
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert((entryValue->w.type & VAR_MASK) == VAR_NOTIFY_THREAD);
+
+	stringValue = Scr_GetThreadNotifyName(startLocalId);
+	assert(stringValue);
+
+	SL_RemoveRefToString(stringValue);
+
+	entryValue->w.type &= ~VAR_MASK;
+	entryValue->w.type |= VAR_THREAD;
+}
+
+/*
+==============
+Var_Shutdown
+==============
+*/
+void Var_Shutdown()
+{
+	if ( !scrVarPub.gameId )
+	{
+		return;
+	}
+
+	FreeValue(scrVarPub.gameId);
+	scrVarPub.gameId = 0;
+}
+
+/*
+==============
+Scr_CopyEntityNum
+==============
+*/
+void Scr_CopyEntityNum( int fromEntnum, int toEntnum, int classnum )
+{
+	unsigned int fromEntId = FindEntityId( fromEntnum, classnum );
+
+	if ( !fromEntId )
+	{
+		return;
+	}
+
+	if ( !FindNextSibling(fromEntId) )
+	{
+		return;
+	}
+
+	assert( !FindEntityId( toEntnum, classnum ) );
+	CopyEntity( fromEntId, Scr_GetEntityId( toEntnum, classnum ) );
+}
+
+/*
+==============
+Scr_ClearVector
+==============
+*/
+void Scr_ClearVector( VariableValue *value )
+{
+	for ( int i = 2; i >= 0; i-- )
+	{
+		RemoveRefToValue( &value[i] );
+	}
+
+	value->type = VAR_UNDEFINED;
+}
+
+/*
+==============
+Scr_CastString
+==============
+*/
+bool Scr_CastString( VariableValue *value )
+{
+	const float *constTempVector;
+
+	switch ( value->type )
+	{
+	case VAR_STRING:
+		return true;
+
+	case VAR_INTEGER:
+		value->type = VAR_STRING;
+		value->u.stringValue = SL_GetStringForInt(value->u.intValue);
+		return true;
+
+	case VAR_FLOAT:
+		value->type = VAR_STRING;
+		value->u.stringValue = SL_GetStringForFloat(value->u.floatValue);
+		return true;
+
+	case VAR_VECTOR:
+		value->type = VAR_STRING;
+		constTempVector = value->u.vectorValue;
+		value->u.stringValue = SL_GetStringForVector(value->u.vectorValue);
+		RemoveRefToVector(constTempVector);
+		return true;
+
+	default:
+		scrVarPub.error_message = va("cannot cast %s to string", var_typename[value->type]);
+		RemoveRefToValue(value);
+		value->type = VAR_UNDEFINED;
+		return false;
+	}
+}
+
+/*
+==============
+Scr_CastBool
+==============
+*/
+void Scr_CastBool( VariableValue *value )
+{
+	int type;
+
+	switch ( value->type )
+	{
+	case VAR_INTEGER:
+		value->u.intValue = value->u.intValue != 0;
+		break;
+
+	case VAR_FLOAT:
+		value->type = VAR_INTEGER;
+		value->u.intValue = value->u.floatValue != 0;
+		break;
+
+	default:
+		type = value->type;
+		RemoveRefToValue(value);
+		value->type = VAR_UNDEFINED;
+		Scr_Error(va("cannot cast %s to bool", var_typename[type]));
+		break;
+	}
+}
+
+/*
+==============
+Scr_EvalBoolComplement
+==============
+*/
+void Scr_EvalBoolComplement( VariableValue *value )
+{
+	int type;
+
+	if ( value->type == VAR_INTEGER )
+	{
+		value->u.intValue = ~value->u.intValue;
+		return;
+	}
+
+	type = value->type;
+	RemoveRefToValue(value);
+	value->type = VAR_UNDEFINED;
+	Scr_Error(va("~ cannot be applied to \"%s\"", var_typename[type]));
+}
+
+/*
+==============
+Scr_EvalBoolNot
+==============
+*/
+void Scr_EvalBoolNot( VariableValue *value )
+{
+	Scr_CastBool(value);
+
+	if ( value->type == VAR_INTEGER )
+	{
+		value->u.intValue = value->u.intValue == 0;
+	}
+}
+
+/*
+==============
+ClearVariableValue
+==============
+*/
+void ClearVariableValue( unsigned int id )
+{
+	VariableValueInternal *entryValue;
+
+	assert(id);
+	entryValue = &scrVarGlob.variableList[id];
+
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(!IsObject( entryValue ));
+	assert((entryValue->w.type & VAR_MASK) != VAR_STACK);
+
+	RemoveRefToValue(entryValue->w.status & VAR_MASK, entryValue->u.u);
+
+	entryValue->w.type &= ~VAR_MASK;
+	assert((entryValue->w.type & VAR_MASK) == VAR_UNDEFINED);
+}
+
+/*
+==============
+SetVariableValue
+==============
+*/
+void SetVariableValue( unsigned int id, VariableValue *value )
+{
+	VariableValueInternal *entryValue;
+
+	assert(id);
+	assert(!IsObjectVal( value ));
+	assert(value->type >= 0 && value->type < VAR_COUNT);
+	assert(value->type != VAR_STACK);
+
+	entryValue = &scrVarGlob.variableList[id];
+
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(!IsObject( entryValue ));
+	assert((entryValue->w.type & VAR_MASK) != VAR_STACK);
+
+	RemoveRefToValue(entryValue->w.type & VAR_MASK, entryValue->u.u);
+
+	entryValue->w.type &= ~VAR_MASK;
+	entryValue->w.type |= value->type;
+	entryValue->u.u = value->u;
+}
+
+/*
+==============
+SetEmptyArray
+==============
+*/
+void SetEmptyArray( unsigned int parentId )
+{
+	VariableValue tempValue;
+
+	tempValue.type = VAR_POINTER;
+	tempValue.u.pointerValue = Scr_AllocArray();
+
+	SetVariableValue(parentId, &tempValue);
+}
+
+/*
+==============
+Scr_EvalFieldObject
+==============
+*/
+unsigned int Scr_EvalFieldObject( unsigned int tempVariable, VariableValue *value )
+{
+	int type;
+	VariableValue tempValue;
+
+	type = value->type;
+
+	if ( type == VAR_POINTER )
+	{
+		type = scrVarGlob.variableList[value->u.pointerValue].w.type & VAR_MASK;
+
+		if ( type < VAR_ARRAY )
+		{
+			assert(type >= FIRST_OBJECT);
+
+			tempValue.type = VAR_POINTER;
+			tempValue.u = value->u;
+
+			SetVariableValue(tempVariable, &tempValue);
+			return tempValue.u.pointerValue;
+		}
+	}
+
+	RemoveRefToValue(value->type, value->u);
+	Scr_Error(va("%s is not a field object", var_typename[type]));
+	return 0;
+}
+
+/*
+==============
+Scr_CastVector
+==============
+*/
+void Scr_CastVector( VariableValue *value )
+{
+	int type, i;
+	vec3_t vec;
+
+	for ( i = 2; i >= 0; i-- )
+	{
+		type = value[i].type;
+
+		switch ( type )
+		{
+		case VAR_FLOAT:
+			vec[2 - i] = value[i].u.floatValue;
+			break;
+
+		case VAR_INTEGER:
+			vec[2 - i] = (float)value[i].u.intValue;
+			break;
+
+		default:
+			scrVarPub.error_index = i + 1;
+			Scr_ClearVector(value);
+			Scr_Error(va("type %s is not a float", var_typename[type]));
+			return;
+		}
+	}
+
+	value->type = VAR_VECTOR;
+	value->u.vectorValue = Scr_AllocVector(vec);
+}
+
+/*
+==============
+Scr_CastDebugString
+==============
+*/
+void Scr_CastDebugString( VariableValue *value )
+{
+	unsigned int stringValue;
+
+	switch ( value->type )
+	{
+	case VAR_POINTER:
+		stringValue = SL_GetString_( var_typename[ GetValueType( value->u.pointerValue) ], 0 );
+		break;
+
+	case VAR_STRING:
+	case VAR_VECTOR:
+	case VAR_FLOAT:
+	case VAR_INTEGER:
+		Scr_CastString(value);
+		return;
+
+	case VAR_ISTRING:
+		value->type = VAR_STRING;
+		return;
+
+	case VAR_ANIMATION:
+		stringValue = SL_GetString_( XAnimGetAnimDebugName( Scr_GetAnims( value->u.pointerValue >> 16 ), (unsigned short)value->u.pointerValue ), 0 );
+		break;
+
+	default:
+		stringValue = SL_GetString_( var_typename[ value->type ], 0 );
+		break;
+	}
+
+	RemoveRefToValue(value);
+
+	value->type = VAR_STRING;
+	value->u.stringValue = stringValue;
+}
+
+/*
+==============
+SafeRemoveVariable
+==============
+*/
+void SafeRemoveVariable( unsigned int parentId, unsigned int name )
+{
+	VariableValueInternal *entryValue;
+	unsigned int index, id;
+
+	index = FindVariableIndexInternal(parentId, name);
+
+	if ( !index )
+	{
+		return;
+	}
+
+	id = scrVarGlob.variableList[index].hash.id;
+	entryValue = &scrVarGlob.variableList[id];
+
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(!IsObject( entryValue ));
+
+	MakeVariableExternal(&scrVarGlob.variableList[index], &scrVarGlob.variableList[parentId]);
+	FreeValue(id);
+}
+
+/*
+==============
+RemoveNextVariable
+==============
+*/
+void RemoveNextVariable( unsigned int parentId )
+{
+	VariableValueInternal *entryValue;
+	unsigned short id;
+
+	assert((scrVarGlob.variableList[parentId].w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	entryValue = &scrVarGlob.variableList[scrVarGlob.variableList[parentId].nextSibling];
+
+	id = entryValue->hash.id;
+	assert(id);
+
+	MakeVariableExternal(entryValue, &scrVarGlob.variableList[parentId]);
+	FreeValue(id);
+}
 
 
 
@@ -1911,33 +2461,14 @@ void FreeVariable(unsigned int id)
 
 
 
-void RemoveRefToValueInternal(int type, VariableUnion u)
-{
-	if ( type > VAR_ISTRING )
-	{
-		if ( type == VAR_VECTOR )
-			RemoveRefToVector(u.vectorValue);
-	}
-	else if ( type >= VAR_STRING )
-	{
-		SL_RemoveRefToString(u.stringValue);
-	}
-	else if ( type == VAR_POINTER )
-	{
-		RemoveRefToObject(u.stringValue);
-	}
-}
 
 
 
 
 
 
-void FreeChildValue(unsigned int id)
-{
-	RemoveRefToValueInternal(scrVarGlob.variableList[id].w.type & VAR_MASK, scrVarGlob.variableList[id].u.u);
-	FreeVariable(id);
-}
+
+
 
 void ClearObjectInternal(unsigned int parentId)
 {
@@ -1962,7 +2493,7 @@ void ClearObjectInternal(unsigned int parentId)
 	{
 		prevId = id;
 		id = scrVarGlob.variableList[scrVarGlob.variableList[id].nextSibling].hash.id;
-		FreeChildValue(prevId);
+		FreeValue(prevId);
 	}
 }
 
@@ -1981,19 +2512,10 @@ void RemoveVariable(unsigned int parentId, unsigned int index)
 	value = &scrVarGlob.variableList[FindVariableIndexInternal(parentId, index)];
 	id = value->hash.id;
 	MakeVariableExternal(value, &scrVarGlob.variableList[parentId]);
-	FreeChildValue(id);
+	FreeValue(id);
 }
 
-void RemoveNextVariable(unsigned int index)
-{
-	uint16_t id;
-	VariableValueInternal *value;
 
-	value = &scrVarGlob.variableList[scrVarGlob.variableList[index].nextSibling];
-	id = value->hash.id;
-	MakeVariableExternal(value, &scrVarGlob.variableList[index]);
-	FreeChildValue(id);
-}
 
 void RemoveObjectVariable(unsigned int parentId, unsigned int id)
 {
@@ -2036,74 +2558,13 @@ void RemoveRefToObject(unsigned int id)
 
 
 
-unsigned int Scr_EvalFieldObject(unsigned int tempVariable, VariableValue *value)
-{
-	VariableValue tempValue;
-	int type;
 
-	type = value->type;
 
-	if ( type == VAR_POINTER && (type = scrVarGlob.variableList[value->u.intValue].w.type & VAR_MASK, type <= VAR_ENTITY) )
-	{
-		tempValue.type = VAR_POINTER;
-		tempValue.u.intValue = value->u.intValue;
-		SetVariableValue(tempVariable, &tempValue);
-		return tempValue.u.intValue;
-	}
-	else
-	{
-		RemoveRefToValue(value);
-		Scr_Error(va("%s is not a field object", var_typename[type]));
-		return 0;
-	}
-}
 
-void Scr_CastBool(VariableValue *value)
-{
-	int type;
 
-	if ( value->type == VAR_INTEGER )
-	{
-		value->u.intValue = value->u.intValue != 0;
-	}
-	else if ( value->type == VAR_FLOAT )
-	{
-		value->type = VAR_INTEGER;
-		value->u.intValue = 0.0 != value->u.floatValue;
-	}
-	else
-	{
-		type = value->type;
-		RemoveRefToValue(value);
-		value->type = VAR_UNDEFINED;
-		Scr_Error(va("cannot cast %s to bool", var_typename[type]));
-	}
-}
 
-void Scr_EvalBoolNot(VariableValue *value)
-{
-	Scr_CastBool(value);
 
-	if ( value->type == VAR_INTEGER )
-		value->u.intValue = value->u.intValue == 0;
-}
 
-void Scr_EvalBoolComplement(VariableValue *value)
-{
-	int type;
-
-	if ( value->type == VAR_INTEGER )
-	{
-		value->u.intValue = ~value->u.intValue;
-	}
-	else
-	{
-		type = value->type;
-		RemoveRefToValue(value);
-		value->type = VAR_UNDEFINED;
-		Scr_Error(va("~ cannot be applied to \"%s\"", var_typename[type]));
-	}
-}
 
 
 
@@ -2174,25 +2635,11 @@ float* Scr_AllocVectorInternal()
 	return refVec->vec;
 }
 
-float* Scr_AllocVector(const float* vec)
-{
-	float* avec = Scr_AllocVectorInternal();
-
-	VectorCopy(vec, avec);
-
-	return avec;
-}
 
 
 
-void SetEmptyArray(unsigned int parentId)
-{
-	VariableValue tempValue;
 
-	tempValue.type = VAR_POINTER;
-	tempValue.u.pointerValue = Scr_AllocArray();
-	SetVariableValue(parentId, &tempValue);
-}
+
 
 void Scr_AllocGameVariable()
 {
@@ -2244,7 +2691,7 @@ void Scr_FreeGameVariable(int bComplete)
 {
 	if ( bComplete )
 	{
-		FreeChildValue(scrVarPub.gameId);
+		FreeValue(scrVarPub.gameId);
 		scrVarPub.gameId = 0;
 	}
 	else
@@ -2273,22 +2720,7 @@ void Scr_FreeObjects()
 	}
 }
 
-unsigned int Scr_GetEntityId(int entnum, unsigned int classnum)
-{
-	VariableValueInternal *entryValue;
-	unsigned int entId;
 
-	entryValue = &scrVarGlob.variableList[GetArrayVariable(scrClassMap[classnum].entArrayId, entnum)];
-
-	if ( VAR_TYPE(entryValue) != VAR_UNDEFINED )
-		return entryValue->u.u.pointerValue;
-
-	entId = AllocEntity(classnum, entnum);
-	entryValue->w.type |= VAR_POINTER;
-	entryValue->u.u.entityOffset = entId;
-
-	return entId;
-}
 
 void Scr_FreeEntityNum(int entnum, unsigned int classnum)
 {
@@ -2318,17 +2750,7 @@ void Scr_FreeEntityNum(int entnum, unsigned int classnum)
 
 
 
-void Scr_RemoveThreadNotifyName(unsigned int startLocalId)
-{
-	VariableValueInternal *entryValue;
-	unsigned short stringValue;
 
-	entryValue = &scrVarGlob.variableList[startLocalId];
-	stringValue = Scr_GetThreadNotifyName(startLocalId);
-	SL_RemoveRefToString(stringValue);
-	entryValue->w.type &= ~VAR_MASK;
-	entryValue->w.type |= VAR_THREAD;
-}
 
 void Scr_ClearThread(unsigned int parentId)
 {
@@ -2535,34 +2957,7 @@ void Scr_EvalArray(VariableValue *value, VariableValue *index)
 	}
 }
 
-unsigned int Scr_EvalArrayIndex(unsigned int parentId, VariableValue *var)
-{
-	unsigned int index;
 
-	if ( var->type == VAR_INTEGER )
-	{
-		if ( IsValidArrayIndex(var->u.intValue) )
-		{
-			return GetArrayVariable(parentId, var->u.intValue);
-		}
-		else
-		{
-			Scr_Error(va("array index %d out of range", var->u.intValue));
-			return 0;
-		}
-	}
-	else if ( var->type == VAR_STRING )
-	{
-		index = GetVariable(parentId, var->u.stringValue);
-		SL_RemoveRefToString(var->u.stringValue);
-		return index;
-	}
-	else
-	{
-		Scr_Error(va("%s is not an array index", var_typename[var->type]));
-		return 0;
-	}
-}
 
 
 
@@ -2697,42 +3092,7 @@ void Scr_EvalVariableFieldInternal(VariableValue *pValue, unsigned int id)
 	*pValue = value;
 }
 
-void Scr_CastDebugString(VariableValue *value)
-{
-	const char *s;
-	unsigned int stringValue;
 
-	switch ( value->type )
-	{
-	case VAR_POINTER:
-		stringValue = SL_GetString_(var_typename[GetValueType(value->u.pointerValue)], 0);
-		break;
-
-	case VAR_STRING:
-	case VAR_VECTOR:
-	case VAR_FLOAT:
-	case VAR_INTEGER:
-		Scr_CastString(value);
-		return;
-
-	case VAR_ISTRING:
-		value->type = VAR_STRING;
-		return;
-
-	case VAR_ANIMATION:
-		s = XAnimGetAnimDebugName(Scr_GetAnims(value->u.pointerValue >> 16), (uint16_t)value->u.pointerValue);
-		stringValue = SL_GetString_(s, 0);
-		break;
-
-	default:
-		stringValue = SL_GetString_(var_typename[value->type], 0);
-		break;
-	}
-
-	RemoveRefToValue(value);
-	value->type = VAR_STRING;
-	value->u.stringValue = stringValue;
-}
 
 void Scr_UnmatchingTypesError(VariableValue *value1, VariableValue *value2)
 {
@@ -3271,49 +3631,8 @@ void Scr_EvalSizeValue(VariableValue *value)
 	}
 }
 
-static void Scr_ClearVector(VariableValue *value)
-{
-	int i;
 
-	for ( i = 2; i >= 0; --i )
-	{
-		RemoveRefToValue(&value[i]);
-	}
 
-	value->type = VAR_UNDEFINED;
-}
-
-void Scr_CastVector(VariableValue *value)
-{
-	int type;
-	int i;
-	vec3_t vec;
-
-	for ( i = 2; i >= 0; --i )
-	{
-		type = value[i].type;
-
-		if ( type == VAR_FLOAT )
-		{
-			vec[2 - i] = value[i].u.floatValue;
-		}
-		else
-		{
-			if ( type != VAR_INTEGER )
-			{
-				scrVarPub.error_index = i + 1;
-				Scr_ClearVector(value);
-				Scr_Error(va("type %s is not a float", var_typename[type]));
-				return;
-			}
-
-			vec[2 - i] = (float)value[i].u.intValue;
-		}
-	}
-
-	value->type = VAR_VECTOR;
-	value->u.vectorValue = Scr_AllocVector(vec);
-}
 
 void Scr_EvalBinaryOperator(int op, VariableValue *value1, VariableValue *value2)
 {
@@ -3450,20 +3769,7 @@ void Scr_FreeEntityList()
 	}
 }
 
-void SafeRemoveVariable(unsigned int parentId, unsigned int name)
-{
-	unsigned int index;
-	unsigned int id;
 
-	index = FindVariableIndexInternal(parentId, name);
-
-	if ( index )
-	{
-		id = scrVarGlob.variableList[index].hash.id;
-		MakeVariableExternal(&scrVarGlob.variableList[index], &scrVarGlob.variableList[parentId]);
-		FreeChildValue(id);
-	}
-}
 
 void ClearVariableField(unsigned int parentId, unsigned int name, VariableValue *value)
 {
@@ -3720,16 +4026,7 @@ void SetVariableEntityFieldValue(unsigned int entId, unsigned int fieldName, Var
 	}
 }
 
-void SetVariableValue(unsigned int id, VariableValue *value)
-{
-	VariableValueInternal *entryValue;
 
-	entryValue = &scrVarGlob.variableList[id];
-	RemoveRefToValueInternal(VAR_TYPE(entryValue), entryValue->u.u);
-	entryValue->w.type &= ~VAR_MASK;
-	entryValue->w.type |= value->type;
-	entryValue->u.u = value->u;
-}
 
 void SetVariableFieldValue(unsigned int id, VariableValue *value)
 {
@@ -3739,11 +4036,6 @@ void SetVariableFieldValue(unsigned int id, VariableValue *value)
 		SetVariableValue(id, value);
 }
 
-void ClearVariableValue(unsigned int id)
-{
-	RemoveRefToValueInternal(scrVarGlob.variableList[id].w.type & VAR_MASK, scrVarGlob.variableList[id].u.u);
-	scrVarGlob.variableList[id].w.status &= ~VAR_MASK;
-}
 
 
 
@@ -3754,62 +4046,9 @@ void ClearVariableValue(unsigned int id)
 
 
 
-void Scr_AddClassField(unsigned int classnum, const char *name, unsigned short offset)
-{
-	unsigned int str;
-	unsigned int classId;
-	unsigned int index;
-	VariableValueInternal *entryValue;
-	unsigned int fieldId;
 
-	classId = scrClassMap[classnum].id;
-	str = SL_GetCanonicalString(name);
-	entryValue = &scrVarGlob.variableList[GetNewArrayVariable(classId, str)];
-	entryValue->w.status &= ~VAR_MASK;
-	entryValue->w.type |= VAR_INTEGER;
-	entryValue->u.u.intValue = offset;
-	index = SL_GetString_(name, 0);
-	fieldId = GetNewVariable(classId, index);
-	SL_RemoveRefToString(index);
-	entryValue = &scrVarGlob.variableList[fieldId];
-	entryValue->w.status &= ~VAR_MASK;
-	entryValue->w.type |= VAR_INTEGER;
-	entryValue->u.u.intValue = offset;
-}
 
-bool Scr_CastString(VariableValue *value)
-{
-	const float *constTempVector;
 
-	switch ( value->type )
-	{
-	case VAR_STRING:
-		return true;
-
-	case VAR_INTEGER:
-		value->type = VAR_STRING;
-		value->u.intValue = SL_GetStringForInt(value->u.intValue);
-		return true;
-
-	case VAR_FLOAT:
-		value->type = VAR_STRING;
-		value->u.intValue = SL_GetStringForFloat(value->u.floatValue);
-		return true;
-
-	case VAR_VECTOR:
-		value->type = VAR_STRING;
-		constTempVector = value->u.vectorValue;
-		value->u.intValue = SL_GetStringForVector(value->u.vectorValue);
-		RemoveRefToVector(constTempVector);
-		return true;
-
-	default:
-		scrVarPub.error_message = va("cannot cast %s to string", var_typename[value->type]);
-		RemoveRefToValue(value);
-		value->type = VAR_UNDEFINED;
-		return false;
-	}
-}
 
 
 
@@ -4075,19 +4314,12 @@ void Var_FreeTempVariables()
 {
 	if ( scrVarPub.tempVariable )
 	{
-		FreeChildValue(scrVarPub.tempVariable);
+		FreeValue(scrVarPub.tempVariable);
 		scrVarPub.tempVariable = 0;
 	}
 }
 
-void Var_Shutdown()
-{
-	if ( scrVarPub.gameId )
-	{
-		FreeChildValue(scrVarPub.gameId);
-		scrVarPub.gameId = 0;
-	}
-}
+
 
 void Var_InitClassMap()
 {
@@ -4125,16 +4357,3 @@ void CopyEntity(unsigned int parentId, unsigned int newParentId)
 	}
 }
 
-void Scr_CopyEntityNum( int fromEntnum, int toEntnum, unsigned int classnum )
-{
-	unsigned int fromEntId;
-
-	fromEntId = FindEntityId(fromEntnum, classnum);
-	if ( fromEntId )
-	{
-		if ( FindNextSibling(fromEntId) )
-		{
-			CopyEntity(fromEntId, Scr_GetEntityId(toEntnum, classnum));
-		}
-	}
-}

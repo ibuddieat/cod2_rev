@@ -762,7 +762,7 @@ void VM_TerminateStack(unsigned int endLocalId, unsigned int startLocalId, Varia
 		}
 		else
 		{
-			RemoveRefToValueInternal(type, u);
+			RemoveRefToValue(type, u);
 		}
 	}
 
@@ -820,7 +820,7 @@ void VM_TrimStack(unsigned int startLocalId, VariableStackBuffer *stackValue, bo
 		}
 		else
 		{
-			RemoveRefToValueInternal(type, u);
+			RemoveRefToValue(type, u);
 		}
 	}
 
