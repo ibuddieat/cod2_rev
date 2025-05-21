@@ -629,7 +629,7 @@ bool SetEntityFieldValue(unsigned int classnum, int entnum, int offset, Variable
 	}
 }
 
-void GetEntityFieldValue(VariableValue *pValue, unsigned int classnum, int entnum, int offset)
+void GetEntityFieldValue_Bad(VariableValue *pValue, unsigned int classnum, int entnum, int offset)
 {
 	scrVmPub.top = scrVmGlob.eval_stack - 1;
 	scrVmGlob.eval_stack->type = VAR_UNDEFINED;
@@ -637,6 +637,20 @@ void GetEntityFieldValue(VariableValue *pValue, unsigned int classnum, int entnu
 	scrVmPub.inparamcount = 0;
 	pValue->u = scrVmGlob.eval_stack->u;
 	pValue->type = scrVmGlob.eval_stack->type;
+}
+
+VariableValue GetEntityFieldValue(int classnum, int entnum, int offset)
+{
+	VariableValue value;
+	
+	scrVmPub.top = scrVmGlob.eval_stack - 1;
+	scrVmGlob.eval_stack->type = VAR_UNDEFINED;
+	Scr_GetObjectField(classnum, entnum, offset);
+	scrVmPub.inparamcount = 0;
+	value.u = scrVmGlob.eval_stack->u;
+	value.type = scrVmGlob.eval_stack->type;
+	
+	return value;
 }
 
 void VM_CancelNotifyInternal(unsigned int notifyListOwnerId, unsigned int startLocalId, unsigned int notifyListId, unsigned int notifyNameListId, unsigned int stringValue)
