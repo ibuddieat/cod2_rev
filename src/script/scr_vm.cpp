@@ -2097,7 +2097,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			if ( IsFieldObject(objectId) )
 			{
 				++top;
-				Scr_FindVariableFieldInternal(&tempValue, objectId, Scr_ReadUnsignedShort(&pos));
+				tempValue = Scr_FindVariableField(objectId, Scr_ReadUnsignedShort(&pos));
 				top->u = tempValue.u;
 				top->type = tempValue.type;
 				continue;
@@ -2108,7 +2108,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_EvalFieldVariable:
 			++top;
-			Scr_FindVariableFieldInternal(&tempValue, objectId, Scr_ReadUnsignedShort(&pos));
+			tempValue = Scr_FindVariableField(objectId, Scr_ReadUnsignedShort(&pos));
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			continue;
@@ -3216,7 +3216,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_inc:
 			++top;
-			Scr_EvalVariableFieldInternal(&tempValue, fieldValueId);
+			tempValue = Scr_EvalVariableField(fieldValueId);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			if ( top->type == VAR_INTEGER )
@@ -3234,7 +3234,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_dec:
 			++top;
-			Scr_EvalVariableFieldInternal(&tempValue, fieldValueId);
+			tempValue = Scr_EvalVariableField(fieldValueId);
 			top->u = tempValue.u;
 			top->type = tempValue.type;
 			if ( top->type == VAR_INTEGER )

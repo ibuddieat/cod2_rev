@@ -1215,9 +1215,7 @@ void Scr_RemoveClassMap(int classnum);
 void Scr_StopThread(unsigned int threadId);
 void Scr_EvalArray(VariableValue *value, VariableValue *index);
 VariableValue Scr_FindVariableField(unsigned int parentId, unsigned int name);
-void Scr_FindVariableFieldInternal(VariableValue *pValue, unsigned int parentId, unsigned int name);
 VariableValue Scr_EvalVariableField(unsigned int id);
-void Scr_EvalVariableFieldInternal(VariableValue *pValue, unsigned int id);
 void SafeRemoveVariable(unsigned int parentId, unsigned int name);
 unsigned int Scr_EvalArrayIndex(unsigned int parentId, VariableValue *var);
 unsigned int Scr_GetVariableField(unsigned int fieldId, unsigned int index);
@@ -1375,7 +1373,7 @@ int SL_GetRefStringLen(RefString *refString);
 void CreateCanonicalFilename(char *newFilename, const char *filename, int count);
 void SL_RemoveAllRefToString(unsigned int stringValue);
 
-void Var_ResetAll();
+void InitVariables();
 void Var_InitClassMap();
 
 unsigned int FindArrayVariableIndex(unsigned int parentId, unsigned int index);
@@ -1393,3 +1391,5 @@ void Scr_CastWeakerPair(VariableValue *value1, VariableValue *value2);
 void Scr_CastWeakerStringPair(VariableValue *value1, VariableValue *value2);
 void Scr_ClearThread(unsigned int parentId);
 void SafeRemoveArrayVariable(unsigned int parentId, unsigned int name);
+VariableValue Scr_EvalVariableEntityField(unsigned int entId, unsigned int name);
+void Scr_AddFieldsForFile(const char *filename);

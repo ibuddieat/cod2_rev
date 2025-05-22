@@ -113,7 +113,7 @@ GetObjectType
 unsigned int GetObjectType( unsigned int id )
 {
 	assert((scrVarGlob.variableList[id].w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
-	return scrVarGlob.variableList[id].w.status & VAR_MASK;
+	return scrVarGlob.variableList[id].w.type & VAR_MASK;
 }
 
 /*
@@ -369,10 +369,10 @@ VariableValue Scr_GetArrayIndexValue( unsigned int name )
 GetInternalVariableIndex
 ==============
 */
-unsigned int GetInternalVariableIndex( unsigned int unsignedValue )
+unsigned int GetInternalVariableIndex( unsigned int index )
 {
-	assert(IsValidArrayIndex( unsignedValue ));
-	return ( unsignedValue + MAX_ARRAYINDEX ) & VAR_NAME_LOW_MASK;
+	assert(IsValidArrayIndex( index ));
+	return ( index + MAX_ARRAYINDEX ) & VAR_NAME_LOW_MASK;
 }
 
 /*
@@ -380,9 +380,9 @@ unsigned int GetInternalVariableIndex( unsigned int unsignedValue )
 IsValidArrayIndex
 ==============
 */
-bool IsValidArrayIndex( unsigned int unsignedValue )
+bool IsValidArrayIndex( unsigned int index )
 {
-	return unsignedValue < MAX_ARRAYINDEX;
+	return index < MAX_ARRAYINDEX;
 }
 
 /*
@@ -718,7 +718,7 @@ Var_Init
 */
 void Var_Init()
 {
-	Var_ResetAll();
+	InitVariables();
 	Var_InitClassMap();
 }
 
@@ -737,9 +737,9 @@ unsigned int FindObjectVariable( unsigned int parentId, unsigned int id )
 FindVariable
 ==============
 */
-unsigned int FindVariable( unsigned int parentId, unsigned int unsignedValue )
+unsigned int FindVariable( unsigned int parentId, unsigned int index )
 {
-	return scrVarGlob.variableList[FindVariableIndexInternal(parentId, unsignedValue)].hash.id;
+	return scrVarGlob.variableList[FindVariableIndexInternal(parentId, index)].hash.id;
 }
 
 /*
@@ -1779,7 +1779,7 @@ void ClearVariableValue( unsigned int id )
 	assert(!IsObject( entryValue ));
 	assert((entryValue->w.type & VAR_MASK) != VAR_STACK);
 
-	RemoveRefToValue(entryValue->w.status & VAR_MASK, entryValue->u.u);
+	RemoveRefToValue(entryValue->w.type & VAR_MASK, entryValue->u.u);
 
 	entryValue->w.type &= ~VAR_MASK;
 	assert((entryValue->w.type & VAR_MASK) == VAR_UNDEFINED);
@@ -3409,34 +3409,363 @@ unsigned int Scr_EvalArrayRef( unsigned int parentId )
 	return varValue.u.pointerValue;
 }
 
+/*
+==============
+Scr_FindVariableField
+==============
+*/
+VariableValue Scr_FindVariableField( unsigned int parentId, unsigned int name )
+{
+	unsigned int id;
+	VariableValueInternal *entryValue;
+	VariableValue value;
 
+	assert(parentId);
+	entryValue = &scrVarGlob.variableList[parentId];
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( entryValue ));
+	assert(((entryValue->w.type & VAR_MASK) >= FIRST_OBJECT && (entryValue->w.type & VAR_MASK) < FIRST_NONFIELD_OBJECT) || ((entryValue->w.type & VAR_MASK) >= FIRST_DEAD_OBJECT));
 
+	id = FindVariable(parentId, name);
 
+	if ( id )
+	{
+		return Scr_EvalVariable(id);
+	}
 
+	if ( (scrVarGlob.variableList[parentId].w.type & VAR_MASK) == VAR_ENTITY )
+	{
+		return Scr_EvalVariableEntityField(parentId, name);
+	}
 
+	value.type = VAR_UNDEFINED;
+	return value;
+}
 
+/*
+==============
+Scr_EvalVariableField
+==============
+*/
+VariableValue Scr_EvalVariableField( unsigned int id )
+{
+	if ( id == VARIABLELIST_CHILD_SIZE )
+	{
+		return Scr_EvalVariableEntityField(scrVarPub.entId, scrVarPub.entFieldName);
+	}
 
+	return Scr_EvalVariable(id);
+}
 
+/*
+==============
+Scr_AddFields
+==============
+*/
+void Scr_AddFields( const char *path, const char *extension )
+{
+	char filename[MAX_QPATH];
+	char **files;
+	int numFiles, i;
 
+	files = FS_ListFiles(path, extension, FS_LIST_PURE_ONLY, &numFiles);
 
+	TempMemoryReset();
 
+	scrVarPub.fieldBuffer = (const char *)Hunk_AllocLowInternal(0);
+	*(char *)scrVarPub.fieldBuffer = 0;
 
+	for ( i = 0; i < numFiles; i++ )
+	{
+		sprintf(filename, "%s/%s", path, files[i]);
+		Scr_AddFieldsForFile(filename);
+	}
 
+	if ( files )
+	{
+		FS_FreeFileList(files);
+	}
 
+	*(char *)TempMalloc(1) = 0;
 
+	Hunk_ConvertTempToPermLowInternal();
+}
 
+/*
+==============
+Scr_GetEntryUsage
+==============
+*/
+float Scr_GetEntryUsage( unsigned int type, VariableUnion u )
+{
+	VariableValueInternal *parentValue;
 
+	if ( type != VAR_POINTER )
+	{
+		return 0;
+	}
 
+	parentValue = &scrVarGlob.variableList[u.pointerValue];
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject(parentValue));
 
+	if ( ( parentValue->w.type & VAR_MASK ) == VAR_ARRAY )
+	{
+		return Scr_GetObjectUsage( u.pointerValue ) / ( parentValue->u.o.refCount + 1.0 );
+	}
 
+	return 0;
+}
 
+/*
+==============
+FreeVariable
+==============
+*/
+void FreeVariable( unsigned int id )
+{
+	VariableValueInternal *entryValue, *entry, *childValue, *firstValue;
+	unsigned short index, childId;
 
+	assert(id);
 
+	firstValue = &scrVarGlob.variableList[0];
+	entryValue = &scrVarGlob.variableList[id];
+	assert(((entryValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL));
 
+	index = entryValue->v.index;
+	entry = &scrVarGlob.variableList[index];
+	//assert(entry->id == id);
+	//assert(!entry->u.prevSibling);
+	//assert(!entryValue->nextSibling);
 
+	childValue = &scrVarGlob.variableList[entryValue->nextSibling];
+	childValue->hash.u.prev = entry->hash.u.prev;
 
+	childId = scrVarGlob.variableList[childValue->hash.u.prev].hash.id;
 
+	childValue = &scrVarGlob.variableList[childId];
+	childValue->nextSibling = entryValue->nextSibling;
 
+	entryValue->w.type = VAR_UNDEFINED;
+	entryValue->u.next = firstValue->u.next;
+
+	entry->hash.u.prev = 0;
+
+	childValue = &scrVarGlob.variableList[firstValue->u.next];
+	childValue->hash.u.prev = index;
+
+	firstValue->u.next = index;
+}
+
+/*
+==============
+FindVariableIndexInternal2
+==============
+*/
+unsigned int FindVariableIndexInternal2( unsigned int name, unsigned int index )
+{
+	Variable *entry, *newEntry;
+	VariableValueInternal *list, *entryValue, *newEntryValue;
+	unsigned int newIndex;
+
+	list = scrVarGlob.variableList;
+	assert(!(name & ~VAR_NAME_LOW_MASK));
+	assert((unsigned)index < VARIABLELIST_CHILD_SIZE);
+
+	entry = &list[index].hash;
+	assert((unsigned)entry->id < VARIABLELIST_CHILD_SIZE);
+
+	entryValue = &list[entry->id];
+
+	if ( (entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_HEAD )
+	{
+		return 0;
+	}
+
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(!IsObject( entryValue ));
+
+	if ( entryValue->w.name >> VAR_NAME_BITS == name )
+	{
+		return index;
+	}
+
+	newIndex = entryValue->v.index;
+
+	for ( newEntry = &list[newIndex].hash; newEntry != entry; newEntry = &list[newIndex].hash )
+	{
+		newEntryValue = &list[newEntry->id];
+		assert((newEntryValue->w.status & VAR_STAT_MASK) == VAR_STAT_MOVABLE);
+		assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+		assert(!IsObject( newEntryValue ));
+
+		if ( newEntryValue->w.name >> VAR_NAME_BITS == name )
+		{
+			return newIndex;
+		}
+
+		newIndex = newEntryValue->v.index;
+	}
+
+	return 0;
+}
+
+/*
+==============
+InitVariables
+==============
+*/
+void InitVariables()
+{
+	unsigned short parentId;
+	VariableValueInternal *value, *firstValue;
+	unsigned int index;
+
+	for ( parentId = 0, index = 1; index < VARIABLELIST_CHILD_SIZE; index++ )
+	{
+		value = &scrVarGlob.variableList[index];
+
+		value->w.type = VAR_UNDEFINED;
+		assert(!(value->w.type & VAR_MASK));
+
+		value->hash.id = index;
+		value->v.index = index;
+
+		scrVarGlob.variableList[parentId].u.next = index;
+		value->hash.u.prev = parentId;
+
+		parentId = index;
+	}
+
+	value = &scrVarGlob.variableList[0];
+
+	value->w.type = VAR_UNDEFINED;
+	assert(!(value->w.type & VAR_MASK));
+
+	//value->w = value->w;
+
+	value->hash.id = 0;
+	value->v.index = 0;
+
+	scrVarGlob.variableList[parentId].u.next = 0;
+	value->hash.u.prev = parentId;
+}
+
+/*
+==============
+ThreadInfoCompare
+==============
+*/
+int ThreadInfoCompare( const void *info1, const void *info2 )
+{
+	const char *pos1, *pos2;
+	ThreadDebugInfo *pInfo1 = (ThreadDebugInfo *)info1, *pInfo2 = (ThreadDebugInfo *)info2;
+
+	for ( int i = 0; ; i++ )
+	{
+		if ( i >= pInfo1->posSize || i >= pInfo2->posSize )
+		{
+			return pInfo1->posSize - pInfo2->posSize;
+		}
+
+		pos1 = pInfo1->pos[i];
+		pos2 = pInfo2->pos[i];
+
+		if ( pos1 != pos2 )
+		{
+			break;
+		}
+	}
+
+	return pos1 - pos2;
+}
+
+/*
+==============
+Scr_GetEntryUsage
+==============
+*/
+float Scr_GetEntryUsage( VariableValueInternal *entryValue )
+{
+	return Scr_GetEntryUsage( entryValue->w.type & VAR_MASK, entryValue->u.u ) + 1.0;
+}
+
+/*
+==============
+FindVariableIndexInternal
+==============
+*/
+unsigned int FindVariableIndexInternal( unsigned int parentId, unsigned int name )
+{
+	VariableValueInternal *parentValue;
+
+	assert(parentId);
+	parentValue = &scrVarGlob.variableList[parentId];
+	assert((parentValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL);
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( parentValue ));
+
+	return FindVariableIndexInternal2( name, ( parentId + name ) % ( VARIABLELIST_CHILD_SIZE - 1 ) + 1 );
+}
+
+/*
+==============
+Scr_GetObjectUsage
+==============
+*/
+float Scr_GetObjectUsage( unsigned int parentId )
+{
+	VariableValueInternal *parentValue;
+	float usage = 1.0;
+	unsigned int id;
+
+	parentValue = &scrVarGlob.variableList[parentId];
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( parentValue ));
+
+	for ( id = FindNextSibling(parentId); id; id = FindNextSibling(id) )
+	{
+		usage = Scr_GetEntryUsage(&scrVarGlob.variableList[id]) + usage;
+	}
+
+	return usage;
+}
+
+/*
+==============
+FindArrayVariableIndex
+==============
+*/
+unsigned int FindArrayVariableIndex( unsigned int parentId, unsigned int index )
+{
+	assert(IsValidArrayIndex( index ));
+	return FindVariableIndexInternal( parentId, ( index + MAX_ARRAYINDEX ) & VAR_NAME_LOW_MASK );
+}
+
+/*
+==============
+Scr_GetEndonUsage
+==============
+*/
+float Scr_GetEndonUsage( unsigned int parentId )
+{
+	VariableValueInternal *parentValue;
+	unsigned int id;
+
+	parentValue = &scrVarGlob.variableList[parentId];
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( parentValue ));
+
+	id = FindObjectVariable( scrVarPub.pauseArrayId, parentId );
+
+	if ( !id )
+	{
+		return 0;
+	}
+
+	return Scr_GetObjectUsage( FindObject( id ) );
+}
 
 
 
@@ -3530,46 +3859,11 @@ unsigned int GetValueType(int varIndex)
 
 
 
-unsigned int FindVariableIndexUnknown(unsigned int name, unsigned short index)
-{
-	unsigned int newIndex;
-	VariableValueInternal *newEntry;
-	VariableValueInternal *entryValue;
-	VariableValueInternal *entry;
-
-	entry = &scrVarGlob.variableList[scrVarGlob.variableList[index].hash.id];
-
-	if ( (entry->w.name & VAR_STAT_MASK) != VAR_STAT_HEAD )
-		return 0;
-
-	if ( entry->w.name >> VAR_NAME_BITS != name )
-	{
-		newIndex = entry->v.next;
-
-		for ( entryValue = &scrVarGlob.variableList[newIndex];
-		        entryValue != &scrVarGlob.variableList[index];
-		        entryValue = &scrVarGlob.variableList[newIndex] )
-		{
-			newEntry = &scrVarGlob.variableList[entryValue->hash.id];
-
-			if ( newEntry->w.name >> VAR_NAME_BITS == name )
-				return newIndex;
-
-			newIndex = newEntry->v.next;
-		}
-
-		return 0;
-	}
-
-	return index;
-}
 
 
 
-unsigned int FindVariableIndexInternal(unsigned int parentId, unsigned int name)
-{
-	return FindVariableIndexUnknown(name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
-}
+
+
 
 
 
@@ -3826,7 +4120,7 @@ unsigned int GetVariableIndexInternal(unsigned int parentId, unsigned int name)
 {
 	unsigned int index;
 
-	index = FindVariableIndexUnknown(name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
+	index = FindVariableIndexInternal2(name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
 
 	if ( !index )
 		return GetNewVariableIndexInternal2(parentId, name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
@@ -3913,25 +4207,7 @@ union VariableValueInternal_u* GetVariableValueAddress_Bad(unsigned int id)
 
 
 
-void FreeVariable(unsigned int id)
-{
-	VariableValueInternal_v value;
-	VariableValueInternal *entryValue;
-	unsigned short next;
-	unsigned short prev;
 
-	entryValue = &scrVarGlob.variableList[id];
-	value.next = entryValue->v.next;
-	prev = scrVarGlob.variableList[value.next].hash.u.prev;
-	next = entryValue->nextSibling;
-	scrVarGlob.variableList[next].hash.u.prev = prev;
-	scrVarGlob.variableList[scrVarGlob.variableList[prev].hash.id].nextSibling = next;
-	entryValue->w.status = 0;
-	entryValue->u.next = scrVarGlob.variableList->u.next;
-	scrVarGlob.variableList[value.next].hash.u.prev = 0;
-	scrVarGlob.variableList[scrVarGlob.variableList->u.next].hash.u.prev = value.next;
-	scrVarGlob.variableList->u.next = value.next;
-}
 
 
 
@@ -3981,9 +4257,9 @@ void ClearObjectInternal(unsigned int parentId)
 
 
 
-void RemoveArrayVariable(unsigned int parentId, unsigned int unsignedValue)
+void RemoveArrayVariable(unsigned int parentId, unsigned int index)
 {
-	RemoveVariable(parentId, (unsignedValue + MAX_ARRAYINDEX) & VAR_NAME_LOW_MASK);
+	RemoveVariable(parentId, (index + MAX_ARRAYINDEX) & VAR_NAME_LOW_MASK);
 }
 
 
@@ -4147,10 +4423,7 @@ void Scr_ClearThread(unsigned int parentId)
 
 
 
-unsigned int FindArrayVariableIndex(unsigned int parentId, unsigned int index)
-{
-	return FindVariableIndexInternal(parentId, (index + MAX_ARRAYINDEX) & VAR_NAME_LOW_MASK);
-}
+
 
 
 
@@ -4241,13 +4514,14 @@ void CopyArray(unsigned int parentId, unsigned int newParentId)
 	}
 }
 
-void Scr_EvalVariableEntityField(VariableValue *pValue, unsigned int entId, unsigned int name)
+VariableValue Scr_EvalVariableEntityField(unsigned int entId, unsigned int name)
 {
 	VariableValue val;
 	unsigned int id;
 	unsigned int fieldId;
 	VariableValueInternal *entryValue;
 	VariableValueInternal *objectValue;
+	VariableValue value;
 
 	entryValue = &scrVarGlob.variableList[entId];
 	fieldId = FindArrayVariable(scrClassMap[(entryValue->w.classnum >> VAR_NAME_BITS)].id, name);
@@ -4260,88 +4534,36 @@ void Scr_EvalVariableEntityField(VariableValue *pValue, unsigned int entId, unsi
 		    entryValue->u.o.u.entnum,
 		    scrVarGlob.variableList[fieldId].u.u.entityOffset);
 
-		pValue->u = val.u;
-		pValue->type = val.type;
+		value.u = val.u;
+		value.type = val.type;
 
-		if ( pValue->type == VAR_POINTER )
+		if ( value.type == VAR_POINTER )
 		{
-			objectValue = &scrVarGlob.variableList[pValue->u.pointerValue];
+			objectValue = &scrVarGlob.variableList[value.u.pointerValue];
 
 			if ( VAR_TYPE(objectValue) == VAR_ARRAY )
 			{
 				if ( objectValue->u.o.refCount )
 				{
-					id = pValue->u.pointerValue;
+					id = value.u.pointerValue;
 					RemoveRefToObject(id);
-					pValue->u.pointerValue = Scr_AllocArray();
-					CopyArray(id, pValue->u.pointerValue);
+					value.u.pointerValue = Scr_AllocArray();
+					CopyArray(id, value.u.pointerValue);
 				}
 			}
 		}
 	}
 	else
 	{
-		pValue->u.intValue = 0;
-		pValue->type = VAR_UNDEFINED;
+		value.u.intValue = 0;
+		value.type = VAR_UNDEFINED;
 	}
-}
 
-void Scr_FindVariableFieldInternal(VariableValue *pValue, unsigned int parentId, unsigned int name)
-{
-	unsigned int index;
-
-	index = FindVariable(parentId, name);
-
-	if ( index )
-	{
-		*pValue = Scr_EvalVariable(index);
-	}
-	else if ( (scrVarGlob.variableList[parentId].w.type & VAR_MASK) == VAR_ENTITY )
-	{
-		Scr_EvalVariableEntityField(pValue, parentId, name);
-	}
-	else
-	{
-		pValue->u.intValue = 0;
-		pValue->type = VAR_UNDEFINED;
-	}
-}
-
-VariableValue Scr_FindVariableField(unsigned int parentId, unsigned int name)
-{
-	VariableValue value;
-
-	Scr_FindVariableFieldInternal(&value, parentId, name);
 	return value;
 }
 
-void Scr_EvalVariableFieldInternal(VariableValue *pValue, unsigned int id)
-{
-	VariableValue value;
-
-	if ( id == VARIABLELIST_CHILD_SIZE )
-	{
-		Scr_EvalVariableEntityField(&value, scrVarPub.entId, scrVarPub.entFieldName);
-	}
-	else
-	{
-		value = Scr_EvalVariable(id);
-	}
-
-	*pValue = value;
-}
 
 
-
-
-
-VariableValue Scr_EvalVariableField(unsigned int id)
-{
-	VariableValue value;
-
-	Scr_EvalVariableFieldInternal(&value, id);
-	return value;
-}
 
 
 
@@ -4568,49 +4790,13 @@ unsigned int FreeTempVariable()
 
 
 
-float Scr_GetObjectEntryUsage(VariableValueInternal *entryValue)
-{
-	return Scr_GetEntryUsage(VAR_TYPE(entryValue), entryValue->u.u) + 1.0;
-}
 
-float Scr_GetEntryUsage(unsigned int type, VariableUnion u)
-{
-	if ( type == VAR_POINTER && (scrVarGlob.variableList[u.intValue].w.type & VAR_MASK) == VAR_ARRAY )
-		return Scr_GetObjectUsage(u.pointerValue) / ((float)scrVarGlob.variableList[u.intValue].u.o.refCount + 1.0);
-	else
-		return 0.0;
-}
 
-float Scr_GetObjectUsage(unsigned int parentId)
-{
-	float usage;
-	unsigned int i;
 
-	usage = 1.0;
 
-	for ( i = FindNextSibling(parentId); i; i = FindNextSibling(i) )
-		usage = Scr_GetObjectEntryUsage(&scrVarGlob.variableList[i]) + usage;
 
-	return usage;
-}
 
-float Scr_GetEndonUsage(unsigned int parentId)
-{
-	unsigned int id;
-	unsigned int localId;
 
-	localId = FindObjectVariable(scrVarPub.pauseArrayId, parentId);
-
-	if ( localId )
-	{
-		id = FindObject(localId);
-		return Scr_GetObjectUsage(id);
-	}
-	else
-	{
-		return 0.0;
-	}
-}
 
 float Scr_GetThreadUsage(VariableStackBuffer *stackBuf, float *endonUsage)
 {
@@ -4649,33 +4835,7 @@ float Scr_GetThreadUsage(VariableStackBuffer *stackBuf, float *endonUsage)
 	return usage;
 }
 
-int ThreadInfoCompare(const void *ainfo1, const void *ainfo2)
-{
-	const char *pos1;
-	int i;
-	const char *pos2;
-	ThreadDebugInfo *info1, *info2;
-	info1 = (ThreadDebugInfo *)ainfo1;
-	info2 = (ThreadDebugInfo *)ainfo2;
 
-	for ( i = 0; ; ++i )
-	{
-		if ( i >= info1->posSize || i >= info2->posSize )
-		{
-			return info1->posSize - info2->posSize;
-		}
-
-		pos1 = info1->pos[i];
-		pos2 = info2->pos[i];
-
-		if ( pos1 != pos2 )
-		{
-			break;
-		}
-	}
-
-	return pos1 - pos2;
-}
 
 
 
@@ -4774,57 +4934,9 @@ void Scr_AddFieldsForFile(const char *filename)
 	Hunk_ClearTempMemoryHighInternal();
 }
 
-void Scr_AddFields(const char *path, const char *extension)
-{
-	char s[MAX_QPATH];
-	int i;
-	char **fields;
-	int numfields;
 
-	fields = FS_ListFiles(path, extension, FS_LIST_PURE_ONLY, &numfields);
-	TempMemoryReset();
-	scrVarPub.fieldBuffer = (const char *)Hunk_AllocLowInternal(0);
-	*(char *)scrVarPub.fieldBuffer = 0;
 
-	for ( i = 0; i < numfields; ++i )
-	{
-		snprintf(s, sizeof(s), "%s/%s", path, fields[i]);
-		Scr_AddFieldsForFile(s);
-	}
 
-	if ( fields )
-		FS_FreeFileList(fields);
-
-	*(char *)TempMalloc(1) = 0;
-	Hunk_ConvertTempToPermLowInternal();
-}
-
-void Var_ResetAll()
-{
-	union Variable_u hash;
-	VariableValueInternal *entryValue;
-	unsigned int i;
-
-	hash.prev = 0;
-
-	for ( i = 1; i < VARIABLELIST_CHILD_SIZE; ++i )
-	{
-		entryValue = &scrVarGlob.variableList[i];
-		entryValue->w.status = 0;
-		entryValue->v.next = i;
-		entryValue->hash.id = i;
-		entryValue->hash.u = hash;
-		scrVarGlob.variableList[hash.prev].u.next = i;
-		hash.prev = i;
-	}
-
-	scrVarGlob.variableList->w.status = 0;
-	scrVarGlob.variableList->w.type = 0;
-	scrVarGlob.variableList->v.next = 0;
-	scrVarGlob.variableList->hash.id = 0;
-	scrVarGlob.variableList->hash.u = hash;
-	scrVarGlob.variableList[hash.prev].u.next = 0;
-}
 
 void Var_FreeTempVariables()
 {
