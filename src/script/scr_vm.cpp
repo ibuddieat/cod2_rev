@@ -3759,7 +3759,7 @@ void Scr_Shutdown()
 	if ( scrVarPub.bInited )
 	{
 		scrVarPub.bInited = 0;
-		Var_FreeTempVariables();
+		Scr_ShutdownVariables();
 		Var_Shutdown();
 		SL_Shutdown();
 	}
@@ -3844,4 +3844,16 @@ void Scr_AddExecEntThreadNum(int entnum, unsigned int classnum, int handle, int 
 	RemoveRefToObject(id);
 	++scrVmPub.outparamcount;
 	--scrVmPub.inparamcount;
+}
+
+unsigned int FreeTempVariableObject()
+{
+	ClearVariableValue(scrVarPub.tempVariable);
+	return GetObjectA(scrVarPub.tempVariable);
+}
+
+unsigned int FreeTempVariable()
+{
+	ClearVariableValue(scrVarPub.tempVariable);
+	return scrVarPub.tempVariable;
 }

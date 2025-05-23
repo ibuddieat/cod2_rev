@@ -1162,7 +1162,7 @@ unsigned int FindArrayVariable(unsigned int parentId, unsigned int index);
 unsigned int GetParentLocalId(unsigned int threadId);
 unsigned int GetSafeParentLocalId(unsigned int threadId);
 unsigned int GetStartLocalId(unsigned int threadId);
-unsigned int GetValueType(int varIndex);
+unsigned int GetValueType(unsigned int varIndex);
 unsigned short AllocVariable();
 unsigned int AllocValue();
 unsigned int AllocEntity(int classnum, unsigned short entnum);
@@ -1253,7 +1253,7 @@ void Scr_AllocGameVariable();
 void Scr_DumpScriptThreads();
 void Scr_DumpScriptVariablesDefault();
 void Var_Shutdown();
-void Var_FreeTempVariables();
+void Scr_ShutdownVariables();
 void Var_Init();
 
 void SetAnimCheck(int bAnimCheck);
@@ -1377,7 +1377,7 @@ void CreateCanonicalFilename(char *newFilename, const char *filename, int count)
 void SL_RemoveAllRefToString(unsigned int stringValue);
 
 void InitVariables();
-void Var_InitClassMap();
+void Scr_InitClassMap();
 
 unsigned int FindArrayVariableIndex(unsigned int parentId, unsigned int index);
 float Scr_GetThreadUsage(VariableStackBuffer *stackBuf, float *endonUsage);
