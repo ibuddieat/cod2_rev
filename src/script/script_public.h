@@ -249,6 +249,9 @@ enum var_type_t
 #define IsObject(var) ((var->w.type & VAR_MASK) >= VAR_THREAD)
 #define IsObjectVal(var) ((var->type & VAR_MASK) >= VAR_THREAD)
 
+#define OBJECT_STACK 0x1FFFF
+#define OBJECT_NOTIFY_LIST 0x1FFFE
+
 enum var_bits_t
 {
 	VAR_NAME_BITS = 0x8,
@@ -1160,9 +1163,9 @@ unsigned int GetParentLocalId(unsigned int threadId);
 unsigned int GetSafeParentLocalId(unsigned int threadId);
 unsigned int GetStartLocalId(unsigned int threadId);
 unsigned int GetValueType(int varIndex);
-unsigned int AllocVariable();
+unsigned short AllocVariable();
 unsigned int AllocValue();
-unsigned int AllocEntity(unsigned int classnum, unsigned short entnum);
+unsigned int AllocEntity(int classnum, unsigned short entnum);
 float* Scr_AllocVector(const float* vec);
 unsigned int Scr_GetEntityId(int entnum, int classnum);
 unsigned short Scr_GetThreadNotifyName(unsigned int startLocalId);

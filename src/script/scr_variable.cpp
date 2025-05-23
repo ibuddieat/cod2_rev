@@ -350,7 +350,7 @@ VariableValue Scr_GetArrayIndexValue( unsigned int name )
 		value.type = VAR_STRING;
 		value.u.stringValue = (unsigned short)name;
 	}
-	else if ( name < 0x1FFFE )
+	else if ( name < OBJECT_NOTIFY_LIST )
 	{
 		value.type = VAR_POINTER;
 		value.u.pointerValue = name - SL_MAX_STRING_INDEX;
@@ -835,7 +835,7 @@ unsigned int Scr_FindAllVariableField( unsigned int parentId, unsigned int *name
 			name = scrVarGlob.variableList[id].w.name >> VAR_NAME_BITS;
 			assert(name);
 
-			if ( name == 0x1FFFE || name == 0x1FFFF )
+			if ( name == OBJECT_NOTIFY_LIST || name == OBJECT_STACK )
 			{
 				continue;
 			}
@@ -880,7 +880,7 @@ unsigned int Scr_FindAllVariableField( unsigned int parentId, unsigned int *name
 			name = scrVarGlob.variableList[id].w.name >> VAR_NAME_BITS;
 			assert(name);
 
-			if ( name == 0x1FFFE || name == 0x1FFFF )
+			if ( name == OBJECT_NOTIFY_LIST || name == OBJECT_STACK )
 			{
 				continue;
 			}
@@ -1108,6 +1108,7 @@ unsigned int AllocChildThread( unsigned int self, unsigned int parentLocalId )
 	VariableValueInternal *entryValue;
 
 	id = AllocVariable();
+
 	entryValue = &scrVarGlob.variableList[id];
 	entryValue->w.status = VAR_STAT_EXTERNAL;
 
@@ -1134,6 +1135,7 @@ unsigned int AllocThread( unsigned int self )
 	VariableValueInternal *entryValue;
 
 	id = AllocVariable();
+
 	entryValue = &scrVarGlob.variableList[id];
 	entryValue->w.status = VAR_STAT_EXTERNAL;
 
@@ -1157,6 +1159,7 @@ unsigned int Scr_AllocArray()
 	VariableValueInternal *entryValue;
 
 	id = AllocVariable();
+
 	entryValue = &scrVarGlob.variableList[id];
 	entryValue->w.status = VAR_STAT_EXTERNAL;
 
@@ -1180,6 +1183,7 @@ unsigned int AllocObject()
 	VariableValueInternal *entryValue;
 
 	id = AllocVariable();
+
 	entryValue = &scrVarGlob.variableList[id];
 	entryValue->w.status = VAR_STAT_EXTERNAL;
 
@@ -1202,6 +1206,7 @@ unsigned int AllocValue()
 	VariableValueInternal *entryValue;
 
 	id = AllocVariable();
+
 	entryValue = &scrVarGlob.variableList[id];
 	entryValue->w.status = VAR_STAT_EXTERNAL;
 
@@ -1469,7 +1474,7 @@ unsigned int Scr_GetEntityId( int entnum, int classnum )
 	entryValue = &scrVarGlob.variableList[id];
 	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 
-	if ( (entryValue->w.status & VAR_MASK) )
+	if ( ( entryValue->w.type & VAR_MASK ) != VAR_UNDEFINED )
 	{
 		assert((entryValue->w.type & VAR_MASK) == VAR_POINTER);
 		return entryValue->u.u.pointerValue;
@@ -3726,7 +3731,7 @@ float Scr_GetObjectUsage( unsigned int parentId )
 
 	for ( id = FindNextSibling(parentId); id; id = FindNextSibling(id) )
 	{
-		usage = Scr_GetEntryUsage(&scrVarGlob.variableList[id]) + usage;
+		usage += Scr_GetEntryUsage(&scrVarGlob.variableList[id]);
 	}
 
 	return usage;
@@ -3767,24 +3772,717 @@ float Scr_GetEndonUsage( unsigned int parentId )
 	return Scr_GetObjectUsage( FindObject( id ) );
 }
 
+/*
+==============
+Scr_GetThreadUsage
+==============
+*/
+float Scr_GetThreadUsage( VariableStackBuffer *stackBuf, float *endonUsage )
+{
+	unsigned int localId;
+	float usage;
+	int size;
+	char *buf;
+	VariableUnion u;
 
+	size = stackBuf->size;
+	buf = &stackBuf->buf[5 * size]; // FIXME: { size = const char *codePosValue 4 byte, unsigned char type 1 byte }
 
+	usage = Scr_GetObjectUsage(stackBuf->localId);
+	*endonUsage = Scr_GetEndonUsage(stackBuf->localId);
 
+	localId = stackBuf->localId;
 
+	while ( size )
+	{
+		buf -= 4;
+		u.codePosValue = *(const char **)buf;
 
+		buf -= 1;
+		size--;
 
+		if ( *buf != VAR_CODEPOS )
+		{
+			usage += Scr_GetEntryUsage( (unsigned char)*buf, u );
+			continue;
+		}
 
+		localId = GetParentLocalId(localId);
 
+		usage += Scr_GetObjectUsage(localId);
+		*endonUsage += Scr_GetEndonUsage(localId);
+	}
 
+	return usage;
+}
 
+/*
+==============
+AllocVariable
+==============
+*/
+unsigned short AllocVariable()
+{
+	VariableValueInternal *entryValue, *entry, *firstValue;
+	unsigned short index, next, newIndex;
 
+	firstValue = &scrVarGlob.variableList[0];
+	index = firstValue->u.next;
 
+	if ( !index )
+	{
+		Scr_TerminalError("exceeded maximum number of script variables");
+	}
 
+	entry = &scrVarGlob.variableList[index];
+	entryValue = &scrVarGlob.variableList[entry->hash.id];
+	assert((entryValue->w.status & VAR_STAT_MASK) == VAR_STAT_FREE);
 
+	next = entryValue->u.next;
 
+	if ( entry != entryValue && !(entry->w.status & VAR_STAT_MASK) )
+	{
+		newIndex = entry->v.next;
+		assert(newIndex != index);
 
+		scrVarGlob.variableList[newIndex].hash.id = entry->hash.id;
+		entry->hash.id = index;
 
+		entryValue->v.index = newIndex;
+		entryValue->u.next = entry->u.next;
 
+		entryValue = &scrVarGlob.variableList[index];
+	}
+
+	firstValue->u.next = next;
+	scrVarGlob.variableList[next].hash.u.prev = 0;
+
+	entryValue->v.index = index;
+
+	entryValue->nextSibling = index;
+	entry->hash.u.prevSibling = index;
+
+	assert(entry->hash.id);
+	return entry->hash.id;
+}
+
+/*
+==============
+GetNewVariableIndexInternal3
+==============
+*/
+unsigned int GetNewVariableIndexInternal3( unsigned int parentId, unsigned int name, unsigned int index )
+{
+	VariableValueInternal *entry, *entryValue, *newEntry, *newEntryValue, *parentValue;
+	unsigned short newIndex, next, prev, nextSiblingIndex, prevId, id;
+	VariableValue value;
+	int type;
+
+	assert(!(name & ~VAR_NAME_LOW_MASK));
+
+	entry = &scrVarGlob.variableList[index];
+	entryValue = &scrVarGlob.variableList[entry->hash.id];
+	type = entryValue->w.status & VAR_STAT_MASK;
+
+	switch ( type )
+	{
+	case VAR_STAT_FREE:
+		newIndex = entry->v.index;
+		next = entryValue->u.next;
+
+		if ( newIndex == entry->hash.id || entry->w.status & VAR_STAT_MASK )
+		{
+			newEntryValue = entryValue;
+		}
+		else
+		{
+			scrVarGlob.variableList[newIndex].hash.id = entry->hash.id;
+			entry->hash.id = index;
+
+			entryValue->v.index = newIndex;
+			entryValue->u.next = entry->u.next;
+
+			newEntryValue = entry;
+		}
+
+		prev = entry->hash.u.prev;
+
+		assert(!scrVarGlob.variableList[prev].hash.id || (scrVarGlob.variableList[scrVarGlob.variableList[prev].hash.id].w.status & VAR_STAT_MASK) == VAR_STAT_FREE);
+		assert(!scrVarGlob.variableList[next].hash.id || (scrVarGlob.variableList[scrVarGlob.variableList[next].hash.id].w.status & VAR_STAT_MASK) == VAR_STAT_FREE);
+
+		scrVarGlob.variableList[scrVarGlob.variableList[prev].hash.id].u.next = next;
+		scrVarGlob.variableList[next].hash.u.prev = prev;
+
+		newEntryValue->w.status = VAR_STAT_HEAD;
+		newEntryValue->v.index = index;
+		break;
+
+	case VAR_STAT_HEAD:
+		if ( entry->w.status & VAR_STAT_MASK )
+		{
+			index = scrVarGlob.variableList[0].u.next;
+
+			if ( !index )
+			{
+				Scr_TerminalError("exceeded maximum number of script variables");
+			}
+
+			entry = &scrVarGlob.variableList[index];
+			newEntryValue = &scrVarGlob.variableList[entry->hash.id];
+			assert((newEntryValue->w.status & VAR_STAT_MASK) == VAR_STAT_FREE);
+			next = newEntryValue->u.next;
+
+			scrVarGlob.variableList[0].u.next = next;
+			scrVarGlob.variableList[next].hash.u.prev = 0;
+
+			newEntryValue->w.status = VAR_STAT_MOVABLE;
+			newEntryValue->v.next = entryValue->v.next;
+
+			entryValue->v.index = index;
+		}
+		else
+		{
+			newIndex = entry->v.index;
+			newEntry = &scrVarGlob.variableList[newIndex];
+			newEntryValue = entry;
+
+			prev = newEntry->hash.u.prev;
+			next = entry->u.next;
+
+			scrVarGlob.variableList[scrVarGlob.variableList[prev].hash.id].u.next = next;
+			scrVarGlob.variableList[next].hash.u.prevSibling = prev;
+
+			newEntry->hash.id = entry->hash.id;
+			entry->hash.id = index;
+			newEntry->hash.u.prev = entry->hash.u.prev;
+
+			scrVarGlob.variableList[scrVarGlob.variableList[newEntry->hash.u.prev].hash.id].nextSibling = newIndex;
+			scrVarGlob.variableList[entryValue->nextSibling].hash.u.prevSibling = newIndex;
+
+			entryValue->w.type &= ~VAR_STAT_MASK;
+			entryValue->w.type |= VAR_STAT_MOVABLE;
+
+			newEntryValue->w.status = VAR_STAT_HEAD;
+		}
+		break;
+
+	default:
+		assert(type == VAR_STAT_MOVABLE || type == VAR_STAT_EXTERNAL);
+		if ( entry->w.status & VAR_STAT_MASK )
+		{
+			newIndex = scrVarGlob.variableList[0].u.next;
+
+			if ( !newIndex )
+			{
+				Scr_TerminalError("exceeded maximum number of script variables");
+			}
+
+			newEntry = &scrVarGlob.variableList[newIndex];
+			newEntryValue = &scrVarGlob.variableList[newEntry->hash.id];
+			assert((newEntryValue->w.status & VAR_STAT_MASK) == VAR_STAT_FREE);
+
+			next = newEntryValue->u.next;
+
+			scrVarGlob.variableList[0].u.next = next;
+			scrVarGlob.variableList[next].hash.u.prev = 0;
+		}
+		else
+		{
+			assert(entry != entryValue);
+			newIndex = entry->v.index;
+			newEntry = &scrVarGlob.variableList[newIndex];
+			newEntryValue = entry;
+
+			prev = newEntry->hash.u.prev;
+			next = entry->u.next;
+
+			scrVarGlob.variableList[scrVarGlob.variableList[prev].hash.id].u.next = next;
+			scrVarGlob.variableList[next].hash.u.prev = prev;
+		}
+
+		nextSiblingIndex = entryValue->nextSibling;
+
+		scrVarGlob.variableList[scrVarGlob.variableList[entry->hash.u.prev].hash.id].nextSibling = newIndex;
+		scrVarGlob.variableList[nextSiblingIndex].hash.u.prev = newIndex;
+
+		if ( type == VAR_STAT_MOVABLE )
+		{
+			nextSiblingIndex = entryValue->v.index;
+			prevId = scrVarGlob.variableList[nextSiblingIndex].hash.id;
+			assert((scrVarGlob.variableList[prevId].w.status & VAR_STAT_MASK) == VAR_STAT_MOVABLE || (scrVarGlob.variableList[prevId].w.status & VAR_STAT_MASK) == VAR_STAT_HEAD);
+
+			while ( 1 )
+			{
+				if ( scrVarGlob.variableList[prevId].v.index == index )
+				{
+					break;
+				}
+
+				prevId = scrVarGlob.variableList[scrVarGlob.variableList[prevId].v.next].hash.id;
+				assert((scrVarGlob.variableList[prevId].w.status & VAR_STAT_MASK) == VAR_STAT_MOVABLE || (scrVarGlob.variableList[prevId].w.status & VAR_STAT_MASK) == VAR_STAT_HEAD);
+			}
+
+			scrVarGlob.variableList[prevId].v.index = newIndex;
+		}
+		else
+		{
+			assert(type == VAR_STAT_EXTERNAL);
+			entryValue->v.index = newIndex;
+		}
+
+		newEntry->hash.u.prev = entry->hash.u.prev;
+		id = newEntry->hash.id;
+		newEntry->hash.id = entry->hash.id;
+		entry->hash.id = id;
+		newEntryValue->w.status = VAR_STAT_HEAD;
+		newEntryValue->v.index = index;
+		break;
+	}
+
+	assert(entry == &scrVarGlob.variableList[index]);
+	assert(newEntryValue == &scrVarGlob.variableList[entry->hash.id]);
+	assert((newEntryValue->w.type & VAR_MASK) == VAR_UNDEFINED);
+
+	newEntryValue->w.type = (unsigned char)newEntryValue->w.type;
+	newEntryValue->w.name |= name << VAR_NAME_BITS;
+
+	parentValue = &scrVarGlob.variableList[parentId];
+
+	assert((parentValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL);
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( parentValue ));
+
+	if ( ( parentValue->w.type & VAR_MASK ) == VAR_ARRAY )
+	{
+		parentValue->u.o.u.size++;
+		value = Scr_GetArrayIndexValue( name );
+		AddRefToValue( &value );
+	}
+
+	return index;
+}
+
+/*
+==============
+AllocEntity
+==============
+*/
+unsigned int AllocEntity( int classnum, unsigned short entnum )
+{
+	unsigned short id;
+	VariableValueInternal *entryValue;
+
+	id = AllocVariable();
+
+	entryValue = &scrVarGlob.variableList[id];
+	entryValue->w.status = VAR_STAT_EXTERNAL;
+
+	assert(!(entryValue->w.type & VAR_MASK));
+	entryValue->w.type |= VAR_ENTITY;
+
+	assert(!(entryValue->w.classnum & VAR_NAME_HIGH_MASK));
+	entryValue->w.classnum |= classnum << VAR_NAME_BITS;
+
+	entryValue->u.o.refCount = 0;
+	entryValue->u.o.u.entnum = entnum;
+
+	return id;
+}
+
+/*
+==============
+GetNewVariableIndexReverseInternal2
+==============
+*/
+unsigned int GetNewVariableIndexReverseInternal2( unsigned int parentId, unsigned int name, unsigned int index )
+{
+	VariableValueInternal *parentValue, *siblingValue, *parent, *entry;
+	unsigned short siblingId;
+
+	index = GetNewVariableIndexInternal3(parentId, name, index);
+
+	parentValue = &scrVarGlob.variableList[parentId];
+	assert(((parentValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL));
+
+	parent = &scrVarGlob.variableList[scrVarGlob.variableList[parentValue->nextSibling].hash.u.prev];
+	entry = &scrVarGlob.variableList[index];
+
+	siblingId = parent->hash.u.prevSibling;
+	siblingValue = &scrVarGlob.variableList[scrVarGlob.variableList[siblingId].hash.id];
+
+	//assert((siblingValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	//assert(!IsObject( siblingValue ));
+
+	scrVarGlob.variableList[entry->hash.id].nextSibling = parentValue->v.next;
+	parent->hash.u.prev = index;
+
+	entry->hash.u.prevSibling = siblingId;
+	siblingValue->nextSibling = index;
+
+	return index;
+}
+
+/*
+==============
+GetNewVariableIndexInternal2
+==============
+*/
+unsigned int GetNewVariableIndexInternal2( unsigned int parentId, unsigned int name, unsigned int index )
+{
+	VariableValueInternal *parentValue, *siblingValue, *entry;
+	unsigned short siblingId;
+
+	index = GetNewVariableIndexInternal3(parentId, name, index);
+
+	parentValue = &scrVarGlob.variableList[parentId];
+	assert(((parentValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL));
+
+	entry = &scrVarGlob.variableList[index];
+
+	siblingId = parentValue->nextSibling;
+	siblingValue = &scrVarGlob.variableList[siblingId];
+
+	//assert((siblingValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	//assert(!IsObject( siblingValue ));
+
+	scrVarGlob.variableList[entry->hash.id].nextSibling = siblingId;
+	siblingValue->hash.u.prevSibling = index;
+
+	entry->hash.u.prev = parentValue->v.next;
+	parentValue->nextSibling = index;
+
+	return index;
+}
+
+/*
+==============
+GetVariableIndexInternal
+==============
+*/
+unsigned int GetVariableIndexInternal( unsigned int parentId, unsigned int name )
+{
+	VariableValueInternal *parentValue;
+	unsigned int newIndex;
+
+	assert(parentId);
+	parentValue = &scrVarGlob.variableList[parentId];
+	assert((parentValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL);
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( parentValue ));
+
+	newIndex = FindVariableIndexInternal2( name, ( parentId + name ) % ( VARIABLELIST_CHILD_SIZE - 1 ) + 1 );
+
+	if ( !newIndex )
+	{
+		newIndex = GetNewVariableIndexInternal2( parentId, name, ( parentId + name ) % ( VARIABLELIST_CHILD_SIZE - 1 ) + 1 );
+	}
+
+	return newIndex;
+}
+
+/*
+==============
+GetNewVariableIndexReverseInternal
+==============
+*/
+unsigned int GetNewVariableIndexReverseInternal( unsigned int parentId, unsigned int name )
+{
+	assert(!FindVariableIndexInternal( parentId, name ));
+	return GetNewVariableIndexReverseInternal2( parentId, name, ( parentId + name ) % ( VARIABLELIST_CHILD_SIZE - 1 ) + 1 );
+}
+
+/*
+==============
+GetNewVariableIndexInternal
+==============
+*/
+unsigned int GetNewVariableIndexInternal( unsigned int parentId, unsigned int name )
+{
+	assert(!FindVariableIndexInternal( parentId, name ));
+	return GetNewVariableIndexInternal2( parentId, name, ( parentId + name ) % ( VARIABLELIST_CHILD_SIZE - 1 ) + 1 );
+}
+
+/*
+==============
+CopyArray
+==============
+*/
+void CopyArray( unsigned int parentId, unsigned int newParentId )
+{
+	unsigned int id;
+	VariableValueInternal *parentValue, *entryValue, *newEntryValue;
+	int type;
+
+	parentValue = &scrVarGlob.variableList[parentId];
+
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( parentValue ));
+	assert((parentValue->w.type & VAR_MASK) == VAR_ARRAY);
+
+	id = scrVarGlob.variableList[parentValue->nextSibling].hash.id;
+	assert(id);
+
+	while ( 1 )
+	{
+		if ( id == parentId )
+		{
+			break;
+		}
+
+		entryValue = &scrVarGlob.variableList[id];
+		type = entryValue->w.type & VAR_MASK;
+
+		assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+		assert(!IsObject( entryValue ));
+
+		newEntryValue = &scrVarGlob.variableList[scrVarGlob.variableList[ GetVariableIndexInternal( newParentId, entryValue->w.name >> VAR_NAME_BITS ) ].hash.id ];
+
+		assert((newEntryValue->w.type & VAR_MASK) == VAR_UNDEFINED);
+		assert(!(newEntryValue->w.type & VAR_MASK));
+
+		newEntryValue->w.type |= type;
+
+		if ( type == VAR_POINTER )
+		{
+			if ( ( scrVarGlob.variableList[entryValue->u.u.pointerValue].w.type & VAR_MASK ) == VAR_ARRAY )
+			{
+				newEntryValue->u.u.pointerValue = Scr_AllocArray();
+				CopyArray(entryValue->u.u.pointerValue, newEntryValue->u.u.pointerValue);
+			}
+			else
+			{
+				newEntryValue->u.u.pointerValue = entryValue->u.u.pointerValue;
+				AddRefToObject(entryValue->u.u.pointerValue);
+			}
+		}
+		else
+		{
+			assert(type != VAR_STACK);
+			newEntryValue->u.u.pointerValue = entryValue->u.u.pointerValue;
+			AddRefToValue(type, entryValue->u.u);
+		}
+
+		id = scrVarGlob.variableList[entryValue->nextSibling].hash.id;
+		assert(id);
+	}
+}
+
+/*
+==============
+GetNewArrayVariableIndex
+==============
+*/
+unsigned int GetNewArrayVariableIndex( unsigned int parentId, unsigned int index )
+{
+	assert(IsValidArrayIndex( index ));
+	return GetNewVariableIndexInternal( parentId, ( index + MAX_ARRAYINDEX ) & VAR_NAME_LOW_MASK );
+}
+
+/*
+==============
+GetArrayVariableIndex
+==============
+*/
+unsigned int GetArrayVariableIndex( unsigned int parentId, unsigned int index )
+{
+	assert(IsValidArrayIndex( index ));
+	return GetVariableIndexInternal( parentId, ( index + MAX_ARRAYINDEX ) & VAR_NAME_LOW_MASK );
+}
+
+/*
+==============
+CopyEntity
+==============
+*/
+void CopyEntity( unsigned int parentId, unsigned int newParentId )
+{
+	VariableValueInternal *entryValue, *newEntryValue, *parentValue, *newParentValue;
+	unsigned int name, id;
+	int type;
+
+	assert(parentId);
+	assert(newParentId);
+
+	parentValue = &scrVarGlob.variableList[parentId];
+
+	assert((parentValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL);
+	assert((parentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( parentValue ));
+	assert((parentValue->w.type & VAR_MASK) == VAR_ENTITY);
+
+	newParentValue = &scrVarGlob.variableList[newParentId];
+
+	assert((newParentValue->w.status & VAR_STAT_MASK) == VAR_STAT_EXTERNAL);
+	assert((newParentValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(IsObject( newParentValue ));
+	assert((newParentValue->w.type & VAR_MASK) == VAR_ENTITY);
+
+	for ( id = FindNextSibling(parentId); id; id = FindNextSibling(id) )
+	{
+		entryValue = &scrVarGlob.variableList[id];
+
+		assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE && (entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_EXTERNAL);
+		assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+		assert(!IsObject( entryValue ));
+
+		name = entryValue->w.name >> VAR_NAME_BITS;
+		assert(name != OBJECT_STACK);
+
+		if ( name == OBJECT_NOTIFY_LIST )
+		{
+			continue;
+		}
+
+		assert(!FindVariableIndexInternal( newParentId, name ));
+		newEntryValue = &scrVarGlob.variableList[GetVariable(newParentId, name)];
+
+		assert((newEntryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE && (newEntryValue->w.status & VAR_STAT_MASK) != VAR_STAT_EXTERNAL);
+		assert((newEntryValue->w.type & VAR_MASK) == VAR_UNDEFINED);
+
+		type = entryValue->w.type & VAR_MASK;
+		assert(!(newEntryValue->w.type & VAR_MASK));
+
+		newEntryValue->w.type |= type;
+		assert((newEntryValue->w.name >> VAR_NAME_BITS) == name);
+		newEntryValue->u.u = entryValue->u.u;
+
+		AddRefToValue(type, newEntryValue->u.u);
+	}
+}
+
+/*
+==============
+Scr_AllocVectorInternal
+==============
+*/
+float* Scr_AllocVectorInternal()
+{
+	RefVector *refVec = (RefVector *)MT_Alloc( sizeof( *refVec ) );
+	refVec->head = 0;
+
+	return refVec->vec;
+}
+
+/*
+==============
+Scr_FindArrayIndex
+==============
+*/
+unsigned int Scr_FindArrayIndex( unsigned int parentId, VariableValue *index )
+{
+	unsigned int id;
+
+	switch ( index->type )
+	{
+	case VAR_INTEGER:
+		if ( IsValidArrayIndex(index->u.intValue) )
+			return FindArrayVariable(parentId, index->u.intValue);
+		Scr_Error(va("array index %d out of range", index->u.intValue));
+		AddRefToObject(parentId);
+		return 0;
+
+	case VAR_STRING:
+		id = FindVariable(parentId, index->u.stringValue);
+		SL_RemoveRefToString(index->u.stringValue);
+		return id;
+
+	default:
+		Scr_Error(va("%s is not an array index", var_typename[index->type]));
+		AddRefToObject(parentId);
+		return 0;
+	}
+}
+
+/*
+==============
+MakeVariableExternal
+==============
+*/
+void MakeVariableExternal( VariableValueInternal *entry, VariableValueInternal *parentValue )
+{
+	unsigned int oldNextSiblingIndex, oldPrevSiblingIndex, nextSiblingIndex, prevSiblingIndex, index, oldIndex;
+	VariableValueInternal *entryValue, *oldEntryValue, *oldEntry, *prev;
+	VariableValue value;
+	Variable tempEntry;
+
+	index = entry - scrVarGlob.variableList;
+	entryValue = &scrVarGlob.variableList[entry->hash.id];
+
+	assert((entryValue->w.status & VAR_STAT_MASK) == VAR_STAT_MOVABLE || (entryValue->w.status & VAR_STAT_MASK) == VAR_STAT_HEAD);
+	assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+	assert(!IsObject( entryValue ));
+
+	if ( (parentValue->w.type & VAR_MASK) == VAR_ARRAY )
+	{
+		parentValue->u.o.u.size--;
+
+		assert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
+		assert(!IsObject( entryValue ));
+
+		value = Scr_GetArrayIndexValue(entryValue->w.name >> VAR_NAME_BITS);
+		RemoveRefToValue(&value);
+	}
+
+	if ( (entryValue->w.status & VAR_STAT_MASK) == VAR_STAT_HEAD )
+	{
+		oldIndex = entryValue->v.index;
+		oldEntry = &scrVarGlob.variableList[oldIndex];
+
+		oldEntryValue = &scrVarGlob.variableList[oldEntry->hash.id];
+
+		if ( oldEntry != entry )
+		{
+			assert((oldEntryValue->w.status & VAR_STAT_MASK) == VAR_STAT_MOVABLE);
+
+			oldEntryValue->w.type &= ~VAR_STAT_MASK;
+			oldEntryValue->w.type |= VAR_STAT_HEAD;
+
+			prevSiblingIndex = entry->hash.u.prevSibling;
+			nextSiblingIndex = entryValue->nextSibling;
+
+			oldPrevSiblingIndex = oldEntry->hash.u.prevSibling;
+			oldNextSiblingIndex = oldEntryValue->nextSibling;
+
+			scrVarGlob.variableList[oldNextSiblingIndex].hash.u.prev = index;
+			scrVarGlob.variableList[scrVarGlob.variableList[oldPrevSiblingIndex].hash.id].nextSibling = index;
+
+			scrVarGlob.variableList[nextSiblingIndex].hash.u.prev = oldIndex;
+			scrVarGlob.variableList[scrVarGlob.variableList[prevSiblingIndex].hash.id].nextSibling = oldIndex;
+
+			tempEntry = entry->hash;
+			entry->hash = oldEntry->hash;
+
+			oldEntry->hash = tempEntry;
+			index = oldIndex;
+		}
+	}
+	else
+	{
+		oldEntry = entry;
+		oldEntryValue = entryValue;
+
+		do
+		{
+			assert((oldEntryValue->w.status & VAR_STAT_MASK) == VAR_STAT_MOVABLE || (oldEntryValue->w.status & VAR_STAT_MASK) == VAR_STAT_HEAD);
+			prev = oldEntry;
+
+			oldIndex = oldEntryValue->v.index;
+			oldEntry = &scrVarGlob.variableList[oldIndex];
+
+			oldEntryValue = &scrVarGlob.variableList[oldEntry->hash.id];
+		}
+		while ( oldEntry != entry );
+
+		scrVarGlob.variableList[prev->hash.id].v.index = entryValue->v.index;
+	}
+
+	assert(entryValue == &scrVarGlob.variableList[oldEntry->hash.id]);
+
+	entryValue->w.type &= ~VAR_STAT_MASK;
+	entryValue->w.type |= VAR_STAT_EXTERNAL;
+
+	entryValue->v.index = index;
+}
 
 
 
@@ -3873,7 +4571,7 @@ unsigned int GetValueType(int varIndex)
 
 
 
-
+/*
 void MakeVariableExternal(VariableValueInternal *value, VariableValueInternal *parentValue)
 {
 	VariableValue indexValue;
@@ -3943,226 +4641,7 @@ void MakeVariableExternal(VariableValueInternal *value, VariableValueInternal *p
 	entryValue->w.status |= VAR_STAT_EXTERNAL;
 	entryValue->v.next = index;
 }
-
-unsigned int GetNewVariableIndexInternal3(unsigned int parentId, unsigned int name, unsigned int index)
-{
-	VariableValue value;
-	unsigned int type;
-	VariableValueInternal *parentValue;
-	VariableValueInternal *newEntry;
-	uint16_t next;
-	uint16_t id;
-	VariableValueInternal *newEntryValue;
-	uint16_t i;
-	uint16_t nextId;
-	VariableValueInternal_u siblingValue;
-	VariableValueInternal *entry;
-	VariableValueInternal *entryValue;
-
-	entry = &scrVarGlob.variableList[index];
-	entryValue = &scrVarGlob.variableList[entry->hash.id];
-	type = entryValue->w.status & VAR_STAT_MASK;
-
-	if ( type )
-	{
-		if ( type == VAR_STAT_HEAD )
-		{
-			if ( entry->w.status & VAR_STAT_MASK )
-			{
-				index = scrVarGlob.variableList->u.next;
-
-				if ( !scrVarGlob.variableList->u.next )
-					Scr_TerminalError("exceeded maximum number of script variables");
-
-				entry = &scrVarGlob.variableList[index];
-				newEntry = &scrVarGlob.variableList[entry->hash.id];
-				nextId = newEntry->u.next;
-				scrVarGlob.variableList->u.next = nextId;
-				scrVarGlob.variableList[nextId].hash.u.prev = 0;
-				newEntry->w.status = VAR_STAT_MOVABLE;
-				newEntry->v.next = entryValue->v.next;
-				entryValue->v.next = index;
-			}
-			else
-			{
-				next = entry->v.next;
-				newEntryValue = &scrVarGlob.variableList[next];
-				newEntry = entry;
-				siblingValue.next = newEntryValue->hash.u.prev;
-				nextId = entry->u.next;
-				scrVarGlob.variableList[scrVarGlob.variableList[siblingValue.next].hash.id].u.next = nextId;
-				scrVarGlob.variableList[nextId].hash.u.prevSibling = siblingValue.next;
-				newEntryValue->hash.id = entry->hash.id;
-				entry->hash.id = index;
-				newEntryValue->hash.u.prev = entry->hash.u.prev;
-				scrVarGlob.variableList[scrVarGlob.variableList[newEntryValue->hash.u.prev].hash.id].nextSibling = next;
-				scrVarGlob.variableList[entryValue->nextSibling].hash.u.prev = next;
-				entryValue->w.status &= ~VAR_STAT_MASK;
-				entryValue->w.status |= VAR_STAT_MOVABLE;
-				newEntry->w.status = VAR_STAT_HEAD;
-			}
-		}
-		else
-		{
-			if ( entry->w.status & VAR_STAT_MASK )
-			{
-				next = scrVarGlob.variableList->u.next;
-
-				if ( !scrVarGlob.variableList->u.next )
-					Scr_TerminalError("exceeded maximum number of script variables");
-
-				newEntryValue = &scrVarGlob.variableList[next];
-				newEntry = &scrVarGlob.variableList[newEntryValue->hash.id];
-				nextId = newEntry->u.next;
-				scrVarGlob.variableList->u.next = nextId;
-				scrVarGlob.variableList[nextId].hash.u.prev = 0;
-			}
-			else
-			{
-				next = entry->v.next;
-				newEntryValue = &scrVarGlob.variableList[next];
-				newEntry = entry;
-				siblingValue.next = newEntryValue->hash.u.prev;
-				nextId = entry->u.next;
-				scrVarGlob.variableList[scrVarGlob.variableList[siblingValue.next].hash.id].u.next = nextId;
-				scrVarGlob.variableList[nextId].hash.u.prevSibling = siblingValue.next;
-			}
-
-			siblingValue.o.u.self = entryValue->nextSibling;
-			scrVarGlob.variableList[scrVarGlob.variableList[entry->hash.u.prev].hash.id].nextSibling = next;
-			scrVarGlob.variableList[siblingValue.o.u.self].hash.u.prev = next;
-
-			if ( type == VAR_STAT_MOVABLE )
-			{
-				siblingValue.o.u.self = entryValue->v.next;
-
-				for ( i = scrVarGlob.variableList[siblingValue.o.u.self].hash.id;
-				        scrVarGlob.variableList[i].v.next != index;
-				        i = scrVarGlob.variableList[scrVarGlob.variableList[i].v.next].hash.id )
-				{
-					;
-				}
-
-				scrVarGlob.variableList[i].v.next = next;
-			}
-			else
-			{
-				entryValue->v.next = next;
-			}
-
-			newEntryValue->hash.u.prev = entry->hash.u.prev;
-			id = newEntryValue->hash.id;
-			newEntryValue->hash.id = entry->hash.id;
-			entry->hash.id = id;
-			newEntry->w.status = VAR_STAT_HEAD;
-			newEntry->v.next = index;
-		}
-	}
-	else
-	{
-		next = entry->v.next;
-		nextId = entryValue->u.next;
-
-		if ( next == entry->hash.id || entry->w.status & VAR_STAT_MASK )
-		{
-			newEntry = entryValue;
-		}
-		else
-		{
-			scrVarGlob.variableList[next].hash.id = entry->hash.id;
-			entry->hash.id = index;
-			entryValue->v.next = next;
-			entryValue->u.next = entry->u.next;
-			newEntry = entry;
-		}
-
-		siblingValue.next = entry->hash.u.prev;
-		scrVarGlob.variableList[scrVarGlob.variableList[siblingValue.next].hash.id].u.next = nextId;
-		scrVarGlob.variableList[nextId].hash.u.prevSibling = siblingValue.next;
-		newEntry->w.status = VAR_STAT_HEAD;
-		newEntry->v.next = index;
-	}
-
-	newEntry->w.status = newEntry->w.status;
-	newEntry->w.name |= name << VAR_NAME_BITS;
-	parentValue = &scrVarGlob.variableList[parentId];
-
-	if ( VAR_TYPE(parentValue) == VAR_ARRAY )
-	{
-		++parentValue->u.o.u.size;
-		value = Scr_GetArrayIndexValue(name);
-		AddRefToValue(&value);
-	}
-
-	return index;
-}
-
-unsigned int GetNewVariableIndexInternal2(unsigned int parentId, unsigned int name, unsigned int index)
-{
-	unsigned int siblingId;
-	VariableValueInternal *entry;
-	uint16_t siblingIndex;
-
-	siblingId = GetNewVariableIndexInternal3(parentId, name, index);
-	entry = &scrVarGlob.variableList[parentId];
-	siblingIndex = entry->nextSibling;
-	scrVarGlob.variableList[scrVarGlob.variableList[siblingId].hash.id].nextSibling = siblingIndex;
-	scrVarGlob.variableList[siblingIndex].hash.u.prev = siblingId;
-	scrVarGlob.variableList[siblingId].hash.u.prev = entry->v.next;
-	entry->nextSibling = siblingId;
-
-	return siblingId;
-}
-
-
-
-unsigned int GetVariableIndexInternal(unsigned int parentId, unsigned int name)
-{
-	unsigned int index;
-
-	index = FindVariableIndexInternal2(name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
-
-	if ( !index )
-		return GetNewVariableIndexInternal2(parentId, name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
-
-	return index;
-}
-
-unsigned int GetArrayVariableIndex(unsigned int parentId, unsigned int index)
-{
-	return GetVariableIndexInternal(parentId, (index + MAX_ARRAYINDEX) & VAR_NAME_LOW_MASK);
-}
-
-
-
-unsigned int GetNewVariableIndexInternal(unsigned int parentId, unsigned int name)
-{
-	return GetNewVariableIndexInternal2(parentId, name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
-}
-
-unsigned int GetNewVariableIndexReverseInternal2(unsigned int parentId, unsigned int name, unsigned int index)
-{
-	unsigned int siblingId;
-	VariableValueInternal *parent;
-	VariableValueInternal *sibling;
-	VariableValueInternal_u siblingValue;
-
-	siblingId = GetNewVariableIndexInternal3(parentId, name, index);
-	parent = &scrVarGlob.variableList[scrVarGlob.variableList[scrVarGlob.variableList[parentId].nextSibling].hash.u.prev];
-	siblingValue.next = parent->hash.u.prev;
-	sibling = &scrVarGlob.variableList[scrVarGlob.variableList[siblingValue.next].hash.id];
-	scrVarGlob.variableList[scrVarGlob.variableList[siblingId].hash.id].nextSibling = scrVarGlob.variableList[parentId].v.next;
-	parent->hash.u.prev = siblingId;
-	scrVarGlob.variableList[siblingId].hash.u.prev = siblingValue.next;
-	sibling->nextSibling = siblingId;
-
-	return siblingId;
-}
-
-unsigned int GetNewVariableIndexReverseInternal(unsigned int parentId, unsigned int name)
-{
-	return GetNewVariableIndexReverseInternal2(parentId, name, (parentId + name) % (VARIABLELIST_CHILD_SIZE - 1) + 1);
-}
+*/
 
 
 
@@ -4176,10 +4655,22 @@ unsigned int GetNewVariableIndexReverseInternal(unsigned int parentId, unsigned 
 
 
 
-unsigned int GetNewArrayVariableIndex(unsigned int parentId, unsigned int index)
-{
-	return GetNewVariableIndexInternal(parentId, (index + MAX_ARRAYINDEX) & VAR_NAME_LOW_MASK);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -4279,72 +4770,15 @@ void RemoveArrayVariable(unsigned int parentId, unsigned int index)
 
 
 
-unsigned int AllocVariable()
-{
-	uint16_t newIndex;
-	uint16_t next;
-	VariableValueInternal *entryValue;
-	VariableValueInternal *entry;
-	uint16_t index;
-
-	index = scrVarGlob.variableList->u.next;
-
-	if ( !scrVarGlob.variableList->u.next )
-		Scr_TerminalError("exceeded maximum number of script variables");
-
-	entry = &scrVarGlob.variableList[index];
-	entryValue = &scrVarGlob.variableList[entry->hash.id];
-	next = entryValue->u.next;
-
-	if ( entry != entryValue && (entry->w.status & VAR_STAT_MASK) == 0 )
-	{
-		newIndex = entry->v.next;
-		scrVarGlob.variableList[newIndex].hash.id = entry->hash.id;
-		entry->hash.id = index;
-		entryValue->v.next = newIndex;
-		entryValue->u.next = entry->u.next;
-		entryValue = &scrVarGlob.variableList[index];
-	}
-
-	scrVarGlob.variableList->u.next = next;
-	scrVarGlob.variableList[next].hash.u.prev = 0;
-	entryValue->v.next = index;
-	entryValue->nextSibling = index;
-	entry->hash.u.prev = index;
-
-	return entry->hash.id;
-}
-
-unsigned int AllocEntity(unsigned int classnum, unsigned short entnum)
-{
-	unsigned int id;
-	VariableValueInternal *entryValue;
-
-	id = AllocVariable();
-
-	entryValue = &scrVarGlob.variableList[id];
-	entryValue->w.status = VAR_STAT_EXTERNAL;
-	entryValue->w.type |= VAR_ENTITY;
-	entryValue->w.classnum  |= classnum << VAR_NAME_BITS;
-	entryValue->u.o.refCount = 0;
-	entryValue->u.o.u.entnum = entnum;
-
-	return id;
-}
 
 
 
 
 
-float* Scr_AllocVectorInternal()
-{
-	RefVector *refVec;
 
-	refVec = (RefVector *)MT_Alloc(sizeof(RefVector));
-	refVec->head = 0;
 
-	return refVec->vec;
-}
+
+
 
 
 
@@ -4436,36 +4870,6 @@ bool IsObjectFree(unsigned int id)
 
 
 
-unsigned int Scr_FindArrayIndex(unsigned int parentId, VariableValue *index)
-{
-	unsigned int varIndex;
-
-	if ( index->type == VAR_INTEGER )
-	{
-		if ( IsValidArrayIndex(index->u.intValue) )
-		{
-			return FindArrayVariable(parentId, index->u.intValue);
-		}
-		else
-		{
-			Scr_Error(va("array index %d out of range", index->u.intValue));
-			AddRefToObject(parentId);
-			return 0;
-		}
-	}
-	else if ( index->type == VAR_STRING )
-	{
-		varIndex = FindVariable(parentId, index->u.stringValue);
-		SL_RemoveRefToString(index->u.stringValue);
-		return varIndex;
-	}
-	else
-	{
-		Scr_Error(va("%s is not an array index", var_typename[index->type]));
-		AddRefToObject(parentId);
-		return 0;
-	}
-}
 
 
 
@@ -4473,46 +4877,8 @@ unsigned int Scr_FindArrayIndex(unsigned int parentId, VariableValue *index)
 
 
 
-void CopyArray(unsigned int parentId, unsigned int newParentId)
-{
-	int i;
-	VariableValueInternal *newEntryValue;
-	VariableValueInternal *entryValue;
-	int type;
 
-	for ( i = scrVarGlob.variableList[scrVarGlob.variableList[parentId].nextSibling].hash.id;
-	        i != parentId;
-	        i = scrVarGlob.variableList[scrVarGlob.variableList[i].nextSibling].hash.id )
-	{
-		entryValue = &scrVarGlob.variableList[i];
-		type = VAR_TYPE(entryValue);
 
-		newEntryValue = &scrVarGlob.variableList[scrVarGlob.variableList[GetVariableIndexInternal(
-		                    newParentId,
-		                    entryValue->w.classnum >> VAR_NAME_BITS)].hash.id];
-
-		newEntryValue->w.type |= type;
-
-		if ( type == VAR_POINTER )
-		{
-			if ( (scrVarGlob.variableList[entryValue->u.u.pointerValue].w.type & VAR_MASK) == VAR_ARRAY )
-			{
-				newEntryValue->u.u.pointerValue = Scr_AllocArray();
-				CopyArray(entryValue->u.u.pointerValue, newEntryValue->u.u.pointerValue);
-			}
-			else
-			{
-				newEntryValue->u.u = entryValue->u.u;
-				AddRefToObject(entryValue->u.u.pointerValue);
-			}
-		}
-		else
-		{
-			newEntryValue->u.u = entryValue->u.u;
-			AddRefToValue(type, entryValue->u.u);
-		}
-	}
-}
 
 VariableValue Scr_EvalVariableEntityField(unsigned int entId, unsigned int name)
 {
@@ -4798,42 +5164,7 @@ unsigned int FreeTempVariable()
 
 
 
-float Scr_GetThreadUsage(VariableStackBuffer *stackBuf, float *endonUsage)
-{
-	unsigned int localId;
-	float usage;
-	int size;
-	char *buf;
-	char *pos;
-	VariableUnion u;
 
-	size = stackBuf->size;
-	buf = &stackBuf->buf[5 * size];
-	usage = Scr_GetObjectUsage(stackBuf->localId);
-	*endonUsage = Scr_GetEndonUsage(stackBuf->localId);
-	localId = stackBuf->localId;
-
-	while ( size )
-	{
-		pos = buf - 4;
-		u.intValue = *(int *)pos;
-		buf = pos - 1;
-		--size;
-
-		if ( *buf == VAR_CODEPOS )
-		{
-			localId = GetParentLocalId(localId);
-			usage = Scr_GetObjectUsage(localId) + usage;
-			*endonUsage = Scr_GetEndonUsage(localId) + *endonUsage;
-		}
-		else
-		{
-			usage = Scr_GetEntryUsage((uint8_t)*buf, u) + usage;
-		}
-	}
-
-	return usage;
-}
 
 
 
@@ -4962,26 +5293,5 @@ void Var_InitClassMap()
 
 
 
-void CopyEntity(unsigned int parentId, unsigned int newParentId)
-{
-	int type;
-	VariableValueInternal *newEntryValue;
-	VariableValueInternal *entryValue;
-	unsigned int index;
-	unsigned int id;
 
-	for ( id = FindNextSibling(parentId); id; id = FindNextSibling(id) )
-	{
-		entryValue = &scrVarGlob.variableList[id];
-		index = entryValue->w.status >> 8;
-		if ( index != 131070 )
-		{
-			newEntryValue = &scrVarGlob.variableList[GetVariable(newParentId, index)];
-			type = entryValue->w.status & 0x1F;
-			newEntryValue->w.status |= type;
-			newEntryValue->u.u.intValue = entryValue->u.u.intValue;
-			AddRefToValue(type, newEntryValue->u.u);
-		}
-	}
-}
 
