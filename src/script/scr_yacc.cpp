@@ -1941,7 +1941,8 @@ int yyparse()
 	/* Number of tokens to shift before error messages enabled.  */
 	int yyerrorstatus;
 
-#define YYINITDEPTH 200 + sizeof(stype_t)
+#define YYINITDEPTH 200
+#define YYMAXDEPTH  10000
 	/* The semantic value stack.  */
 	stype_t yyvsa[YYINITDEPTH];
 	stype_t *yyvsp;
@@ -2022,7 +2023,7 @@ yysetstate:
 			yyss1 = yyss;
 
 			/* Extend the stack our own way.  */
-			if ( yystacksize >= 10000 ) // YYMAXDEPTH
+			if ( yystacksize >= YYMAXDEPTH )
 			{
 				if ( !yychar ) // yyerror yyexhaustedlab
 				{
@@ -2038,9 +2039,9 @@ yysetstate:
 			}
 
 			yystacksize *= 2;
-			if ( yystacksize > 10000 ) // YYMAXDEPTH
+			if ( yystacksize > YYMAXDEPTH )
 			{
-				yystacksize = 10000; // YYMAXDEPTH
+				yystacksize = YYMAXDEPTH;
 			}
 
 			// YYSTACK_RELOCATE (yyss_alloc, yyss);
@@ -2051,7 +2052,7 @@ yysetstate:
 			// YYSTACK_RELOCATE (yyvs_alloc, yyvs);
 			s = sizeof(stype_t) * yystacksize;
 			yyvs = (stype_t *)alloca(s);
-			memcpy(yyss, yyvs1, s);
+			memcpy(yyvs, yyvs1, s);
 
 			yyvsp = &yyvs[yysize - 1];
 			yyssp = &yyss[yysize - 1];
