@@ -6,10 +6,10 @@ scrVarPub_t scrVarPub;
 
 /*
 ==============
-GetValueType
+GetObjectType
 ==============
 */
-unsigned int GetValueType( unsigned int id )
+unsigned int GetObjectType( unsigned int id )
 {
 	assert((scrVarGlob.variableList[id].w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 	return scrVarGlob.variableList[id].w.type & VAR_MASK;
@@ -126,16 +126,7 @@ bool IsVarFree( unsigned int id )
 	return true;
 }
 
-/*
-==============
-GetObjectType
-==============
-*/
-unsigned int GetObjectType( unsigned int id )
-{
-	assert((scrVarGlob.variableList[id].w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
-	return scrVarGlob.variableList[id].w.type & VAR_MASK;
-}
+
 
 /*
 ==============
@@ -675,7 +666,7 @@ IsObjectId
 */
 bool IsObjectId( unsigned int id )
 {
-	return GetValueType( id ) >= VAR_THREAD;
+	return GetObjectType( id ) >= VAR_THREAD;
 }
 
 /*
@@ -1935,7 +1926,7 @@ void Scr_CastDebugString( VariableValue *value )
 	switch ( value->type )
 	{
 	case VAR_POINTER:
-		stringValue = SL_GetString_( var_typename[ GetValueType( value->u.pointerValue) ], 0 );
+		stringValue = SL_GetString_( var_typename[ GetObjectType( value->u.pointerValue) ], 0 );
 		break;
 
 	case VAR_STRING:

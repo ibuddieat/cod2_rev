@@ -284,7 +284,7 @@ int Scr_GetFunctionHandle( const char *filename, const char *name )
 		return 0;
 	}
 
-	if ( GetValueType(posId) != VAR_POINTER )
+	if ( GetObjectType(posId) != VAR_POINTER )
 	{
 		return 0;
 	}

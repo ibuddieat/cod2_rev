@@ -209,7 +209,7 @@ void ScriptCompile( sval_u val, unsigned int fileId, unsigned int scriptId )
 
 		for ( includePosId = FindNextSibling(includeFilePosId); includePosId; includePosId = FindNextSibling(includePosId) )
 		{
-			if ( GetValueType(includePosId) != VAR_POINTER )
+			if ( GetObjectType(includePosId) != VAR_POINTER )
 			{
 				continue;
 			}
@@ -2814,7 +2814,7 @@ void LinkThread( unsigned int threadCountId, VariableValue *pos, bool allowFarCa
 
 		value = GetVariableValueAddress(valueId);
 
-		type = GetValueType(valueId);
+		type = GetObjectType(valueId);
 		assert(type == VAR_CODEPOS || type == VAR_DEVELOPER_CODEPOS);
 		//assert(scrVarPub.developer_script);
 
@@ -2891,7 +2891,7 @@ void EmitFunction(sval_u func, sval_u sourcePos)
 		{
 			valueId = FindVariable(fileId, func.node[2].idValue);
 
-			if ( !valueId || GetValueType(valueId) != VAR_POINTER )
+			if ( !valueId || GetObjectType(valueId) != VAR_POINTER )
 			{
 				CompileError(sourcePos.sourcePosValue, "unknown function");
 				return;
@@ -3008,7 +3008,7 @@ void EmitObject( sval_u expr, sval_u sourcePos )
 			return;
 		}
 
-		type = GetValueType((unsigned short)idValue);
+		type = GetObjectType((unsigned short)idValue);
 
 		if ( type != VAR_THREAD && type != VAR_NOTIFY_THREAD && type != VAR_TIME_THREAD && type != VAR_CHILD_THREAD && type != VAR_DEAD_THREAD )
 		{

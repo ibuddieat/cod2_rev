@@ -61,9 +61,7 @@ Scr_GetHudElem
 */
 game_hudelem_t* Scr_GetHudElem( unsigned int index )
 {
-	scr_entref_t entref;
-
-	Scr_GetEntityRef(&entref, index);
+	scr_entref_t entref = Scr_GetEntityRef(index);
 
 	if ( entref.classnum != CLASS_NUM_HUDELEM )
 	{
@@ -82,9 +80,7 @@ Scr_GetEntity
 */
 gentity_t* Scr_GetEntity( unsigned int index )
 {
-	scr_entref_t entref;
-
-	Scr_GetEntityRef(&entref, index);
+	scr_entref_t entref = Scr_GetEntityRef(index);
 
 	if ( entref.classnum != CLASS_NUM_ENTITY )
 	{

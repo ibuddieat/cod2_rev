@@ -218,7 +218,7 @@ int Scr_GetAnimTreeSize( unsigned int parentNode )
 			continue;
 		}
 
-		if ( GetValueType(node) == VAR_POINTER )
+		if ( GetObjectType(node) == VAR_POINTER )
 		{
 			arrayNode = FindObject(node);
 			size += Scr_GetAnimTreeSize(arrayNode);
@@ -419,7 +419,7 @@ int Scr_CreateAnimationTree( unsigned int parentNode, unsigned int names, XAnim 
 
 		ConnectScriptToAnim(names, parentIndex, filename, name, treeIndex);
 
-		if ( GetValueType(nodeRef) == VAR_POINTER )
+		if ( GetObjectType(nodeRef) == VAR_POINTER )
 		{
 			childIndex = Scr_CreateAnimationTree(FindObject(nodeRef), names, anims, childIndex, SL_ConvertToString(name), parentIndex, filename, treeIndex);
 		}
@@ -788,7 +788,7 @@ void Scr_PrecacheAnimationTree( unsigned int parentNode )
 			continue;
 		}
 
-		if ( GetValueType(node) == VAR_POINTER )
+		if ( GetObjectType(node) == VAR_POINTER )
 		{
 			Scr_PrecacheAnimationTree(FindObject(node));
 			continue;

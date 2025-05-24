@@ -2963,7 +2963,7 @@ void GScr_GetAngleDelta()
 		}
 	}
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	XAnimGetRelDelta(Scr_GetAnims(anim.tree), anim.index, rot, trans, startTime, endTime);
 
 	Scr_AddFloat(RotationToYaw(rot));
@@ -3005,7 +3005,7 @@ void GScr_GetMoveDelta()
 		}
 	}
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	XAnimGetRelDelta(Scr_GetAnims(anim.tree), anim.index, rot, trans, startTime, endTime);
 
 	Scr_AddVector(trans);
@@ -3888,7 +3888,7 @@ void GScr_AnimHasNotetrack()
 {
 	scr_anim_s anim;
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	Scr_AddBool( XAnimNotetrackExists( Scr_GetAnims(anim.tree), anim.index, Scr_GetConstString(1) ) );
 }
 
@@ -3902,7 +3902,7 @@ void GScr_GetAnimLength()
 	scr_anim_s anim;
 	XAnim *anims;
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	anims = Scr_GetAnims(anim.tree);
 
 	if ( !XAnimIsPrimitive(anims, anim.index) )
