@@ -3,6 +3,8 @@
 typedef void (*xfunction_t)();
 typedef void (*xmethod_t)(scr_entref_t);
 
+#define MAX_BUILTIN_FUNCTION_CALLS 30
+
 typedef struct scr_function_s
 {
 	const char      *name;
@@ -405,7 +407,7 @@ typedef struct scrCompilePub_s
 	unsigned int scriptsPos;
 	unsigned int builtinFunc;
 	unsigned int builtinMeth;
-	uint16_t *canonicalStrings;
+	uint16_t *archivedCanonicalStringsBuf;
 	const char *in_ptr;
 	const char *parseBuf;
 	bool script_loading;
@@ -987,7 +989,6 @@ unsigned int Scr_AllocString(const char *string);
 const char* Scr_GetString(unsigned int index);
 unsigned int Scr_GetConstIString(unsigned int index);
 const char* Scr_GetIString(unsigned int index);
-void GetEntityFieldValue_Bad(VariableValue *pValue, unsigned int classnum, int entnum, int offset);
 VariableValue GetEntityFieldValue(unsigned int classnum, int entnum, int offset);
 bool SetEntityFieldValue(unsigned int classnum, int entnum, int offset, VariableValue *value);
 void Scr_GetVector(unsigned int index, float *vector);
@@ -1124,7 +1125,6 @@ unsigned int Scr_CreateCanonicalFilename(const char *name);
 void Scr_CopyEntityNum( int fromEntnum, int toEntnum, int classnum );
 void CopyEntity(unsigned int parentId, unsigned int newParentId);
 
-VariableValue* Scr_GetValue(unsigned int param);
 unsigned int FindNextSibling(unsigned int id);
 unsigned int FindPrevSibling(unsigned int id);
 unsigned int FindVariable(unsigned int parentId, unsigned int name);
@@ -1273,9 +1273,9 @@ void Scr_SetGenericField(byte *data, int fieldtype, int offset);
 unsigned int SL_TransferToCanonicalString(unsigned int index);
 unsigned int SL_GetCanonicalString(const char *str);
 
-void Scr_ClearStrings();
+void Scr_EndLoadEvaluate();
 void Scr_BeginLoadAnimTrees(int num);
-void Scr_AllocStrings();
+void Scr_InitEvaluate();
 
 bool Scr_IsIdentifier(const char *token);
 unsigned int Scr_GetSourceBuffer(const char *codePos);
@@ -1406,3 +1406,5 @@ void Scr_CancelWaittill(unsigned int startLocalId);
 void IncInParam();
 void Scr_VM_Init();
 void VM_SetTime();
+void VM_Resume(unsigned int timeId);
+unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned int localVarCount, VariableValue *top, VariableValue *startTop);

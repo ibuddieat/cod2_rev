@@ -606,4 +606,9 @@ uint64_t Sys_Milliseconds64(void)
 	return (tp.tv_sec - sys_timeBase64) * 1000 + tp.tv_usec / 1000;
 }
 
+VariableValue* Scr_GetValue(unsigned int param)
+{
+	return &scrVmPub.top[int(-param)];
+}
+
 #endif

@@ -57,13 +57,13 @@ unsigned int SL_TransferToCanonicalString( unsigned int stringValue )
 
 	SL_TransferRefToUser(stringValue, 2);
 
-	if ( scrCompilePub.canonicalStrings[stringValue] )
+	if ( scrCompilePub.archivedCanonicalStringsBuf[stringValue] )
 	{
-		return scrCompilePub.canonicalStrings[stringValue];
+		return scrCompilePub.archivedCanonicalStringsBuf[stringValue];
 	}
 
 	scrVarPub.canonicalStrCount++;
-	scrCompilePub.canonicalStrings[stringValue] = scrVarPub.canonicalStrCount;
+	scrCompilePub.archivedCanonicalStringsBuf[stringValue] = scrVarPub.canonicalStrCount;
 
 	return scrVarPub.canonicalStrCount;
 }
@@ -109,9 +109,9 @@ unsigned int SL_GetCanonicalString( const char *str )
 {
 	unsigned int stringValue = SL_FindString(str);
 
-	if ( scrCompilePub.canonicalStrings[stringValue] )
+	if ( scrCompilePub.archivedCanonicalStringsBuf[stringValue] )
 	{
-		return scrCompilePub.canonicalStrings[stringValue];
+		return scrCompilePub.archivedCanonicalStringsBuf[stringValue];
 	}
 
 	return SL_TransferToCanonicalString( SL_GetString_( str, 0 ) );
@@ -124,7 +124,7 @@ Scr_EndLoadScripts
 */
 void Scr_EndLoadScripts()
 {
-	Scr_ClearStrings();
+	Scr_EndLoadEvaluate();
 	SL_ShutdownSystem(2);
 
 	scrCompilePub.script_loading = false;
@@ -231,7 +231,7 @@ void Scr_BeginLoadScripts()
 	scrCompilePub.programLen = 0;
 	scrVarPub.endScriptBuffer = 0;
 
-	Scr_AllocStrings();
+	Scr_InitEvaluate();
 
 	scrVarPub.fieldBuffer = NULL;
 	scrCompilePub.value_count = 0;
