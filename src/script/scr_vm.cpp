@@ -2917,7 +2917,7 @@ void VM_Resume( unsigned int timeId )
 		RemoveObjectVariable(timeId, startLocalId);
 
 		VM_UnarchiveStack( startLocalId, &fs, stackValue );
-		RemoveRefToObject( VM_ExecuteInternal( fs.pos, fs.localId, fs.localVarCount, fs.top, fs.startTop ) );
+		RemoveRefToObject( VM_Execute( fs.pos, fs.localId, fs.localVarCount, fs.top, fs.startTop ) );
 	}
 
 	RemoveRefToObject(timeId);
@@ -2984,7 +2984,7 @@ unsigned int VM_Execute( unsigned int localId, const char *pos, unsigned int par
 
 	scrVmPub.inparamcount = 0;
 
-	localId = VM_ExecuteInternal( pos, localId, 0, scrVmPub.top, startTop );
+	localId = VM_Execute( pos, localId, 0, scrVmPub.top, startTop );
 
 	startTop->type = type;
 	scrVmPub.top = startTop + 1;
@@ -3216,37 +3216,22 @@ unsigned int VM_Execute( unsigned int localId, const char *pos, unsigned int par
 
 
 
-unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned int localVarCount, VariableValue *top, VariableValue *startTop)
+unsigned int VM_Execute( const char *pos, unsigned int localId, unsigned int localVarCount, VariableValue *top, VariableValue *startTop )
 {
-	int gOpcode;
-	int gParamCount;
-	unsigned int parentLocalId;
-	unsigned int builtinIndex;
-	VariableValue stackValue;
-	int jumpOffset;
-	unsigned int waitTime;
-	unsigned int stringValue;
-	unsigned int id;
-	unsigned int threadId;
-	const char *tempCodePos;
-	VariableValue tempValue;
-	unsigned int outparamcount;
-	unsigned int selfId;
-	unsigned int objectId;
-	unsigned int fieldValueId;
-	int gCaseCount;
-	unsigned int caseValue;
-	unsigned int currentCaseValue;
-	unsigned int classnum;
-	int entnum;
-	const char *currentCodePos;
-	unsigned char removeCount;
+	int jumpOffset, entnum, gCaseCount;
+	unsigned int parentLocalId, builtinIndex, waitTime, stringValue, id, threadId, classnum, removeCount;
+	unsigned int outparamcount, selfId, objectId, fieldValueId, caseValue, currentCaseValue, stackId;
+	VariableValue stackValue, tempValue;
 	scr_entref_t entref;
-	unsigned int stackId;
+	const char *currentCodePos, *tempCodePos;
 
-	gParamCount = 0;
+	int gOpcode = 0;
+	int gParamCount = 0;
 
-	if ( setjmp(g_script_error[++g_script_error_level]) )
+	g_script_error_level++;
+	assert(g_script_error_level >= 0 && g_script_error_level < MAX_VM_STACK_DEPTH + 1);
+
+	if ( setjmp( g_script_error[ g_script_error_level ] ) )
 	{
 		switch ( gOpcode )
 		{
@@ -3255,6 +3240,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_EvalArrayRef:
 		case OP_ClearArray:
 		case OP_EvalLocalVariableRef:
+			assert(scrVarPub.error_index >= -1);
 			if ( scrVarPub.error_index < 0 )
 				scrVarPub.error_index = 1;
 			break;
@@ -3276,6 +3262,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_CallBuiltin4:
 		case OP_CallBuiltin5:
 		case OP_CallBuiltin:
+			assert(scrVarPub.error_index >= 0);
 			if ( scrVarPub.error_index > 0 )
 				scrVarPub.error_index = scrVmPub.outparamcount - scrVarPub.error_index + 1;
 			break;
@@ -3287,15 +3274,11 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_CallBuiltinMethod4:
 		case OP_CallBuiltinMethod5:
 		case OP_CallBuiltinMethod:
-			if ( scrVarPub.error_index <= 0 )
-			{
-				if ( scrVarPub.error_index < 0 )
-					scrVarPub.error_index = 1;
-			}
-			else
-			{
+			assert(scrVarPub.error_index >= -1);
+			if ( scrVarPub.error_index > 0 )
 				scrVarPub.error_index = scrVmPub.outparamcount - scrVarPub.error_index + 2;
-			}
+			else if ( scrVarPub.error_index < 0 )
+				scrVarPub.error_index = 1;
 			break;
 
 		default:
@@ -3309,7 +3292,8 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		{
 		case OP_EvalLocalArrayCached:
 		case OP_EvalArray:
-			RemoveRefToValue(top--);
+			RemoveRefToValue(top);
+			top--;
 			RemoveRefToValue(top);
 			top->type = VAR_UNDEFINED;
 			break;
@@ -3320,13 +3304,13 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_EvalLocalVariableRef:
 			fieldValueId = GetDummyFieldValue();
 			RemoveRefToValue(top);
-			--top;
+			top--;
 			break;
 
 		case OP_ClearArray:
 		case OP_wait:
 			RemoveRefToValue(top);
-			--top;
+			top--;
 			break;
 
 		case OP_GetSelfObject:
@@ -3345,30 +3329,41 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_ClearFieldVariable:
 			if ( scrVmPub.outparamcount )
+			{
+				assert(scrVmPub.outparamcount == 1);
+				assert(scrVmPub.top->type == VAR_UNDEFINED);
 				scrVmPub.outparamcount = 0;
+			}
 			break;
 
 		case OP_checkclearparams:
+			assert(top->type != VAR_CODEPOS);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_CODEPOS);
+			}
 			top->type = VAR_CODEPOS;
 			break;
 
 		case OP_SetVariableField:
 			if ( scrVmPub.outparamcount )
 			{
+				assert(scrVmPub.outparamcount == 1);
+				assert(scrVmPub.top == top);
 				RemoveRefToValue(top);
 				scrVmPub.outparamcount = 0;
-				--top;
+				top--;
 				break;
 			}
-			--top;
+			top--;
 			break;
 
 		case OP_SetSelfFieldVariableField:
 			RemoveRefToValue(top);
 			scrVmPub.outparamcount = 0;
-			--top;
+			top--;
 			break;
 
 		case OP_CallBuiltin0:
@@ -3387,7 +3382,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_CallBuiltinMethod:
 			Scr_ClearOutParams();
 			top = scrVmPub.top + 1;
-			scrVmPub.top[1].type = VAR_UNDEFINED;
+			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptFunctionCall2:
@@ -3395,41 +3390,55 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_ScriptMethodCall:
 			Scr_ReadCodePos(&pos);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+			}
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptFunctionCallPointer:
 		case OP_ScriptMethodCallPointer:
+			assert(top->type != VAR_CODEPOS);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_CODEPOS);
+			}
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptThreadCall:
 		case OP_ScriptMethodThreadCall:
 			Scr_ReadCodePos(&pos);
-			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; --outparamcount )
-				RemoveRefToValue(top--);
-			++top;
+			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; outparamcount-- )
+			{
+				RemoveRefToValue(top);
+				top--;
+			}
+			top++;
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptThreadCallPointer:
 		case OP_ScriptMethodThreadCallPointer:
-			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; --outparamcount )
-				RemoveRefToValue(top--);
-			++top;
+			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; outparamcount-- )
+			{
+				RemoveRefToValue(top);
+				top--;
+			}
+			top++;
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_CastFieldObject:
 			objectId = GetDummyObject();
-			--top;
+			top--;
 			break;
 
 		case OP_EvalLocalVariableObjectCached:
-			++pos;
+			pos++;
 			objectId = GetDummyObject();
 			break;
 
@@ -3438,7 +3447,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_JumpOnFalseExpr:
 		case OP_JumpOnTrueExpr:
 			Scr_ReadUnsignedShort(&pos);
-			--top;
+			top--;
 			break;
 
 		case OP_jumpback:
@@ -3462,28 +3471,35 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_multiply:
 		case OP_divide:
 		case OP_mod:
-			--top;
+			top--;
 			break;
 
 		case OP_waittillmatch:
-			++pos;
-			RemoveRefToValue(top--);
+			pos++;
 			RemoveRefToValue(top);
-			--top;
+			top--;
+			RemoveRefToValue(top);
+			top--;
 			break;
 
 		case OP_waittill:
 		case OP_endon:
-			RemoveRefToValue(top--);
 			RemoveRefToValue(top);
-			--top;
+			top--;
+			RemoveRefToValue(top);
+			top--;
 			break;
 
 		case OP_notify:
+			assert(top->type != VAR_CODEPOS);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_CODEPOS);
+			}
 			RemoveRefToValue(top);
-			--top;
+			top--;
 			break;
 
 		case OP_switch:
@@ -3491,15 +3507,15 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			{
 				currentCaseValue = Scr_ReadUnsigned(&pos);
 				currentCodePos = Scr_ReadCodePos(&pos);
-				--gCaseCount;
+				gCaseCount--;
 			}
 			if ( !currentCaseValue )
+			{
 				pos = currentCodePos;
+				assert(pos);
+			}
 			RemoveRefToValue(top);
-			--top;
-			break;
-
-		default:
+			top--;
 			break;
 		}
 	}

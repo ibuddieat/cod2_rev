@@ -1407,4 +1407,4 @@ void IncInParam();
 void Scr_VM_Init();
 void VM_SetTime();
 void VM_Resume(unsigned int timeId);
-unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned int localVarCount, VariableValue *top, VariableValue *startTop);
+unsigned int VM_Execute(const char *pos, unsigned int localId, unsigned int localVarCount, VariableValue *top, VariableValue *startTop);
