@@ -979,8 +979,8 @@ void Scr_DumpScriptThreads()
 	int num, size, i, j, count, classnum, id;
 	VariableValueInternal *entryValue;
 	VariableStackBuffer *stackBuf;
-	const char *pos, *buf, *currentPos;
-	unsigned char type;
+	const char *pos, *buf;
+	VariableValue value;
 
 	infoArray = (ThreadDebugInfo *)Z_Malloc( sizeof( *infoArray ) * VARIABLELIST_CHILD_SIZE );
 
@@ -1020,14 +1020,16 @@ void Scr_DumpScriptThreads()
 		while ( size )
 		{
 			size--;
-			type = *buf;
-			buf += 1;
-			currentPos = *(const char **)buf;
-			buf += 4;
 
-			if ( type == VAR_CODEPOS )
+			value.type = *(unsigned char *)buf;
+			buf += sizeof(unsigned char);
+
+			value.u.codePosValue = *(const char **)buf;
+			buf += sizeof(VariableUnion);
+
+			if ( value.type == VAR_CODEPOS )
 			{
-				info.pos[info.posSize] = currentPos;
+				info.pos[info.posSize] = value.u.codePosValue;
 				info.posSize++;
 			}
 		}
@@ -1619,22 +1621,6 @@ void Scr_RemoveThreadNotifyName( unsigned int startLocalId )
 
 	entryValue->w.type &= ~VAR_MASK;
 	entryValue->w.type |= VAR_THREAD;
-}
-
-/*
-==============
-Var_Shutdown
-==============
-*/
-void Var_Shutdown()
-{
-	if ( !scrVarPub.gameId )
-	{
-		return;
-	}
-
-	FreeValue(scrVarPub.gameId);
-	scrVarPub.gameId = 0;
 }
 
 /*
@@ -3795,10 +3781,10 @@ float Scr_GetThreadUsage( VariableStackBuffer *stackBuf, float *endonUsage )
 	float usage;
 	int size;
 	char *buf;
-	VariableUnion u;
+	VariableValue value;
 
 	size = stackBuf->size;
-	buf = &stackBuf->buf[5 * size]; // FIXME: { size = const char *codePosValue 4 byte, unsigned char type 1 byte }
+	buf = &stackBuf->buf[STACKBUF_BUFFER_SIZE * size];
 
 	usage = Scr_GetObjectUsage(stackBuf->localId);
 	*endonUsage = Scr_GetEndonUsage(stackBuf->localId);
@@ -3807,15 +3793,17 @@ float Scr_GetThreadUsage( VariableStackBuffer *stackBuf, float *endonUsage )
 
 	while ( size )
 	{
-		buf -= 4;
-		u.codePosValue = *(const char **)buf;
+		buf -= sizeof(VariableUnion);
+		value.u.codePosValue = *(const char **)buf;
 
-		buf -= 1;
+		buf -= sizeof(unsigned char);
+		value.type = *(unsigned char *)buf;
+
 		size--;
 
-		if ( *buf != VAR_CODEPOS )
+		if ( value.type != VAR_CODEPOS )
 		{
-			usage += Scr_GetEntryUsage( (unsigned char)*buf, u );
+			usage += Scr_GetEntryUsage( value.type, value.u );
 			continue;
 		}
 

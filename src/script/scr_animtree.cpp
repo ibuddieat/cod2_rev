@@ -84,7 +84,7 @@ scr_animtree_t Scr_FindAnimTree( const char *filename )
 Scr_FindAnim
 ============
 */
-void Scr_FindAnim( const char *filename, const char *animName, scr_anim_t *anim, int user )
+void Scr_FindAnim( const char *filename, const char *animName, scr_anim_s *anim, int user )
 {
 	unsigned int index, name;
 
@@ -274,7 +274,7 @@ ConnectScriptToAnim
 */
 void ConnectScriptToAnim( unsigned int names, int index, unsigned int filename, unsigned int name, int treeIndex )
 {
-	scr_anim_t anim;
+	scr_anim_s anim;
 	const char *codePos, *nextCodePos;
 	VariableUnion *value;
 	unsigned int animId;

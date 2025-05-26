@@ -1057,6 +1057,7 @@ void Scr_PlayerKilled( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 {
 	Scr_AddInt(deathAnimDuration);
 	Scr_AddInt(psTimeOffset);
+
 	Scr_AddConstString(G_GetHitLocationString(hitLoc));
 	GScr_AddVector(vDir);
 	Scr_AddString(BG_GetWeaponDef(iWeapon)->szInternalName);
@@ -1067,12 +1068,11 @@ void Scr_PlayerKilled( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 		Scr_AddString("badMOD");
 
 	Scr_AddInt(damage);
+
 	GScr_AddEntity(attacker);
 	GScr_AddEntity(inflictor);
 
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerkilled, 9);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerkilled, 9 ) );
 }
 
 /*
@@ -1086,8 +1086,10 @@ void Scr_PlayerDamage( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 {
 	Scr_AddInt(timeOffset);
 	Scr_AddConstString(G_GetHitLocationString(hitLoc));
+
 	GScr_AddVector(vDir);
 	GScr_AddVector(vPoint);
+
 	Scr_AddString(BG_GetWeaponDef(iWeapon)->szInternalName);
 
 	if ( meansOfDeath < MOD_NUM )
@@ -1097,12 +1099,11 @@ void Scr_PlayerDamage( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 
 	Scr_AddInt(dflags);
 	Scr_AddInt(damage);
+
 	GScr_AddEntity(attacker);
 	GScr_AddEntity(inflictor);
 
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerdamage, 10);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerdamage, 10 ) );
 }
 
 /*
@@ -1112,9 +1113,7 @@ Scr_PlayerDisconnect
 */
 void Scr_PlayerDisconnect( gentity_t *self )
 {
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerdisconnect, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerdisconnect, 0 ) );
 }
 
 /*
@@ -1124,9 +1123,7 @@ Scr_PlayerConnect
 */
 void Scr_PlayerConnect( gentity_t *self )
 {
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerconnect, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerconnect, 0 ) );
 }
 
 /*
@@ -1136,9 +1133,7 @@ Scr_PlayerConnect
 */
 void Scr_StartupGameType()
 {
-	unsigned short callback = Scr_ExecThread(g_scr_data.gametype.startupgametype, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecThread( g_scr_data.gametype.startupgametype, 0 ) );
 }
 
 /*
@@ -1148,9 +1143,7 @@ Scr_LoadGameType
 */
 void Scr_LoadGameType()
 {
-	unsigned short callback = Scr_ExecThread(g_scr_data.gametype.main, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecThread( g_scr_data.gametype.main, 0 ) );
 }
 
 /*
@@ -1165,9 +1158,7 @@ void Scr_LoadLevel()
 		return;
 	}
 
-	unsigned short callback = Scr_ExecThread(g_scr_data.levelscript, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecThread( g_scr_data.levelscript, 0 ) );
 }
 
 /*
