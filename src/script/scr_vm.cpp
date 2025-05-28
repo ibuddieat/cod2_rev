@@ -2350,18 +2350,17 @@ void VM_TrimStack( unsigned int startLocalId, VariableStackBuffer *stackValue, b
 
 		Scr_StopThread(localId);
 
-		if ( fromEndon )
+		if ( !fromEndon )
 		{
-			continue;
+			Scr_SetThreadNotifyName(startLocalId, 0);
+			stackValue->pos = 0;
+
+			tempValue.type = VAR_STACK;
+			tempValue.u.stackValue = stackValue;
+
+			SetNewVariableValue(GetNewVariable(startLocalId, OBJECT_STACK), &tempValue);
 		}
 
-		Scr_SetThreadNotifyName(startLocalId, 0);
-		stackValue->pos = 0;
-
-		tempValue.type = VAR_STACK;
-		tempValue.u.stackValue = stackValue;
-
-		SetNewVariableValue(GetNewVariable(startLocalId, OBJECT_STACK), &tempValue);
 		return;
 	}
 
