@@ -3,8 +3,6 @@
 typedef void (*xfunction_t)();
 typedef void (*xmethod_t)(scr_entref_t);
 
-#define MAX_BUILTIN_FUNCTION_CALLS 30
-
 typedef struct scr_function_s
 {
 	const char      *name;
@@ -200,6 +198,8 @@ enum
 	MAX_VM_STACK_DEPTH = 0x20,
 	MAX_VM_OPERAND_STACK = 0x800,
 };
+
+#define MAX_EMBEDDED_FUNCTION_CALLS MAX_VM_STACK_DEPTH - 2
 
 enum
 {
