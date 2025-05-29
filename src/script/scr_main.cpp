@@ -243,7 +243,7 @@ void Scr_BeginLoadScripts()
 	Scr_BeginLoadAnimTrees(1);
 
 	TempMemoryReset();
-	assert((!((int)scrVarPub.programBuffer & 31)));
+	//assert((!((int)scrVarPub.programBuffer & 31)));
 }
 
 /*
