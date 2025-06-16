@@ -283,11 +283,37 @@ void Scr_SetGenericField( byte *b, int type, int ofs )
 
 /*
 ===============
+isValidEnt
+===============
+*/
+static bool isValidEnt( gentity_t *ent )
+{
+	if ( !ent )
+	{
+		return false;
+	}
+
+	if ( ent->s.number != ent - g_entities )
+	{
+		return false;
+	}
+
+	if ( !ent->r.inuse )
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/*
+===============
 Scr_FreeHudElem
 ===============
 */
 void Scr_FreeHudElem( game_hudelem_t *hud )
 {
+	assert(hud);
 	assert(hud - g_hudelems >= 0 && hud - g_hudelems < MAX_HUDELEMS_TOTAL);
 	assert(hud->elem.type != HE_TYPE_FREE);
 
@@ -302,8 +328,10 @@ Scr_FreeEntity
 */
 void Scr_FreeEntity( gentity_t *ent )
 {
-	assert(ent->s.number == ent - g_entities);
-	assert(ent->r.inuse);
+	if ( !isValidEnt( ent ) )
+	{
+		return;
+	}
 
 	Scr_FreeEntityConstStrings(ent);
 	Scr_FreeEntityNum(ent->s.number, CLASS_NUM_ENTITY);
@@ -406,6 +434,7 @@ Scr_AddHudElem
 */
 void Scr_AddHudElem( game_hudelem_t *hud )
 {
+	assert(hud);
 	assert(hud - g_hudelems >= 0 && hud - g_hudelems < MAX_HUDELEMS_TOTAL);
 	assert(hud->elem.type != HE_TYPE_FREE);
 
@@ -419,8 +448,10 @@ Scr_AddEntity
 */
 void Scr_AddEntity( gentity_t *ent )
 {
-	assert(ent->s.number == ent - g_entities);
-	assert(ent->r.inuse);
+	if ( !isValidEnt( ent ) )
+	{
+		return;
+	}
 
 	Scr_AddEntityNum(ent->s.number, CLASS_NUM_ENTITY);
 }
@@ -796,9 +827,10 @@ Scr_Notify
 */
 void Scr_Notify( gentity_t *ent, unsigned short stringValue, unsigned int paramcount )
 {
-	assert(ent);
-	assert(ent->s.number == ent - g_entities);
-	assert(ent->r.inuse);
+	if ( !isValidEnt( ent ) )
+	{
+		return;
+	}
 
 	Scr_NotifyNum(ent->s.number, CLASS_NUM_ENTITY, stringValue, paramcount);
 }
