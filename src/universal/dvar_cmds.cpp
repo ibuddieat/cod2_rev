@@ -45,7 +45,7 @@ void Dvar_WriteVariables(fileHandle_t f)
 	{
 		if (I_stricmp(dvar->name, "cl_cdkey"))
 		{
-			if (!(dvar->flags & DVAR_ARCHIVE))
+			if (!((dvar->flags ^ DVAR_ARCHIVE) & DVAR_ARCHIVE))
 				FS_Printf(f, "seta %s \"%s\"\n", dvar->name, Dvar_DisplayableLatchedValue(dvar));
 		}
 	}
