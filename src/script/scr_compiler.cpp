@@ -7,190 +7,1478 @@
 scrCompilePub_t scrCompilePub;
 scrCompileGlob_t scrCompileGlob;
 
-int GetExpressionCount(sval_u exprlist)
+/*
+============
+AddRefToValue
+============
+*/
+void AddRefToValue( VariableValue *value )
 {
-	int expr_count;
+	AddRefToValue(value->type, value->u);
+}
+
+/*
+============
+AddRefToValue
+============
+*/
+void RemoveRefToValue( VariableValue *value )
+{
+	RemoveRefToValue(value->type, value->u);
+}
+
+/*
+============
+Scr_CompileShutdown
+============
+*/
+void Scr_CompileShutdown()
+{
+	PrecacheEntry *entry;
+
+	while ( scrCompileGlob.precachescriptListHead )
+	{
+		entry = scrCompileGlob.precachescriptListHead;
+		scrCompileGlob.precachescriptListHead = scrCompileGlob.precachescriptListHead->next;
+		Z_FreeInternal(entry);
+	}
+}
+
+/*
+============
+CompareCaseInfo
+============
+*/
+int CompareCaseInfo( const void *elem1, const void *elem2 )
+{
+	if ( *(intptr_t *)elem1 > *(intptr_t *)elem2 )
+	{
+		return -1;
+	}
+
+	return *(intptr_t *)elem1 < *(intptr_t *)elem2;
+}
+
+/*
+============
+GetExpressionCount
+============
+*/
+int GetExpressionCount( sval_u exprlist )
+{
 	sval_u *node;
+	int expr_count = 0;
 
-	expr_count = 0;
-
-	for ( node = exprlist.node->node; node; node = node[1].node )
-		++expr_count;
+	for ( node = exprlist.node[0].node; node; node = node[1].node )
+	{
+		expr_count++;
+	}
 
 	return expr_count;
 }
 
-void Scr_CompileRemoveRefToString(unsigned int stringValue)
+/*
+============
+Scr_GetBuiltin
+============
+*/
+unsigned int Scr_GetBuiltin( sval_u func_name )
 {
-	if ( !scrCompileGlob.bConstRefCount )
-		SL_RemoveRefToString(stringValue);
+	if ( func_name.node[0].type != ENUM_script_call )
+	{
+		return 0;
+	}
+
+	func_name = func_name.node[1];
+
+	if ( func_name.node[0].type != ENUM_function )
+	{
+		return 0;
+	}
+
+	func_name = func_name.node[1];
+
+	if ( func_name.node[0].type != ENUM_local_function )
+	{
+		return 0;
+	}
+
+	func_name = func_name.node[1];
+
+	if ( FindVariable(scrCompileGlob.fileId, func_name.idValue) )
+	{
+		return 0;
+	}
+
+	return func_name.idValue;
 }
 
-void EmitCanonicalString(unsigned int stringValue)
+/*
+============
+Scr_CompileStatement
+============
+*/
+void Scr_CompileStatement( sval_u parseData )
 {
-	const char *pos;
+	EmitStatement( parseData, false, 0, NULL );
+	EmitOpcode( OP_abort, 0, CALL_NONE );
+}
 
-	scrCompileGlob.codePos = TempMallocAlign(sizeof(uint16_t));
+/*
+============
+ScriptCompile
+============
+*/
+void ScriptCompile( sval_u val, unsigned int fileId, unsigned int scriptId )
+{
+	PrecacheEntry *precachescript, *precachescript2, *precachescriptList;
+	unsigned short filename, name;
+	unsigned int posId, includePosId, includeFilePosId, toThreadCountId;
+	VariableValue includePos, value;
+	VariableUnion *pos;
+	int i, j, func_count;
 
-	if ( scrCompilePub.developer_statement == 2 )
+	scrCompileGlob.fileId = fileId;
+	scrCompileGlob.bConstRefCount = 0;
+
+	scrAnimPub.animTreeIndex = 0;
+	scrCompilePub.developer_statement = SCR_DEV_NO;
+
+	if ( scrCompilePub.far_function_count )
 	{
-		Scr_CompileRemoveRefToString(stringValue);
+		precachescriptList = (PrecacheEntry *)Z_Malloc( sizeof( *precachescriptList ) * scrCompilePub.far_function_count );
 	}
 	else
 	{
-		if ( scrCompileGlob.bConstRefCount )
-			SL_AddRefToString(stringValue);
-
-		pos = scrCompileGlob.codePos;
-		*(uint16_t *)pos = Scr_GetCanonicalStringIndex(stringValue);
+		precachescriptList = NULL;
 	}
-}
 
-void CompileTransferRefToString(unsigned int stringValue, unsigned char user)
-{
-	if ( scrCompilePub.developer_statement == 2 )
+	scrCompileGlob.precachescriptList = precachescriptList;
+
+	if ( precachescriptList )
 	{
-		Scr_CompileRemoveRefToString(stringValue);
+		precachescriptList->next = scrCompileGlob.precachescriptListHead;
+		scrCompileGlob.precachescriptListHead = precachescriptList;
 	}
-	else
+
+	EmitIncludeList(val.node[0]);
+	EmitThreadList(val.node[1]);
+
+	scrCompilePub.programLen = (char *)TempMalloc(0) - scrVarPub.programBuffer;
+	Hunk_ClearTempMemoryHighInternal();
+
+	func_count = scrCompilePub.far_function_count;
+
+	for ( i = 0; i < func_count; i++ )
 	{
-		if ( scrCompileGlob.bConstRefCount )
-			SL_AddRefToString(stringValue);
+		precachescript = &precachescriptList[i];
 
-		SL_TransferRefToUser(stringValue, user);
+		filename = precachescript->filename;
+		includeFilePosId = Scr_LoadScript(SL_ConvertToString(filename));
+
+		if ( !includeFilePosId )
+		{
+			CompileError(precachescript->sourcePos, "Could not find script '%s'", SL_ConvertToString(filename));
+			return;
+		}
+
+		SL_RemoveRefToString(filename);
+
+		if ( !precachescript->include )
+		{
+			continue;
+		}
+
+		for ( j = i + 1; j < func_count; j++ )
+		{
+			precachescript2 = &precachescriptList[j];
+
+			if ( !precachescript2->include )
+			{
+				break;
+			}
+
+			if ( precachescript2->filename == filename )
+			{
+				CompileError(precachescript2->sourcePos, "Duplicate #include");
+				return;
+			}
+		}
+
+		precachescript->include = false;
+
+		for ( includePosId = FindNextSibling(includeFilePosId); includePosId; includePosId = FindNextSibling(includePosId) )
+		{
+			if ( GetObjectType(includePosId) != VAR_POINTER )
+			{
+				continue;
+			}
+
+			posId = FindVariable( FindObject( includePosId ), 1 );
+
+			if ( !posId )
+			{
+				continue;
+			}
+
+			includePos = Scr_EvalVariable(posId);
+
+			if ( includePos.type == VAR_INCLUDE_CODEPOS )
+			{
+				continue;
+			}
+
+			assert((includePos.type == VAR_CODEPOS) || (includePos.type == VAR_DEVELOPER_CODEPOS));
+
+			name = GetVariableName(includePosId);
+			toThreadCountId = GetObjectA( GetVariable( fileId, name ) );
+
+			pos = GetVariableValueAddress( SpecifyThreadPosition( toThreadCountId, name, precachescript->sourcePos, VAR_INCLUDE_CODEPOS ) );
+			pos = GetVariableValueAddress( posId );
+
+			LinkThread(toThreadCountId, &includePos, false);
+		}
 	}
+
+	if ( precachescriptList )
+	{
+		scrCompileGlob.precachescriptListHead = precachescriptList->next;
+		Z_Free(precachescriptList);
+	}
+
+	LinkFile(fileId);
+
+	value.type = VAR_INTEGER;
+	SetVariableValue(scriptId, &value);
 }
 
-void EmitCodepos(const char *pos)
+/*
+============
+EmitBreakpointStatement
+============
+*/
+void EmitBreakpointStatement( sval_u sourcePos )
 {
-	scrCompileGlob.codePos = TempMallocAlign(sizeof(intptr_t));
-	*(intptr_t *)scrCompileGlob.codePos = (intptr_t)pos;
+	if ( !scrVarPub.developer_script )
+	{
+		return;
+	}
+
+	EmitOpcode(OP_breakpoint, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 }
 
-void EmitShort(short value)
+/*
+============
+Scr_IsLastStatement
+============
+*/
+bool Scr_IsLastStatement( sval_u *node )
 {
-	scrCompileGlob.codePos = TempMallocAlign(sizeof(short));
-	*(short *)scrCompileGlob.codePos = value;
+	if ( !node )
+	{
+		return true;
+	}
+
+	if ( scrVarPub.developer_script )
+	{
+		return false;
+	}
+
+	while ( node )
+	{
+		if ( node[0].node[0].type != ENUM_developer_statement_list )
+		{
+			return false;
+		}
+
+		node = node[1].node;
+	}
+
+	return true;
 }
 
-void EmitByte(byte value)
+/*
+============
+IsUndefinedPrimitiveExpression
+============
+*/
+bool IsUndefinedPrimitiveExpression( sval_u expr )
 {
-	scrCompileGlob.codePos = (char *)TempMalloc(sizeof(byte));
-	*(byte *)scrCompileGlob.codePos = value;
+	return expr.node[0].type == ENUM_undefined;
 }
 
-void EmitFloat(float value)
+/*
+============
+Scr_CalcLocalVarsArrayPrimitiveExpressionRef
+============
+*/
+void Scr_CalcLocalVarsArrayPrimitiveExpressionRef( sval_u expr, scr_block_s *block )
 {
-	scrCompileGlob.codePos = TempMallocAlignStrict(sizeof(float));
-	*(float *)scrCompileGlob.codePos = value;
+	if ( expr.node[0].type != ENUM_variable )
+	{
+		return;
+	}
+
+	Scr_CalcLocalVarsVariableExpressionRef( expr.node[1], block );
 }
 
-void EvalUndefined(sval_u sourcePos, VariableCompileValue *constValue)
+/*
+============
+Scr_GetUncacheType
+============
+*/
+int Scr_GetUncacheType( int type )
 {
-	constValue->value.type = VAR_UNDEFINED;
-	constValue->sourcePos = sourcePos;
+	if ( type == VAR_CODEPOS )
+	{
+		return BUILTIN_ANY;
+	}
+
+	assert( type == VAR_DEVELOPER_CODEPOS );
+	return BUILTIN_DEVELOPER_ONLY;
 }
 
-void EvalInteger(int value, sval_u sourcePos, VariableCompileValue *constValue)
+/*
+============
+Scr_GetCacheType
+============
+*/
+int Scr_GetCacheType( int type )
 {
-	constValue->value.type = VAR_INTEGER;
-	constValue->value.u.intValue = value;
-	constValue->sourcePos = sourcePos;
+	if ( type == BUILTIN_ANY )
+	{
+		return VAR_CODEPOS;
+	}
+
+	assert( type == BUILTIN_DEVELOPER_ONLY );
+	return VAR_DEVELOPER_CODEPOS;
 }
 
-void EvalFloat(float value, sval_u sourcePos, VariableCompileValue *constValue)
+/*
+============
+GetSingleParameter
+============
+*/
+sval_u* GetSingleParameter( sval_u exprlist )
 {
-	constValue->value.type = VAR_FLOAT;
-	constValue->value.u.floatValue = value;
-	constValue->sourcePos = sourcePos;
+	if ( exprlist.node[0].node == NULL )
+	{
+		return NULL;
+	}
+
+	if ( exprlist.node[0].node[1].node != NULL )
+	{
+		return NULL;
+	}
+
+	return exprlist.node[0].node;
 }
 
-void EvalString(unsigned int value, sval_u sourcePos, VariableCompileValue *constValue)
+/*
+============
+EmitExpressionList
+============
+*/
+int EmitExpressionList( sval_u exprlist, scr_block_s *block )
 {
-	constValue->value.type = VAR_STRING;
-	constValue->value.u.stringValue = value;
-	constValue->sourcePos = sourcePos;
+	sval_u *node;
+	int expr_count = 0;
+
+	for ( node = exprlist.node[0].node; node; node = node[1].node )
+	{
+		EmitExpression(node[0].node[0], block);
+		expr_count++;
+	}
+
+	return expr_count;
 }
 
-void EvalIString(unsigned int value, sval_u sourcePos, VariableCompileValue *constValue)
+/*
+============
+Scr_CalcLocalVarsArrayVariableRef
+============
+*/
+void Scr_CalcLocalVarsArrayVariableRef( sval_u expr, scr_block_s *block )
 {
+	Scr_CalcLocalVarsArrayPrimitiveExpressionRef(expr, block);
+}
+
+/*
+============
+Scr_PopValue
+============
+*/
+void Scr_PopValue()
+{
+	assert(scrCompilePub.value_count);
+	scrCompilePub.value_count--;
+}
+
+/*
+============
+EvalIString
+============
+*/
+void EvalIString( unsigned int value, sval_u sourcePos, VariableCompileValue *constValue )
+{
+	assert(constValue);
 	constValue->value.type = VAR_ISTRING;
 	constValue->value.u.stringValue = value;
 	constValue->sourcePos = sourcePos;
 }
 
-void EmitGetUndefined(sval_u sourcePos)
+/*
+============
+EvalString
+============
+*/
+void EvalString( unsigned int value, sval_u sourcePos, VariableCompileValue *constValue )
 {
-	EmitOpcode(OP_GetUndefined, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+	assert(constValue);
+	constValue->value.type = VAR_STRING;
+	constValue->value.u.stringValue = value;
+	constValue->sourcePos = sourcePos;
 }
 
-void EmitGetString(unsigned int value, sval_u sourcePos)
+/*
+============
+Scr_InitFromChildBlocks
+============
+*/
+void Scr_InitFromChildBlocks( scr_block_s **childBlocks, int childCount, scr_block_s *block )
 {
-	EmitOpcode(OP_GetString, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	EmitShort(value);
-	CompileTransferRefToString(value, 1);
+	int localVarsCreateCount, childIndex, i;
+	scr_block_s *childBlock;
+	unsigned int name;
+
+	if ( !childCount )
+	{
+		return;
+	}
+
+	localVarsCreateCount = childBlocks[0]->localVarsPublicCount;
+
+	for ( childIndex = 1; childIndex < childCount; childIndex++ )
+	{
+		childBlock = childBlocks[childIndex];
+
+		if ( childBlock->localVarsPublicCount < localVarsCreateCount )
+		{
+			localVarsCreateCount = childBlock->localVarsPublicCount;
+		}
+	}
+
+	assert(block->localVarsCreateCount <= localVarsCreateCount);
+	assert(localVarsCreateCount <= block->localVarsCount);
+
+	block->localVarsCreateCount = localVarsCreateCount;
+
+	for ( i = 0; i < localVarsCreateCount; i++ )
+	{
+		assert(i < block->localVarsCount);
+
+		if ( !( ( 1 << ( i & 7 ) ) & block->localVarsInitBits[ i >> 3 ] ) )
+		{
+			name = block->localVars[i].name;
+
+			for ( childIndex = 0; childIndex < childCount; childIndex++ )
+			{
+				childBlock = childBlocks[childIndex];
+
+				assert(localVarsCreateCount <= childBlock->localVarsPublicCount);
+				assert(i < childBlock->localVarsPublicCount);
+				assert(childBlock->localVars[i].name == name);
+
+				if ( !( ( 1 << ( i & 7 ) ) & childBlock->localVarsInitBits[ i >> 3 ] ) )
+				{
+					goto out;
+				}
+			}
+
+			block->localVarsInitBits[ i >> 3 ] |= 1 << ( i & 7 );
+		}
+
+out:
+		;
+	}
 }
 
-void EmitGetIString(unsigned int value, sval_u sourcePos)
+/*
+============
+Scr_FindLocalVar
+============
+*/
+int Scr_FindLocalVar( scr_block_s *block, int startIndex, unsigned int name )
 {
-	EmitOpcode(OP_GetIString, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	EmitShort(value);
-	CompileTransferRefToString(value, 1);
+	for ( int i = startIndex; i < block->localVarsCount; i++ )
+	{
+		if ( block->localVars[i].name == name )
+		{
+			return i;
+		}
+	}
+
+	return -1;
 }
 
-void EmitGetVector(const float *value, sval_u sourcePos)
+/*
+============
+EvalFloat
+============
+*/
+void EvalFloat( float value, sval_u sourcePos, VariableCompileValue *constValue )
+{
+	assert(constValue);
+	constValue->value.type = VAR_FLOAT;
+	constValue->value.u.floatValue = value;
+	constValue->sourcePos = sourcePos;
+}
+
+/*
+============
+EvalInteger
+============
+*/
+void EvalInteger( int value, sval_u sourcePos, VariableCompileValue *constValue )
+{
+	assert(constValue);
+	constValue->value.type = VAR_INTEGER;
+	constValue->value.u.intValue = value;
+	constValue->sourcePos = sourcePos;
+}
+
+/*
+============
+EvalUndefined
+============
+*/
+void EvalUndefined( sval_u sourcePos, VariableCompileValue *constValue )
+{
+	assert(constValue);
+	constValue->value.type = VAR_UNDEFINED;
+	constValue->sourcePos = sourcePos;
+}
+
+/*
+============
+IsUndefinedExpression
+============
+*/
+bool IsUndefinedExpression( sval_u expr )
+{
+	if ( expr.node[0].type == ENUM_primitive_expression )
+	{
+		if ( IsUndefinedPrimitiveExpression( expr.node[1] ) )
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+============
+Scr_AppendChildBlocks
+============
+*/
+void Scr_AppendChildBlocks( scr_block_s **childBlocks, int childCount, scr_block_s *block )
+{
+	unsigned int name;
+	int childIndex, i;
+
+	if ( !childCount )
+	{
+		return;
+	}
+
+	if ( block->abortLevel != SCR_ABORT_NONE )
+	{
+		return;
+	}
+
+	for ( childIndex = 0; childIndex < childCount; childIndex++ )
+	{
+		childBlocks[childIndex]->abortLevel = SCR_ABORT_NONE;
+	}
+
+	for ( i = 0; i < childBlocks[0]->localVarsCount; i++ )
+	{
+		name = childBlocks[0]->localVars[i].name;
+
+		if ( Scr_FindLocalVar(block, 0, name) >= 0 )
+		{
+			continue;
+		}
+
+		for ( childIndex = 1; childIndex < childCount; childIndex++ )
+		{
+			if ( Scr_FindLocalVar(childBlocks[childIndex], 0, name) < 0 )
+			{
+				goto out;
+			}
+		}
+
+		block->localVars[block->localVarsCount].name = name;
+		block->localVarsCount++;
+out:
+		;
+	}
+}
+
+/*
+============
+AddExpressionListOpcodePos
+============
+*/
+void AddExpressionListOpcodePos( sval_u exprlist )
+{
+	if ( !scrVarPub.developer )
+	{
+		return;
+	}
+
+	for ( sval_u *node = exprlist.node[0].node; node; node = node[1].node )
+	{
+		AddOpcodePos( node[0].node[1].sourcePosValue, SOURCE_TYPE_NONE );
+	}
+}
+
+/*
+============
+EmitGetUndefined
+============
+*/
+void EmitGetUndefined( sval_u sourcePos )
+{
+	EmitOpcode( OP_GetUndefined, 1, CALL_NONE );
+	AddOpcodePos( sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT );
+}
+
+/*
+============
+Scr_CompileRemoveRefToString
+============
+*/
+void Scr_CompileRemoveRefToString( unsigned int stringValue )
+{
+	assert(stringValue);
+
+	if ( scrCompileGlob.bConstRefCount )
+	{
+		return;
+	}
+
+	SL_RemoveRefToString(stringValue);
+}
+
+/*
+============
+AddFilePrecache
+============
+*/
+unsigned int AddFilePrecache( unsigned int filename, unsigned int sourcePos, bool include )
+{
+	assert(scrCompileGlob.precachescriptList);
+
+	SL_AddRefToString(filename);
+	Scr_CompileRemoveRefToString(filename);
+
+	scrCompileGlob.precachescriptList->filename = filename;
+	scrCompileGlob.precachescriptList->sourcePos = sourcePos;
+	scrCompileGlob.precachescriptList->include = include;
+
+	scrCompileGlob.precachescriptList++;
+
+	return GetObjectA( GetVariable( scrCompilePub.scriptsPos, filename ) );
+}
+
+/*
+============
+CompileTransferRefToString
+============
+*/
+void CompileTransferRefToString( unsigned int stringValue, unsigned char user )
+{
+	assert(stringValue);
+
+	if ( scrCompilePub.developer_statement == SCR_DEV_IGNORE )
+	{
+		Scr_CompileRemoveRefToString(stringValue);
+		return;
+	}
+
+	if ( scrCompileGlob.bConstRefCount )
+	{
+		SL_AddRefToString(stringValue);
+	}
+
+	SL_TransferRefToUser(stringValue, user);
+}
+
+/*
+============
+EmitCaseStatementInfo
+============
+*/
+void EmitCaseStatementInfo( unsigned int name, sval_u sourcePos )
+{
+	CaseStatementInfo *newCaseStatement;
+
+	if ( scrCompilePub.developer_statement == SCR_DEV_IGNORE )
+	{
+		assert(!scrVarPub.developer_script);
+		return;
+	}
+
+	newCaseStatement = (CaseStatementInfo *)Hunk_AllocateTempMemoryHighInternal(sizeof(*newCaseStatement));
+
+	newCaseStatement->name = name;
+	newCaseStatement->codePos = (char *)TempMalloc(0);
+	newCaseStatement->sourcePos = sourcePos.sourcePosValue;
+	newCaseStatement->next = scrCompileGlob.currentCaseStatement;
+
+	scrCompileGlob.currentCaseStatement = newCaseStatement;
+}
+
+/*
+============
+EmitDefaultStatement
+============
+*/
+void EmitDefaultStatement( sval_u sourcePos )
+{
+	EmitCaseStatementInfo( 0, sourcePos );
+}
+
+/*
+============
+ConnectContinueStatements
+============
+*/
+void ConnectContinueStatements()
+{
+	const char *codePos = (char *)TempMalloc(0);
+
+	for ( ContinueStatementInfo *statement = scrCompileGlob.currentContinueStatement; statement; statement = statement->next )
+	{
+		*(intptr_t *)statement->codePos = codePos - statement->nextCodePos;
+	}
+}
+
+/*
+============
+ConnectBreakStatements
+============
+*/
+void ConnectBreakStatements()
+{
+	assert(!scrCompilePub.value_count);
+	const char *codePos = (char *)TempMalloc(0);
+
+	for ( BreakStatementInfo *statement = scrCompileGlob.currentBreakStatement; statement; statement = statement->next )
+	{
+		*(intptr_t *)statement->codePos = codePos - statement->nextCodePos;
+	}
+}
+
+/*
+============
+SetThreadPosition
+============
+*/
+void SetThreadPosition( unsigned int posId )
+{
+	VariableUnion *value;
+
+	value = GetVariableValueAddress( FindVariable( posId, 1 ) );
+	value->codePosValue = (char *)TempMalloc(0);
+}
+
+/*
+============
+Scr_BeginDevScript
+============
+*/
+void Scr_BeginDevScript( int *type, char **savedPos )
+{
+	if ( scrCompilePub.developer_statement != SCR_DEV_NO )
+	{
+		*type = BUILTIN_ANY;
+		return;
+	}
+
+	if ( scrVarPub.developer_script )
+	{
+		scrCompilePub.developer_statement = SCR_DEV_YES;
+		*type = BUILTIN_DEVELOPER_ONLY;
+		return;
+	}
+
+	*savedPos = (char *)TempMalloc(0);
+	scrCompilePub.developer_statement = SCR_DEV_IGNORE;
+	*type = BUILTIN_DEVELOPER_ONLY;
+}
+
+/*
+============
+AddFunction
+============
+*/
+int AddFunction( intptr_t func )
 {
 	int i;
 
+	for ( i = 0; i < scrCompilePub.func_table_size; i++ )
+	{
+		if ( scrCompilePub.func_table[i] == func )
+		{
+			return i;
+		}
+	}
+
+	assert(i == scrCompilePub.func_table_size);
+
+	if ( scrCompilePub.func_table_size == SCR_FUNC_TABLE_SIZE )
+	{
+		Com_Error(ERR_DROP, "SCR_FUNC_TABLE_SIZE exceeded");
+	}
+
+	scrCompilePub.func_table[scrCompilePub.func_table_size] = func;
+	scrCompilePub.func_table_size++;
+
+	return i;
+}
+
+/*
+============
+Scr_CopyBlock
+============
+*/
+void Scr_CopyBlock( scr_block_s *from, scr_block_s **to )
+{
+	if ( *to == NULL )
+	{
+		*to = (scr_block_s *)Hunk_AllocateTempMemoryHighInternal( sizeof( **to ) );
+	}
+
+	**to = *from;
+	to[0]->localVarsPublicCount = 0;
+}
+
+/*
+============
+Scr_CheckLocalVarsCount
+============
+*/
+void Scr_CheckLocalVarsCount( int localVarsCount )
+{
+	if ( localVarsCount < LOCAL_VAR_STACK_SIZE )
+	{
+		return;
+	}
+
+	Com_Error(ERR_DROP, "LOCAL_VAR_STACK_SIZE exceeded");
+}
+
+/*
+============
+Scr_CheckMaxSwitchCases
+============
+*/
+void Scr_CheckMaxSwitchCases( int count )
+{
+	if ( count < MAX_SWITCH_CASES )
+	{
+		return;
+	}
+
+	Com_Error(ERR_DROP, "MAX_SWITCH_CASES exceeded");
+}
+
+/*
+============
+EmitByte
+============
+*/
+void EmitByte( byte value )
+{
+	scrCompileGlob.codePos = (byte *)TempMalloc( sizeof( byte ) );
+	*(byte *)scrCompileGlob.codePos = value;
+}
+
+/*
+============
+EmitInclude
+============
+*/
+void EmitInclude( sval_u val )
+{
+	assert( val.node[0].type == ENUM_include );
+
+	unsigned int filename = Scr_CreateCanonicalFilename( SL_ConvertToString( val.node[1].stringValue ) );
+	Scr_CompileRemoveRefToString( val.node[1].stringValue );
+
+	AddFilePrecache( filename, val.node[2].sourcePosValue, true );
+}
+
+/*
+============
+Scr_AddContinueBlock
+============
+*/
+void Scr_AddContinueBlock( scr_block_s *block )
+{
+	if ( block->abortLevel )
+	{
+		return;
+	}
+
+	if ( !scrCompileGlob.continueChildBlocks )
+	{
+		return;
+	}
+
+	Scr_CheckMaxSwitchCases(*scrCompileGlob.continueChildCount);
+
+	scrCompileGlob.continueChildBlocks[*scrCompileGlob.continueChildCount] = block;
+	(*scrCompileGlob.continueChildCount)++;
+}
+
+/*
+============
+Scr_AddBreakBlock
+============
+*/
+void Scr_AddBreakBlock( scr_block_s *block )
+{
+	if ( block->abortLevel )
+	{
+		return;
+	}
+
+	if ( !scrCompileGlob.breakChildBlocks )
+	{
+		return;
+	}
+
+	Scr_CheckMaxSwitchCases(*scrCompileGlob.breakChildCount);
+
+	scrCompileGlob.breakChildBlocks[*scrCompileGlob.breakChildCount] = block;
+	(*scrCompileGlob.breakChildCount)++;
+}
+
+/*
+============
+Scr_EndDevScript
+============
+*/
+void Scr_EndDevScript( int type, char **savedPos )
+{
+	if ( type != BUILTIN_DEVELOPER_ONLY )
+	{
+		return;
+	}
+
+	assert(type == BUILTIN_DEVELOPER_ONLY);
+	scrCompilePub.developer_statement = SCR_DEV_NO;
+
+	if ( scrVarPub.developer_script )
+	{
+		return;
+	}
+
+	TempMemorySetPos(*savedPos);
+}
+
+/*
+============
+Scr_TransferBlock
+============
+*/
+void Scr_TransferBlock( scr_block_s *from, scr_block_s *to )
+{
+	unsigned int name;
+	int i, j;
+
+	assert(to->localVarsPublicCount <= from->localVarsCount);
+
+	for ( i = 0; i < to->localVarsPublicCount || i < from->localVarsCreateCount; i++ )
+	{
+		name = from->localVars[i].name;
+		j = Scr_FindLocalVar(to, i, name);
+
+		if ( j < 0 )
+		{
+			j = to->localVarsCount;
+
+			Scr_CheckLocalVarsCount(j);
+			to->localVarsCount++;
+		}
+
+		assert(to->localVarsPublicCount <= from->localVarsCount);
+
+		if ( j >= to->localVarsPublicCount )
+		{
+			to->localVarsPublicCount++;
+		}
+
+		while ( j > i )
+		{
+			to->localVars[j] = *(scr_localVar_t *)&to->localVarsInitBits[ sizeof( scr_localVar_t ) * j + sizeof( unsigned int ) ];
+			j--;
+		}
+
+		to->localVars[i].name = name;
+
+		if ( ( 1 << ( i & 7 ) ) & from->localVarsInitBits[ i >> 3 ] )
+		{
+			to->localVarsInitBits[ i >> 3] |= 1 << ( i & 7 );
+		}
+	}
+
+	assert(from->localVarsCreateCount <= to->localVarsPublicCount);
+
+	to->localVarsCreateCount = from->localVarsCreateCount;
+	to->abortLevel = SCR_ABORT_NONE;
+}
+
+/*
+============
+Scr_MergeChildBlocks
+============
+*/
+void Scr_MergeChildBlocks( scr_block_s **childBlocks, int childCount, scr_block_s *block )
+{
+	scr_block_s *childBlock;
+	unsigned int name;
+	int childIndex, i, j;
+
+	if ( !childCount )
+	{
+		return;
+	}
+
+	if ( block->abortLevel != SCR_ABORT_NONE )
+	{
+		return;
+	}
+
+	for ( childIndex = 0; childIndex < childCount; childIndex++ )
+	{
+		childBlock = childBlocks[childIndex];
+
+		assert(!childBlock->localVarsPublicCount);
+		childBlock->localVarsPublicCount = block->localVarsCount;
+
+		for ( i = 0; i < block->localVarsCount; i++ )
+		{
+			name = block->localVars[i].name;
+			j = Scr_FindLocalVar(childBlock, i, name);
+
+			if ( j < 0 )
+			{
+				j = childBlock->localVarsCount;
+
+				Scr_CheckLocalVarsCount(j);
+				childBlock->localVarsCount++;
+			}
+
+			while ( j > i )
+			{
+				childBlock->localVars[j] = *(scr_localVar_t *)&childBlock->localVarsInitBits[ sizeof( scr_localVar_t ) * j + sizeof( unsigned int ) ];
+				j--;
+			}
+
+			childBlock->localVars[i].name = name;
+		}
+	}
+}
+
+/*
+============
+Scr_RegisterLocalVar
+============
+*/
+void Scr_RegisterLocalVar( unsigned int name, sval_u sourcePos, scr_block_s *block )
+{
+	if ( block->abortLevel != SCR_ABORT_NONE )
+	{
+		return;
+	}
+
+	for ( int i = 0; i < block->localVarsCount; i++ )
+	{
+		if ( block->localVars[i].name == name )
+		{
+			return;
+		}
+	}
+
+	Scr_CheckLocalVarsCount(block->localVarsCount);
+
+	block->localVars[block->localVarsCount].name = name;
+	// block->localVars[block->localVarsCount].sourcePos = sourcePos.sourcePosValue;
+
+	block->localVarsCount++;
+}
+
+/*
+============
+EmitCodepos
+============
+*/
+void EmitCodepos( const char *pos )
+{
+	scrCompileGlob.codePos = (byte *)TempMallocAlign( sizeof( const char * ) );
+	*(const char **)scrCompileGlob.codePos = pos;
+}
+
+/*
+============
+EmitString
+============
+*/
+void EmitString( unsigned int value )
+{
+	scrCompileGlob.codePos = (byte *)TempMallocAlign( sizeof( unsigned short ) );
+	*(unsigned short *)scrCompileGlob.codePos = value;
+}
+
+/*
+============
+EmitFloat
+============
+*/
+void EmitFloat( float value )
+{
+	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict( sizeof( float ) );
+	*(float *)scrCompileGlob.codePos = value;
+}
+
+/*
+============
+EmitUnsignedShort
+============
+*/
+void EmitUnsignedShort( unsigned short value )
+{
+	scrCompileGlob.codePos = (byte *)TempMallocAlign( sizeof( unsigned short ) );
+	*(unsigned short *)scrCompileGlob.codePos = value;
+}
+
+/*
+============
+EmitShort
+============
+*/
+void EmitShort( short value )
+{
+	scrCompileGlob.codePos = (byte *)TempMallocAlign( sizeof( short ) );
+	*(short *)scrCompileGlob.codePos = value;
+}
+
+/*
+============
+EmitInteger
+============
+*/
+void EmitInteger( int value )
+{
+	scrCompileGlob.codePos = (byte *)TempMallocAlign( sizeof( int ) );
+	*(int *)scrCompileGlob.codePos = value;
+}
+
+/*
+============
+EmitCanonicalString
+============
+*/
+void EmitCanonicalString( unsigned int stringValue )
+{
+	assert(stringValue);
+	scrCompileGlob.codePos = (byte *)TempMallocAlign( sizeof( unsigned short ) );
+
+	if ( scrCompilePub.developer_statement == SCR_DEV_IGNORE )
+	{
+		assert(!scrVarPub.developer_script);
+		Scr_CompileRemoveRefToString(stringValue);
+		return;
+	}
+
+	if ( scrCompileGlob.bConstRefCount )
+	{
+		SL_AddRefToString(stringValue);
+	}
+
+	*(unsigned short *)scrCompileGlob.codePos = SL_TransferToCanonicalString(stringValue);
+}
+
+/*
+============
+EmitIncludeList
+============
+*/
+void EmitIncludeList( sval_u val )
+{
+	for ( sval_u *node = val.node[0].node[1].node; node; node = node[1].node )
+	{
+		EmitInclude(node[0]);
+	}
+}
+
+/*
+============
+Scr_CalcLocalVarsDeveloperStatementList
+============
+*/
+void Scr_CalcLocalVarsDeveloperStatementList( sval_u val, scr_block_s *block, sval_u *devStatBlock )
+{
+	Scr_CopyBlock( block, &devStatBlock->block );
+	Scr_CalcLocalVarsStatementList( val, devStatBlock->block );
+	Scr_MergeChildBlocks( &devStatBlock->block, 1, block );
+}
+
+/*
+============
+Scr_CalcLocalVarsSwitchStatement
+============
+*/
+void Scr_CalcLocalVarsSwitchStatement( sval_u stmtlist, scr_block_s *block )
+{
+	int childCount, breakChildCount;
+	int abortLevel = SCR_ABORT_RETURN;
+	bool hasDefault;
+	scr_block_s *currentBlock;
+	int *oldBreakChildCount;
+	scr_block_s **oldBreakChildBlocks, **breakChildBlocks, **childBlocks;
+	sval_u *node;
+
+	oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
+	oldBreakChildCount = scrCompileGlob.breakChildCount;
+
+	breakChildCount = 0;
+	breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+
+	scrCompileGlob.breakChildBlocks = breakChildBlocks;
+	scrCompileGlob.breakChildCount = &breakChildCount;
+
+	childCount = 0;
+	currentBlock = NULL;
+
+	hasDefault = false;
+	childBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+
+	for ( node = stmtlist.node[0].node[1].node; node; node = node[1].node )
+	{
+		if ( node[0].node[0].type == ENUM_case || node[0].node[0].type == ENUM_default )
+		{
+			currentBlock = NULL;
+			Scr_CopyBlock(block, &currentBlock);
+
+			if ( node[0].node[0].type == ENUM_case )
+			{
+				node[0].node[3].block = currentBlock;
+			}
+			else
+			{
+				node[0].node[2].block = currentBlock;
+				hasDefault = true;
+			}
+		}
+		else if ( currentBlock )
+		{
+			Scr_CalcLocalVarsStatement(node[0], currentBlock);
+
+			if ( currentBlock->abortLevel != SCR_ABORT_NONE )
+			{
+				if ( currentBlock->abortLevel == SCR_ABORT_BREAK )
+				{
+					currentBlock->abortLevel = SCR_ABORT_NONE;
+					abortLevel = SCR_ABORT_NONE;
+
+					Scr_CheckMaxSwitchCases(childCount);
+
+					childBlocks[childCount] = currentBlock;
+					childCount++;
+				}
+				else if ( currentBlock->abortLevel <= abortLevel )
+				{
+					abortLevel = currentBlock->abortLevel;
+				}
+
+				currentBlock = NULL;
+			}
+		}
+	}
+
+	if ( hasDefault )
+	{
+		if ( currentBlock )
+		{
+			Scr_AddBreakBlock(currentBlock);
+			Scr_CheckMaxSwitchCases(childCount);
+
+			childBlocks[childCount] = currentBlock;
+			childCount++;
+		}
+
+		if ( block->abortLevel == SCR_ABORT_NONE )
+		{
+			block->abortLevel = abortLevel;
+		}
+
+		Scr_AppendChildBlocks(breakChildBlocks, breakChildCount, block);
+		Scr_MergeChildBlocks(childBlocks, childCount, block);
+	}
+
+	scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
+	scrCompileGlob.breakChildCount = oldBreakChildCount;
+}
+
+/*
+============
+Scr_CalcLocalVarsIfElseStatement
+============
+*/
+void Scr_CalcLocalVarsIfElseStatement( sval_u stmt1, sval_u stmt2, scr_block_s *block, sval_u *ifStatBlock, sval_u *elseStatBlock )
+{
+	int childCount = 0, abortLevel = SCR_ABORT_RETURN;
+	scr_block_s *childBlocks[2];
+
+	Scr_CopyBlock(block, &ifStatBlock->block);
+	Scr_CalcLocalVarsStatement(stmt1, ifStatBlock->block);
+
+	if ( ifStatBlock->node[0].intValue <= SCR_ABORT_MAX )
+	{
+		abortLevel = ifStatBlock->node[0].intValue;
+
+		if ( abortLevel == SCR_ABORT_NONE )
+		{
+			childBlocks[0] = ifStatBlock->block;
+			childCount = 1;
+		}
+	}
+
+	Scr_CopyBlock(block, &elseStatBlock->block);
+	Scr_CalcLocalVarsStatement(stmt2, elseStatBlock->block);
+
+	if ( elseStatBlock->node[0].intValue <= abortLevel )
+	{
+		abortLevel = elseStatBlock->node[0].intValue;
+
+		if ( abortLevel == SCR_ABORT_NONE )
+		{
+			childBlocks[childCount] = elseStatBlock->block;
+			childCount++;
+		}
+	}
+
+	if ( block->abortLevel == SCR_ABORT_NONE )
+	{
+		block->abortLevel = abortLevel;
+	}
+
+	Scr_AppendChildBlocks(childBlocks, childCount, block);
+	Scr_MergeChildBlocks(childBlocks, childCount, block);
+}
+
+/*
+============
+Scr_CalcLocalVarsIfStatement
+============
+*/
+void Scr_CalcLocalVarsIfStatement( sval_u stmt, scr_block_s *block, sval_u *ifStatBlock )
+{
+	Scr_CopyBlock( block, &ifStatBlock->block );
+	Scr_CalcLocalVarsStatement( stmt, ifStatBlock->block );
+	Scr_MergeChildBlocks( &ifStatBlock->block, 1, block );
+}
+
+/*
+============
+EmitGetVector
+============
+*/
+void EmitGetVector( const vec3_t value, sval_u sourcePos )
+{
 	EmitOpcode(OP_GetVector, 1, CALL_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 
-	for ( i = 0; i < 3; ++i )
+	for ( int i = 0; i < 3; i++ )
+	{
 		EmitFloat(value[i]);
+	}
 
 	RemoveRefToVector(value);
 }
 
-void EmitGetFloat(float value, sval_u sourcePos)
+/*
+============
+EmitGetIString
+============
+*/
+void EmitGetIString( unsigned int value, sval_u sourcePos )
+{
+	EmitOpcode(OP_GetIString, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.stringValue, SOURCE_TYPE_BREAKPOINT);
+	EmitString(value);
+	CompileTransferRefToString(value, 1);
+}
+
+/*
+============
+EmitGetString
+============
+*/
+void EmitGetString( unsigned int value, sval_u sourcePos )
+{
+	EmitOpcode(OP_GetString, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.stringValue, 1);
+	EmitString(value);
+	CompileTransferRefToString(value, 1);
+}
+
+/*
+============
+Scr_CalcLocalVarsSafeSetVariableField
+============
+*/
+void Scr_CalcLocalVarsSafeSetVariableField( sval_u expr, sval_u sourcePos, scr_block_s *block )
+{
+	Scr_RegisterLocalVar(expr.idValue, sourcePos, block);
+}
+
+/*
+============
+EmitGetFloat
+============
+*/
+void EmitGetFloat( float value, sval_u sourcePos )
 {
 	EmitOpcode(OP_GetFloat, 1, CALL_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 	EmitFloat(value);
 }
 
-void EmitGetInteger(int value, sval_u sourcePos)
+/*
+============
+EmitGetInteger
+============
+*/
+void EmitGetInteger( int value, sval_u sourcePos )
 {
-	if ( value < 0 )
+	if ( value >= 0 )
 	{
-		if ( value > -256 )
-		{
-			EmitOpcode(OP_GetNegByte, 1, CALL_NONE);
-			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-			EmitByte(-(byte)value);
-			return;
-		}
-
-		if ( value > -65536 )
-		{
-			EmitOpcode(OP_GetNegUnsignedShort, 1, CALL_NONE);
-			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-			EmitShort(-(short)value);
-			return;
-		}
-	}
-	else
-	{
-		if ( !value )
+		if ( value == 0 )
 		{
 			EmitOpcode(OP_GetZero, 1, CALL_NONE);
 			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 			return;
 		}
 
-		if ( value < 256 )
+		if ( value <= UCHAR_MAX )
 		{
 			EmitOpcode(OP_GetByte, 1, CALL_NONE);
 			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
@@ -198,11 +1486,29 @@ void EmitGetInteger(int value, sval_u sourcePos)
 			return;
 		}
 
-		if ( value < 65536 )
+		if ( value <= USHRT_MAX )
 		{
 			EmitOpcode(OP_GetUnsignedShort, 1, CALL_NONE);
 			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-			EmitShort(value);
+			EmitUnsignedShort(value);
+			return;
+		}
+	}
+	else
+	{
+		if ( value >= -UCHAR_MAX )
+		{
+			EmitOpcode(OP_GetNegByte, 1, CALL_NONE);
+			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+			EmitByte(-value);
+			return;
+		}
+
+		if ( value >= -USHRT_MAX )
+		{
+			EmitOpcode(OP_GetNegUnsignedShort, 1, CALL_NONE);
+			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+			EmitUnsignedShort(-value);
 			return;
 		}
 	}
@@ -212,7 +1518,73 @@ void EmitGetInteger(int value, sval_u sourcePos)
 	EmitCodepos((const char *)value);
 }
 
-void EmitValue(VariableCompileValue *constValue)
+/*
+============
+EmitCanonicalStringConst
+============
+*/
+void EmitCanonicalStringConst( unsigned int stringValue )
+{
+	bool bConstRefCount = scrCompileGlob.bConstRefCount;
+	scrCompileGlob.bConstRefCount = true;
+
+	EmitCanonicalString(stringValue);
+	scrCompileGlob.bConstRefCount = bConstRefCount;
+}
+
+/*
+============
+Scr_CalcLocalVarsFormalParameterListInternal
+============
+*/
+void Scr_CalcLocalVarsFormalParameterListInternal( sval_u *node, scr_block_s *block )
+{
+	while ( 1 )
+	{
+		node = node[1].node;
+
+		if ( !node )
+		{
+			break;
+		}
+
+		Scr_CalcLocalVarsSafeSetVariableField(node[0].node[0], node[0].node[1], block);
+	}
+}
+
+/*
+============
+Scr_CalcLocalVarsVariableExpressionRef
+============
+*/
+void Scr_CalcLocalVarsVariableExpressionRef( sval_u expr, scr_block_s *block )
+{
+	if ( expr.node[0].type == ENUM_local_variable )
+	{
+		Scr_CalcLocalVarsSafeSetVariableField(expr.node[1], expr.node[2], block);
+	}
+	else if ( expr.node[0].type == ENUM_array_variable )
+	{
+		Scr_CalcLocalVarsArrayVariableRef(expr.node[1], block);
+	}
+}
+
+/*
+============
+Scr_CalcLocalVarsBinaryEqualsOperatorExpression
+============
+*/
+void Scr_CalcLocalVarsBinaryEqualsOperatorExpression( sval_u expr, scr_block_s *block )
+{
+	Scr_CalcLocalVarsVariableExpressionRef(expr, block);
+}
+
+/*
+============
+EmitValue
+============
+*/
+void EmitValue( VariableCompileValue *constValue )
 {
 	switch ( constValue->value.type )
 	{
@@ -245,738 +1617,1076 @@ void EmitValue(VariableCompileValue *constValue)
 	}
 }
 
-void EmitOpcode(unsigned int op, int offset, int callType)
+/*
+============
+EmitOpcode
+============
+*/
+void EmitOpcode( unsigned int op, int offset, int callType )
 {
 	unsigned int index;
-	int count;
-	int i;
+	int value_count, valueIndex;
 
 	if ( scrCompilePub.value_count )
 	{
-		count = scrCompilePub.value_count;
+		value_count = scrCompilePub.value_count;
 		scrCompilePub.value_count = 0;
 
-		for ( i = 0; i < count; ++i )
+		for ( valueIndex = 0; valueIndex < value_count; valueIndex++ )
 		{
-			EmitValue(&scrCompileGlob.value_start[i]);
+			EmitValue(&scrCompileGlob.value_start[valueIndex]);
 		}
 	}
 
-	scrCompilePub.allowedBreakpoint = 0;
+	scrCompilePub.allowedBreakpoint = false;
 
 	if ( !scrCompileGlob.cumulOffset || callType == CALL_THREAD || callType == CALL_FUNCTION )
-		scrCompilePub.allowedBreakpoint = 1;
+	{
+		scrCompilePub.allowedBreakpoint = true;
+	}
 
 	scrCompileGlob.cumulOffset += offset;
 
 	if ( scrCompileGlob.maxOffset < scrCompileGlob.cumulOffset )
+	{
 		scrCompileGlob.maxOffset = scrCompileGlob.cumulOffset;
+	}
 
-	if ( callType && scrCompileGlob.maxCallOffset < scrCompileGlob.cumulOffset )
+	if ( callType != CALL_NONE && scrCompileGlob.maxCallOffset < scrCompileGlob.cumulOffset )
+	{
 		scrCompileGlob.maxCallOffset = scrCompileGlob.cumulOffset;
+	}
 
 	scrVarPub.checksum *= 31;
 	scrVarPub.checksum += op;
 
-	if ( scrCompilePub.opcodePos )
+	if ( !scrCompilePub.opcodePos )
 	{
-		scrCompileGlob.codePos = scrCompilePub.opcodePos;
-
-		switch ( op )
-		{
-		case OP_EvalArray:
-			if ( *scrCompilePub.opcodePos == OP_EvalLocalVariableCached )
-			{
-				RemoveOpcodePos();
-				*scrCompilePub.opcodePos = OP_EvalLocalArrayCached;
-				return;
-			}
-			index = (byte)*scrCompilePub.opcodePos - OP_EvalLocalVariableCached0;
-			if ( index > OP_GetNegByte )
-				goto setopcodepos;
-			RemoveOpcodePos();
-			*scrCompilePub.opcodePos = OP_EvalLocalArrayCached;
-			EmitByte(index);
-			return;
-
-		case OP_EvalArrayRef:
-			if ( *scrCompilePub.opcodePos == OP_EvalLocalVariableRefCached )
-			{
-				RemoveOpcodePos();
-				*scrCompilePub.opcodePos = OP_EvalLocalArrayRefCached;
-				return;
-			}
-			if ( *scrCompilePub.opcodePos != OP_EvalLocalVariableRefCached0 )
-				goto setopcodepos;
-			RemoveOpcodePos();
-			*scrCompilePub.opcodePos = OP_EvalLocalArrayRefCached0;
-			return;
-
-		case OP_EvalFieldVariable:
-			if ( *scrCompilePub.opcodePos == OP_GetSelfObject )
-			{
-				*scrCompilePub.opcodePos = OP_EvalSelfFieldVariable;
-				return;
-			}
-			if ( *scrCompilePub.opcodePos == OP_GetLevelObject )
-			{
-				*scrCompilePub.opcodePos = OP_EvalLevelFieldVariable;
-				return;
-			}
-			if ( *scrCompilePub.opcodePos != OP_GetAnimObject )
-				goto setopcodepos;
-			*scrCompilePub.opcodePos = OP_EvalAnimFieldVariable;
-			return;
-
-		case OP_EvalFieldVariableRef:
-			if ( *scrCompilePub.opcodePos == OP_GetSelfObject )
-			{
-				*scrCompilePub.opcodePos = OP_EvalSelfFieldVariableRef;
-				return;
-			}
-			if ( *scrCompilePub.opcodePos == OP_GetLevelObject )
-			{
-				*scrCompilePub.opcodePos = OP_EvalLevelFieldVariableRef;
-				return;
-			}
-			if ( *scrCompilePub.opcodePos != OP_GetAnimObject )
-				goto setopcodepos;
-			*scrCompilePub.opcodePos = OP_EvalAnimFieldVariableRef;
-			return;
-
-		case OP_SafeSetVariableFieldCached0:
-			if ( *scrCompilePub.opcodePos != OP_CreateLocalVariable )
-				goto setopcodepos;
-			*scrCompilePub.opcodePos = OP_SafeCreateVariableFieldCached;
-			return;
-
-		case OP_SetVariableField:
-			switch ( *scrCompilePub.opcodePos )
-			{
-			case OP_EvalLocalVariableRefCached:
-				RemoveOpcodePos();
-				*scrCompilePub.opcodePos = OP_SetLocalVariableFieldCached;
-				return;
-			case OP_EvalLocalVariableRefCached0:
-				RemoveOpcodePos();
-				*scrCompilePub.opcodePos = OP_SetLocalVariableFieldCached0;
-				return;
-			case OP_EvalSelfFieldVariableRef:
-				RemoveOpcodePos();
-				*scrCompilePub.opcodePos = OP_SetSelfFieldVariableField;
-				return;
-			case OP_EvalLevelFieldVariableRef:
-				RemoveOpcodePos();
-				*scrCompilePub.opcodePos = OP_SetLevelFieldVariableField;
-				return;
-			}
-			if ( *scrCompilePub.opcodePos != OP_EvalAnimFieldVariableRef )
-				goto setopcodepos;
-			RemoveOpcodePos();
-			*scrCompilePub.opcodePos = OP_SetAnimFieldVariableField;
-			return;
-
-		case OP_ScriptFunctionCall:
-			if ( *scrCompilePub.opcodePos != OP_PreScriptCall )
-				goto setopcodepos;
-			*scrCompilePub.opcodePos = OP_ScriptFunctionCall2;
-			return;
-
-		case OP_ScriptMethodCall:
-			if ( *scrCompilePub.opcodePos != OP_GetSelf )
-				goto setopcodepos;
-			RemoveOpcodePos();
-			*scrCompilePub.opcodePos = OP_ScriptFunctionCall;
-			if ( *scrCompileGlob.prevOpcodePos == OP_PreScriptCall )
-			{
-				TempMemorySetPos(scrCompilePub.opcodePos);
-				--scrCompilePub.opcodePos;
-				scrCompileGlob.prevOpcodePos = 0;
-				scrCompileGlob.codePos = scrCompilePub.opcodePos;
-				*scrCompilePub.opcodePos = OP_ScriptFunctionCall2;
-			}
-			return;
-
-		case OP_ScriptMethodThreadCall:
-			if ( *scrCompilePub.opcodePos != OP_GetSelf )
-				goto setopcodepos;
-			RemoveOpcodePos();
-			*scrCompilePub.opcodePos = OP_ScriptThreadCall;
-			return;
-
-		case OP_CastFieldObject:
-			if ( *scrCompilePub.opcodePos == OP_EvalLocalVariableCached )
-			{
-				*scrCompilePub.opcodePos = OP_EvalLocalVariableObjectCached;
-				return;
-			}
-			index = (byte)*scrCompilePub.opcodePos - OP_EvalLocalVariableCached0;
-			if ( index > OP_GetNegByte )
-				goto setopcodepos;
-			*scrCompilePub.opcodePos = OP_EvalLocalVariableObjectCached;
-			EmitByte(index);
-			return;
-
-		case OP_JumpOnFalse:
-			if ( *scrCompilePub.opcodePos != OP_BoolNot )
-				goto setopcodepos;
-			RemoveOpcodePos();
-			*scrCompilePub.opcodePos = OP_JumpOnTrue;
-			return;
-
-		default:
-			goto setopcodepos;
-		}
-	}
-	else
-	{
-setopcodepos:
 		scrCompileGlob.prevOpcodePos = scrCompilePub.opcodePos;
-		scrCompilePub.opcodePos = (char *)TempMalloc(sizeof(byte));
+		scrCompilePub.opcodePos = (byte *)TempMalloc( sizeof( byte ) );
 		scrCompileGlob.codePos = scrCompilePub.opcodePos;
 		*scrCompilePub.opcodePos = op;
+		return;
 	}
-}
 
-void LinkThread(unsigned int threadCountId, VariableValue *pos, bool allowFarCall)
-{
-	VariableValue tempValue;
-	int type;
-	int i;
-	int valueId;
-	VariableValueInternal_u *value;
-	unsigned int countId;
+	scrCompileGlob.codePos = scrCompilePub.opcodePos;
 
-	countId = FindVariable(threadCountId, 0);
-
-	if ( countId )
+	switch ( op )
 	{
-		Scr_EvalVariable(&tempValue, countId);
-
-		for ( i = 0; i < tempValue.u.intValue; ++i )
+	case OP_EvalArray:
+		if ( *scrCompilePub.opcodePos == OP_EvalLocalVariableCached )
 		{
-			valueId = FindVariable(threadCountId, i + 2);
-			value = GetVariableValueAddress_Bad(valueId);
-			type = GetValueType(valueId);
-
-			if ( pos->type == VAR_DEVELOPER_CODEPOS && type == VAR_CODEPOS )
-				CompileError2(value->u.codePosValue, "normal script cannot reference a function in a /# ... #/ comment");
-
-			if ( pos->type == VAR_UNDEFINED )
-				CompileError2(value->u.codePosValue, "unknown function");
-
-			if ( !allowFarCall && value->u.stackValue->pos == (const char *)1 )
-				CompileError2(value->u.codePosValue, "unknown function");
-
-			value->u.stackValue->pos = pos->u.codePosValue;
-		}
-	}
-}
-
-void LinkFile(unsigned int filePosId)
-{
-	VariableValue pos;
-	VariableValue emptyValue;
-	unsigned int nameId;
-	unsigned int threadCountId;
-	unsigned int threadCountPtr;
-
-	emptyValue.type = VAR_UNDEFINED;
-	emptyValue.u.intValue = 0;
-
-	for ( threadCountPtr = FindNextSibling(filePosId); threadCountPtr; threadCountPtr = FindNextSibling(threadCountPtr) )
-	{
-		threadCountId = FindObject(threadCountPtr);
-		nameId = FindVariable(threadCountId, 1);
-
-		if ( nameId )
-		{
-			Scr_EvalVariable(&pos, nameId);
-
-			if ( pos.type == VAR_INCLUDE_CODEPOS )
-				SetVariableValue(threadCountPtr, &emptyValue);
-			else
-				LinkThread(threadCountId, &pos, 1);
-		}
-		else
-		{
-			LinkThread(threadCountId, &emptyValue, 1);
-		}
-	}
-}
-
-unsigned int AddFilePrecache(unsigned int filename, unsigned int sourcePos, bool include)
-{
-	SL_AddRefToString(filename);
-	Scr_CompileRemoveRefToString(filename);
-	scrCompileGlob.precachescriptList->filename = filename;
-	scrCompileGlob.precachescriptList->sourcePos = sourcePos;
-	scrCompileGlob.precachescriptList->include = include;
-	++scrCompileGlob.precachescriptList;
-
-	return GetObjectA(GetVariable(scrCompilePub.scriptsPos, filename));
-}
-
-void EmitInclude(sval_u val)
-{
-	unsigned int filename;
-
-	filename = Scr_CreateCanonicalFilename(SL_ConvertToString(val.node[1].stringValue));
-	Scr_CompileRemoveRefToString(val.node[1].stringValue);
-	AddFilePrecache(filename, val.node[2].sourcePosValue, 1);
-}
-
-void EmitIncludeList(sval_u val)
-{
-	sval_u *node;
-
-	for ( node = val.node->node[1].node; node; node = node[1].node )
-		EmitInclude(node[0]);
-}
-
-unsigned int SpecifyThreadPosition(unsigned int posId, unsigned int name, unsigned int sourcePos, int type)
-{
-	unsigned int buffer;
-	unsigned int id;
-	VariableValue pos;
-
-	id = GetVariable(posId, 1);
-	Scr_EvalVariable(&pos, id);
-
-	if ( pos.type )
-	{
-		if ( pos.u.intValue )
-		{
-			buffer = Scr_GetSourceBuffer(pos.u.codePosValue);
-			CompileError(sourcePos, "function '%s' already defined in '%s'", SL_ConvertToString(name), scrParserPub.sourceBufferLookup[buffer].buf);
-		}
-		else
-		{
-			CompileError(sourcePos, "function '%s' already defined", SL_ConvertToString(name));
-		}
-		return 0;
-	}
-	else
-	{
-		pos.type = type;
-		pos.u.intValue = 0;
-		SetNewVariableValue(id, &pos);
-		return id;
-	}
-}
-
-void SpecifyThread(sval_u val)
-{
-	unsigned int var;
-	sval_u node;
-	int type;
-	unsigned int posId;
-
-	node.type = val.node->type;
-
-	if ( val.node->type == ENUM_begin_developer_thread )
-	{
-		if ( scrCompileGlob.in_developer_thread )
-		{
-			CompileError(val.node[1].sourcePosValue, "cannot recurse /#");
-		}
-		else
-		{
-			scrCompileGlob.in_developer_thread = 1;
-			scrCompileGlob.developer_thread_sourcePos = val.node[1].sourcePosValue;
-		}
-	}
-	else if ( node.type > ENUM_begin_developer_thread )
-	{
-		if ( node.type == ENUM_end_developer_thread )
-		{
-			if ( scrCompileGlob.in_developer_thread )
-				scrCompileGlob.in_developer_thread = 0;
-			else
-				CompileError(val.node[1].sourcePosValue, "#/ has no matching /#");
-		}
-	}
-	else if ( node.type == ENUM_thread && (!scrCompileGlob.in_developer_thread || scrVarPub.developer_script) )
-	{
-		var = GetVariable(scrCompileGlob.filePosId, val.node[1].idValue);
-		posId = GetObjectA(var);
-
-		if ( scrCompileGlob.in_developer_thread )
-
-			type = VAR_DEVELOPER_CODEPOS;
-		else
-			type = VAR_CODEPOS;
-
-		SpecifyThreadPosition(posId, val.node[1].sourcePosValue, val.node[4].sourcePosValue, type);
-	}
-}
-
-void Scr_CheckLocalVarsCount(int localVarsCount)
-{
-	if ( localVarsCount > 63 )
-		Com_Error(ERR_DROP, "LOCAL_VAR_STACK_SIZE exceeded");
-}
-
-void Scr_RegisterLocalVar(unsigned int name, sval_u sourcePos, scr_block_s *block)
-{
-	int i;
-
-	if ( !block->abortLevel )
-	{
-		for ( i = 0; i < block->localVarsCount; ++i )
-		{
-			if ( block->localVars[i] == name )
-				return;
+			RemoveOpcodePos();
+			*scrCompilePub.opcodePos = OP_EvalLocalArrayCached;
+			return;
 		}
 
-		Scr_CheckLocalVarsCount(block->localVarsCount);
-		block->localVars[block->localVarsCount++] = name;
-	}
-}
+		index = *scrCompilePub.opcodePos - OP_EvalLocalVariableCached0;
 
-int Scr_FindLocalVar(scr_block_s *block, int startIndex, unsigned int name)
-{
-	while ( startIndex < block->localVarsCount )
-	{
-		if ( block->localVars[startIndex] == name )
-			return startIndex;
-
-		++startIndex;
-	}
-
-	return -1;
-}
-
-void Scr_CalcLocalVarsSafeSetVariableField(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	Scr_RegisterLocalVar(expr.sourcePosValue, sourcePos, block);
-}
-
-void Scr_CalcLocalVarsFormalParameterListInternal(sval_u *node, scr_block_s *block)
-{
-	while ( 1 )
-	{
-		node = node[1].node;
-
-		if ( !node )
+		if ( index > OP_GetNegByte )
+		{
 			break;
+		}
 
-		Scr_CalcLocalVarsSafeSetVariableField(node->node[0], node->node[1], block);
+		RemoveOpcodePos();
+		*scrCompilePub.opcodePos = OP_EvalLocalArrayCached;
+		EmitByte(index);
+		return;
+
+	case OP_EvalArrayRef:
+		if ( *scrCompilePub.opcodePos == OP_EvalLocalVariableRefCached )
+		{
+			RemoveOpcodePos();
+			*scrCompilePub.opcodePos = OP_EvalLocalArrayRefCached;
+			return;
+		}
+
+		if ( *scrCompilePub.opcodePos != OP_EvalLocalVariableRefCached0 )
+		{
+			break;
+		}
+
+		RemoveOpcodePos();
+		*scrCompilePub.opcodePos = OP_EvalLocalArrayRefCached0;
+		return;
+
+	case OP_EvalFieldVariable:
+		if ( *scrCompilePub.opcodePos == OP_GetSelfObject )
+		{
+			*scrCompilePub.opcodePos = OP_EvalSelfFieldVariable;
+			return;
+		}
+
+		if ( *scrCompilePub.opcodePos == OP_GetLevelObject )
+		{
+			*scrCompilePub.opcodePos = OP_EvalLevelFieldVariable;
+			return;
+		}
+
+		if ( *scrCompilePub.opcodePos != OP_GetAnimObject )
+		{
+			break;
+		}
+
+		*scrCompilePub.opcodePos = OP_EvalAnimFieldVariable;
+		return;
+
+	case OP_EvalFieldVariableRef:
+		if ( *scrCompilePub.opcodePos == OP_GetSelfObject )
+		{
+			*scrCompilePub.opcodePos = OP_EvalSelfFieldVariableRef;
+			return;
+		}
+
+		if ( *scrCompilePub.opcodePos == OP_GetLevelObject )
+		{
+			*scrCompilePub.opcodePos = OP_EvalLevelFieldVariableRef;
+			return;
+		}
+
+		if ( *scrCompilePub.opcodePos != OP_GetAnimObject )
+		{
+			break;
+		}
+
+		*scrCompilePub.opcodePos = OP_EvalAnimFieldVariableRef;
+		return;
+
+	case OP_SafeSetVariableFieldCached0:
+		if ( *scrCompilePub.opcodePos != OP_CreateLocalVariable )
+		{
+			break;
+		}
+
+		*scrCompilePub.opcodePos = OP_SafeCreateVariableFieldCached;
+		return;
+
+	case OP_SetVariableField:
+		switch ( *scrCompilePub.opcodePos )
+		{
+		case OP_EvalLocalVariableRefCached:
+			RemoveOpcodePos();
+			*scrCompilePub.opcodePos = OP_SetLocalVariableFieldCached;
+			return;
+
+		case OP_EvalLocalVariableRefCached0:
+			RemoveOpcodePos();
+			*scrCompilePub.opcodePos = OP_SetLocalVariableFieldCached0;
+			return;
+
+		case OP_EvalSelfFieldVariableRef:
+			RemoveOpcodePos();
+			*scrCompilePub.opcodePos = OP_SetSelfFieldVariableField;
+			return;
+
+		case OP_EvalLevelFieldVariableRef:
+			RemoveOpcodePos();
+			*scrCompilePub.opcodePos = OP_SetLevelFieldVariableField;
+			return;
+		}
+
+		if ( *scrCompilePub.opcodePos != OP_EvalAnimFieldVariableRef )
+		{
+			break;
+		}
+
+		RemoveOpcodePos();
+		*scrCompilePub.opcodePos = OP_SetAnimFieldVariableField;
+		return;
+
+	case OP_ScriptFunctionCall:
+		if ( *scrCompilePub.opcodePos != OP_PreScriptCall )
+		{
+			break;
+		}
+
+		*scrCompilePub.opcodePos = OP_ScriptFunctionCall2;
+		return;
+
+	case OP_ScriptMethodCall:
+		if ( *scrCompilePub.opcodePos != OP_GetSelf )
+		{
+			break;
+		}
+
+		RemoveOpcodePos();
+		*scrCompilePub.opcodePos = OP_ScriptFunctionCall;
+		assert(scrCompileGlob.prevOpcodePos);
+
+		if ( *scrCompileGlob.prevOpcodePos != OP_PreScriptCall )
+		{
+			return;
+		}
+
+		assert(scrCompilePub.opcodePos == (byte *)TempMalloc( 0 ) - 1);
+		TempMemorySetPos((char*)scrCompilePub.opcodePos);
+		--scrCompilePub.opcodePos;
+		scrCompileGlob.prevOpcodePos = NULL;
+		scrCompileGlob.codePos = scrCompilePub.opcodePos;
+		*scrCompilePub.opcodePos = OP_ScriptFunctionCall2;
+		return;
+
+	case OP_ScriptMethodThreadCall:
+		if ( *scrCompilePub.opcodePos != OP_GetSelf )
+		{
+			break;
+		}
+
+		RemoveOpcodePos();
+		*scrCompilePub.opcodePos = OP_ScriptThreadCall;
+		return;
+
+	case OP_CastFieldObject:
+		if ( *scrCompilePub.opcodePos == OP_EvalLocalVariableCached )
+		{
+			*scrCompilePub.opcodePos = OP_EvalLocalVariableObjectCached;
+			return;
+		}
+
+		index = *scrCompilePub.opcodePos - OP_EvalLocalVariableCached0;
+
+		if ( index > OP_GetNegByte )
+		{
+			break;
+		}
+
+		*scrCompilePub.opcodePos = OP_EvalLocalVariableObjectCached;
+		EmitByte(index);
+		return;
+
+	case OP_JumpOnFalse:
+		if ( *scrCompilePub.opcodePos != OP_BoolNot )
+		{
+			break;
+		}
+
+		RemoveOpcodePos();
+		*scrCompilePub.opcodePos = OP_JumpOnTrue;
+		return;
 	}
+
+	scrCompileGlob.prevOpcodePos = scrCompilePub.opcodePos;
+	scrCompilePub.opcodePos = (byte *)TempMalloc( sizeof( byte ) );
+	scrCompileGlob.codePos = scrCompilePub.opcodePos;
+	*scrCompilePub.opcodePos = op;
 }
 
-void Scr_CalcLocalVarsWaittillStatement(sval_u exprlist, scr_block_s *block)
+/*
+============
+Scr_CalcLocalVarsFormalParameterList
+============
+*/
+void Scr_CalcLocalVarsFormalParameterList( sval_u exprlist, scr_block_s *block )
 {
-	Scr_CalcLocalVarsFormalParameterListInternal(exprlist.node->node[1].node, block);
+	Scr_CalcLocalVarsFormalParameterListInternal(exprlist.node[0].node, block);
 }
 
-void Scr_CalcLocalVarsFormalParameterList(sval_u exprlist, scr_block_s *block)
+/*
+============
+EmitProfStatement
+============
+*/
+void EmitProfStatement( sval_u profileName, sval_u sourcePos, unsigned char op )
 {
-	Scr_CalcLocalVarsFormalParameterListInternal(exprlist.node->node, block);
-}
-
-void Scr_CalcLocalVarsArrayVariableRef(sval_u expr, scr_block_s *block)
-{
-	Scr_CalcLocalVarsArrayPrimitiveExpressionRef(expr, block);
-}
-
-void Scr_CalcLocalVarsVariableExpressionRef(sval_u expr, scr_block_s *block)
-{
-	if ( expr.node->type == ENUM_local_variable )
+	if ( !scrVarPub.developer_script )
 	{
-		Scr_CalcLocalVarsSafeSetVariableField(expr.node[1], expr.node[2], block);
+		Scr_CompileRemoveRefToString(profileName.stringValue);
+		return;
 	}
-	else if ( expr.node->type == ENUM_array_variable )
-	{
-		Scr_CalcLocalVarsArrayVariableRef(expr.node[1], block);
-	}
+
+	Scr_CompileRemoveRefToString(profileName.stringValue);
+	EmitOpcode(op, 0, CALL_NONE);
+	EmitByte(0);
 }
 
-void Scr_CalcLocalVarsAssignmentStatement(sval_u lhs, sval_u rhs, scr_block_s *block)
+/*
+============
+Scr_CalcLocalVarsWaittillStatement
+============
+*/
+void Scr_CalcLocalVarsWaittillStatement( sval_u exprlist, scr_block_s *block )
+{
+	Scr_CalcLocalVarsFormalParameterListInternal(exprlist.node[0].node[1].node, block);
+}
+
+/*
+============
+Scr_CalcLocalVarsIncStatement
+============
+*/
+void Scr_CalcLocalVarsIncStatement( sval_u expr, scr_block_s *block )
+{
+	Scr_CalcLocalVarsVariableExpressionRef(expr, block);
+}
+
+/*
+============
+EmitWaittillFrameEnd
+============
+*/
+void EmitWaittillFrameEnd( sval_u sourcePos )
+{
+	EmitOpcode(OP_waittillFrameEnd, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+Scr_CalcLocalVarsAssignmentStatement
+============
+*/
+void Scr_CalcLocalVarsAssignmentStatement( sval_u lhs, sval_u rhs, scr_block_s *block )
 {
 	Scr_CalcLocalVarsVariableExpressionRef(lhs, block);
 }
 
-void Scr_CalcLocalVarsArrayPrimitiveExpressionRef(sval_u expr, scr_block_s *block)
+/*
+============
+EmitPrimitiveExpression
+============
+*/
+void EmitPrimitiveExpression( sval_u expr, scr_block_s *block )
 {
-	if ( expr.node->type == ENUM_variable )
-		Scr_CalcLocalVarsVariableExpressionRef(expr.node[1], block);
+	VariableCompileValue constValue;
+
+	if ( EmitOrEvalPrimitiveExpression(expr, &constValue, block) )
+	{
+		EmitValue(&constValue);
+	}
 }
 
-void Scr_CopyBlock(scr_block_s *from, scr_block_s **to)
+/*
+============
+EmitCallBuiltinMethodOpcode
+============
+*/
+void EmitCallBuiltinMethodOpcode( int param_count, sval_u sourcePos )
 {
-	if ( !*to )
-		*to = (scr_block_s *)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s));
+	unsigned int opcode;
 
-	memcpy(*to, from, sizeof(scr_block_s));
-	(*to)->localVarsPublicCount = 0;
+	if ( param_count > 5 )
+		opcode = OP_CallBuiltinMethod;
+	else
+		opcode = OP_CallBuiltinMethod0 + param_count;
+
+	EmitOpcode(opcode, -param_count, CALL_BUILTIN);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+
+	if ( opcode == OP_CallBuiltinMethod )
+	{
+		EmitByte(param_count);
+	}
 }
 
-void Scr_MergeChildBlocks(scr_block_s **childBlocks, int childCount, scr_block_s *block)
+/*
+============
+EmitCallBuiltinOpcode
+============
+*/
+void EmitCallBuiltinOpcode( int param_count, sval_u sourcePos )
 {
-	scr_block_s *childBlock;
+	unsigned int opcode;
+
+	if ( param_count > 5 )
+		opcode = OP_CallBuiltin;
+	else
+		opcode = OP_CallBuiltin0 + param_count;
+
+	EmitOpcode(opcode, 1 - param_count, CALL_BUILTIN);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+
+	if ( opcode == OP_CallBuiltin )
+	{
+		EmitByte(param_count);
+	}
+}
+
+/*
+============
+EmitPreFunctionCall
+============
+*/
+void EmitPreFunctionCall( sval_u func_name )
+{
+	if ( func_name.node[0].type == ENUM_script_call )
+	{
+		EmitOpcode(OP_PreScriptCall, 1, CALL_NONE);
+	}
+}
+
+/*
+============
+EmitPostScriptThreadPointer
+============
+*/
+void EmitPostScriptThreadPointer( sval_u expr, int param_count, bool bMethod, sval_u sourcePos, scr_block_s *block )
+{
+	EmitExpression(expr, block);
+
+	if ( bMethod )
+		EmitOpcode(OP_ScriptMethodThreadCallPointer, -param_count - 1, CALL_THREAD);
+	else
+		EmitOpcode(OP_ScriptThreadCallPointer, -param_count, CALL_THREAD);
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+	EmitCodepos((const char *)param_count);
+}
+
+/*
+============
+EmitPostScriptFunctionPointer
+============
+*/
+void EmitPostScriptFunctionPointer( sval_u expr, int param_count, bool bMethod, sval_u nameSourcePos, sval_u sourcePos, scr_block_s *block )
+{
+	EmitExpression(expr, block);
+
+	if ( bMethod )
+		EmitOpcode(OP_ScriptMethodCallPointer, -param_count - 2, CALL_FUNCTION);
+	else
+		EmitOpcode(OP_ScriptFunctionCallPointer, -param_count - 1, CALL_FUNCTION);
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(nameSourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitCastFieldObject
+============
+*/
+void EmitCastFieldObject( sval_u sourcePos )
+{
+	EmitOpcode(OP_CastFieldObject, -1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitDecTop
+============
+*/
+void EmitDecTop()
+{
+	EmitOpcode(OP_DecTop, -1, CALL_NONE);
+}
+
+/*
+============
+EmitEmptyArray
+============
+*/
+void EmitEmptyArray( sval_u sourcePos )
+{
+	EmitOpcode(OP_EmptyArray, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitClearArray
+============
+*/
+void EmitClearArray( sval_u sourcePos, sval_u indexSourcePos )
+{
+	EmitOpcode(OP_ClearArray, -1, CALL_NONE);
+	AddOpcodePos(indexSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitEvalArrayRef
+============
+*/
+void EmitEvalArrayRef( sval_u sourcePos, sval_u indexSourcePos )
+{
+	EmitOpcode(OP_EvalArrayRef, -1, CALL_NONE);
+	AddOpcodePos(indexSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitEvalArray
+============
+*/
+void EmitEvalArray( sval_u sourcePos, sval_u indexSourcePos )
+{
+	EmitOpcode(OP_EvalArray, -1, CALL_NONE);
+	AddOpcodePos(indexSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitGameRef
+============
+*/
+void EmitGameRef( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetGameRef, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitAnimObject
+============
+*/
+void EmitAnimObject( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetAnimObject, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitLevelObject
+============
+*/
+void EmitLevelObject( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetLevelObject, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitSelfObject
+============
+*/
+void EmitSelfObject( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetSelfObject, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitAnim
+============
+*/
+void EmitAnim( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetAnim, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitGame
+============
+*/
+void EmitGame( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetGame, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitLevel
+============
+*/
+void EmitLevel( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetLevel, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitSelf
+============
+*/
+void EmitSelf( sval_u sourcePos )
+{
+	EmitOpcode(OP_GetSelf, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitSize
+============
+*/
+void EmitSize( sval_u expr, sval_u sourcePos, scr_block_s *block )
+{
+	EmitPrimitiveExpression(expr, block);
+	EmitOpcode(OP_size, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitBoolComplement
+============
+*/
+void EmitBoolComplement( sval_u sourcePos )
+{
+	EmitOpcode(OP_BoolComplement, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitBoolNot
+============
+*/
+void EmitBoolNot( sval_u sourcePos )
+{
+	EmitOpcode(OP_BoolNot, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitCastBool
+============
+*/
+void EmitCastBool( sval_u sourcePos )
+{
+	EmitOpcode(OP_CastBool, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitRemoveLocalVars
+============
+*/
+void EmitRemoveLocalVars( scr_block_s *block, scr_block_s *outerBlock )
+{
+	if ( block->abortLevel != SCR_ABORT_NONE )
+	{
+		return;
+	}
+
+	assert(block->localVarsCreateCount >= block->localVarsPublicCount);
+	assert(block->localVarsPublicCount >= outerBlock->localVarsPublicCount);
+
+	int removeCount = block->localVarsCreateCount - outerBlock->localVarsPublicCount;
+	assert(removeCount >= 0);
+
+	if ( !removeCount )
+	{
+		return;
+	}
+
+	EmitOpcode(OP_RemoveLocalVariables, 0, CALL_NONE);
+	EmitByte(removeCount);
+	block->localVarsCreateCount = block->localVarsPublicCount;
+}
+
+/*
+============
+EmitCreateLocalVars
+============
+*/
+void EmitCreateLocalVars( scr_block_s *block )
+{
+	assert(block->localVarsPublicCount >= block->localVarsCreateCount);
+
+	if ( block->localVarsCreateCount == block->localVarsPublicCount )
+	{
+		return;
+	}
+
+	for ( int i = block->localVarsCreateCount; i < block->localVarsPublicCount; i++ )
+	{
+		EmitOpcode(OP_CreateLocalVariable, 0, CALL_NONE);
+		EmitCanonicalStringConst(block->localVars[i].name);
+	}
+
+	block->localVarsCreateCount = block->localVarsPublicCount;
+}
+
+/*
+============
+EmitSetVariableField
+============
+*/
+void EmitSetVariableField( sval_u sourcePos )
+{
+	EmitOpcode(OP_SetVariableField, -1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitReturn
+============
+*/
+void EmitReturn( void )
+{
+	EmitOpcode(OP_Return, -1, CALL_NONE);
+}
+
+/*
+============
+EmitEnd
+============
+*/
+void EmitEnd()
+{
+	EmitOpcode(OP_End, 0, CALL_NONE);
+}
+
+/*
+============
+InitThread
+============
+*/
+void InitThread( int type )
+{
+	scrCompileGlob.bCanIgnoreCase = false;
+	scrCompileGlob.currentCaseStatement = NULL;
+	scrCompileGlob.bCanBreak = false;
+	scrCompileGlob.bCanIgnoreBreak = false;
+	scrCompileGlob.currentBreakStatement = NULL;
+	scrCompileGlob.bCanContinue = false;
+	scrCompileGlob.bCanIgnoreContinue = false;
+	scrCompileGlob.currentContinueStatement = NULL;
+	scrCompileGlob.breakChildBlocks = NULL;
+	scrCompileGlob.continueChildBlocks = NULL;
+
+	if ( !scrCompileGlob.firstThread[type] )
+	{
+		return;
+	}
+
+	scrCompileGlob.firstThread[type] = false;
+	EmitEnd();
+
+	AddOpcodePos(0, SOURCE_TYPE_NONE);
+	AddOpcodePos(0xFFFFFFFE, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitProfEndStatement
+============
+*/
+void EmitProfEndStatement( sval_u profileName, sval_u sourcePos )
+{
+	EmitProfStatement(profileName, sourcePos, OP_prof_end);
+}
+
+/*
+============
+EmitProfBeginStatement
+============
+*/
+void EmitProfBeginStatement( sval_u profileName, sval_u sourcePos )
+{
+	EmitProfStatement(profileName, sourcePos, OP_prof_begin);
+}
+
+/*
+============
+EmitEndStatement
+============
+*/
+void EmitEndStatement( sval_u sourcePos, scr_block_s *block )
+{
+	if ( block->abortLevel == SCR_ABORT_NONE )
+	{
+		block->abortLevel = SCR_ABORT_RETURN;
+	}
+
+	EmitEnd();
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitBoolAndExpression
+============
+*/
+void EmitBoolAndExpression( sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sval_u expr2sourcePos, scr_block_s *block )
+{
+	const char *nextPos, *pos;
+	unsigned int offset;
+
+	EmitExpression(expr1, block);
+
+	EmitOpcode(OP_JumpOnFalseExpr, -1, CALL_NONE);
+	AddOpcodePos(expr1sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
+	EmitUnsignedShort(0);
+
+	pos = (const char *)scrCompileGlob.codePos;
+	nextPos = TempMallocAlignStrict(0);
+
+	EmitExpression(expr2, block);
+	EmitCastBool(expr2sourcePos);
+
+	offset = TempMallocAlignStrict(0) - nextPos;
+	assert(offset < 65536);
+
+	*(unsigned short *)pos = offset;
+}
+
+/*
+============
+EmitBoolOrExpression
+============
+*/
+void EmitBoolOrExpression( sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sval_u expr2sourcePos, scr_block_s *block )
+{
+	const char *nextPos, *pos;
+	unsigned int offset;
+
+	EmitExpression(expr1, block);
+
+	EmitOpcode(OP_JumpOnTrueExpr, -1, CALL_NONE);
+	AddOpcodePos(expr1sourcePos.stringValue, SOURCE_TYPE_NONE);
+
+	EmitUnsignedShort(0);
+
+	pos = (const char *)scrCompileGlob.codePos;
+	nextPos = TempMallocAlignStrict(0);
+
+	EmitExpression(expr2, block);
+	EmitCastBool(expr2sourcePos);
+
+	offset = TempMallocAlignStrict(0) - nextPos;
+	assert(offset < 65536);
+
+	*(unsigned short *)pos = offset;
+}
+
+/*
+============
+EmitArrayVariable
+============
+*/
+void EmitArrayVariable( sval_u expr, sval_u index, sval_u sourcePos, sval_u indexSourcePos, scr_block_s *block )
+{
+	EmitExpression(index, block);
+	EmitPrimitiveExpression(expr, block);
+	EmitEvalArray(sourcePos, indexSourcePos);
+}
+
+/*
+============
+EmitNOP2
+============
+*/
+void EmitNOP2( bool lastStatement, unsigned int endSourcePos, scr_block_s *block )
+{
+	int checksum = scrVarPub.checksum;
+
+	if ( lastStatement )
+	{
+		EmitEnd();
+		AddOpcodePos(endSourcePos, SOURCE_TYPE_BREAKPOINT);
+	}
+	else
+	{
+		EmitRemoveLocalVars(block, block);
+	}
+
+	scrVarPub.checksum = checksum + 1;
+}
+
+/*
+============
+EmitDeveloperStatementList
+============
+*/
+void EmitDeveloperStatementList( sval_u val, sval_u sourcePos, scr_block_s *block, sval_u *devStatBlock )
+{
+	char *savedPos;
+	unsigned int savedChecksum;
+
+	if ( scrCompilePub.developer_statement != SCR_DEV_NO )
+	{
+		CompileError(sourcePos.sourcePosValue, "cannot recurse /#");
+		return;
+	}
+
+	savedChecksum = scrVarPub.checksum;
+	Scr_TransferBlock(block, devStatBlock->block);
+
+	if ( scrVarPub.developer_script )
+	{
+		scrCompilePub.developer_statement = SCR_DEV_YES;
+		EmitStatementList(val, false, 0, devStatBlock->block);
+		EmitRemoveLocalVars(devStatBlock->block, devStatBlock->block);
+	}
+	else
+	{
+		savedPos = TempMalloc(0);
+		scrCompilePub.developer_statement = SCR_DEV_IGNORE;
+		EmitStatementList(val, false, 0, devStatBlock->block);
+		TempMemorySetPos(savedPos);
+	}
+
+	scrCompilePub.developer_statement = SCR_DEV_NO;
+	scrVarPub.checksum = savedChecksum;
+}
+
+/*
+============
+EmitContinueStatement
+============
+*/
+void EmitContinueStatement( sval_u sourcePos, scr_block_s *block )
+{
+	ContinueStatementInfo *newContinueStatement;
+
+	if ( !scrCompileGlob.bCanContinue || block->abortLevel != SCR_ABORT_NONE )
+	{
+		CompileError(sourcePos.stringValue, "illegal continue statement");
+		return;
+	}
+
+	Scr_AddContinueBlock(block);
+	EmitRemoveLocalVars(block, block);
+
+	block->abortLevel = SCR_ABORT_CONTINUE;
+
+	EmitOpcode(OP_jump, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.stringValue, SOURCE_TYPE_BREAKPOINT);
+
+	EmitCodepos(0);
+
+	newContinueStatement = (ContinueStatementInfo *)Hunk_AllocateTempMemoryHighInternal( sizeof( *newContinueStatement ) );
+	newContinueStatement->codePos = (char *)scrCompileGlob.codePos;
+	newContinueStatement->nextCodePos = TempMalloc(0);
+	newContinueStatement->next = scrCompileGlob.currentContinueStatement;
+
+	scrCompileGlob.currentContinueStatement = newContinueStatement;
+}
+
+/*
+============
+EmitBreakStatement
+============
+*/
+void EmitBreakStatement( sval_u sourcePos, scr_block_s *block )
+{
+	BreakStatementInfo *newBreakStatement;
+
+	if ( !scrCompileGlob.bCanBreak || block->abortLevel != SCR_ABORT_NONE )
+	{
+		CompileError(sourcePos.sourcePosValue, "illegal break statement");
+		return;
+	}
+
+	assert(scrCompileGlob.breakBlock);
+	Scr_AddBreakBlock(block);
+	EmitRemoveLocalVars(block, scrCompileGlob.breakBlock);
+
+	block->abortLevel = SCR_ABORT_BREAK;
+
+	EmitOpcode(OP_jump, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+
+	EmitCodepos(0);
+
+	newBreakStatement = (BreakStatementInfo *)Hunk_AllocateTempMemoryHighInternal( sizeof( *newBreakStatement ) );
+	newBreakStatement->codePos = (char *)scrCompileGlob.codePos;
+	newBreakStatement->nextCodePos = TempMalloc(0);
+	newBreakStatement->next = scrCompileGlob.currentBreakStatement;
+
+	scrCompileGlob.currentBreakStatement = newBreakStatement;
+}
+
+/*
+============
+EmitCaseStatement
+============
+*/
+void EmitCaseStatement( sval_u expr, sval_u sourcePos )
+{
 	unsigned int name;
-	int i;
-	int localVar;
-	int startIndex;
 
-	if ( childCount && !block->abortLevel )
+	if ( expr.node[0].type == ENUM_integer )
 	{
-		for ( i = 0; i < childCount; ++i )
+		if ( !IsValidArrayIndex(expr.node[1].intValue) )
 		{
-			childBlock = childBlocks[i];
-			childBlock->localVarsPublicCount = block->localVarsCount;
-
-			for ( startIndex = 0; startIndex < block->localVarsCount; ++startIndex )
-			{
-				name = block->localVars[startIndex];
-				localVar = Scr_FindLocalVar(childBlock, startIndex, name);
-
-				if ( localVar < 0 )
-				{
-					localVar = childBlock->localVarsCount;
-					Scr_CheckLocalVarsCount(localVar);
-					++childBlock->localVarsCount;
-				}
-
-				while ( localVar > startIndex )
-				{
-					childBlock->localVars[localVar] = childBlock->localVarsInitBits[localVar + 1];
-					--localVar;
-				}
-
-				childBlock->localVars[startIndex] = name;
-			}
+			CompileError(sourcePos.sourcePosValue, va("case index %d out of range", expr.node[1].intValue));
+			return;
 		}
+
+		name = GetInternalVariableIndex(expr.node[1].intValue);
 	}
-}
-
-void Scr_TransferBlock(scr_block_s *from, scr_block_s *to)
-{
-	unsigned int name;
-	int localVar;
-	int startIndex;
-
-	for ( startIndex = 0; startIndex < to->localVarsPublicCount || startIndex < from->localVarsCreateCount; ++startIndex )
+	else
 	{
-		name = from->localVars[startIndex];
-		localVar = Scr_FindLocalVar(to, startIndex, name);
-
-		if ( localVar < 0 )
+		if ( expr.node[0].type != ENUM_string )
 		{
-			localVar = to->localVarsCount;
-			Scr_CheckLocalVarsCount(localVar);
-			++to->localVarsCount;
+			CompileError(sourcePos.sourcePosValue, "case expression must be an int or string");
+			return;
 		}
 
-		if ( localVar >= to->localVarsPublicCount )
-			++to->localVarsPublicCount;
-
-		while ( localVar > startIndex )
-		{
-			to->localVars[localVar] = to->localVarsInitBits[localVar + 1];
-			--localVar;
-		}
-
-		to->localVars[startIndex] = name;
-
-		if ( (((int)*((unsigned char *)from->localVarsInitBits + (startIndex >> 3)) >> (startIndex & 7)) & 1) != 0 )
-			*((byte *)to->localVarsInitBits + (startIndex >> 3)) |= 1 << (startIndex & 7);
+		name = expr.node[1].stringValue;
+		CompileTransferRefToString(name, 1);
 	}
 
-	to->localVarsCreateCount = from->localVarsCreateCount;
-	to->abortLevel = SCR_ABORT_NONE;
+	EmitCaseStatementInfo(name, sourcePos);
 }
 
-void Scr_CheckMaxSwitchCases(int count)
+/*
+============
+EmitExpressionFieldObject
+============
+*/
+void EmitExpressionFieldObject( sval_u expr, sval_u sourcePos, scr_block_s *block )
 {
-	if ( count > 1023 )
-		Com_Error(ERR_DROP, "MAX_SWITCH_CASES exceeded");
-}
-
-void Scr_AddBreakBlock(scr_block_s *block)
-{
-	if ( !block->abortLevel )
+	if ( expr.node[0].type == ENUM_primitive_expression )
 	{
-		if ( scrCompileGlob.breakChildBlocks )
-		{
-			Scr_CheckMaxSwitchCases(*scrCompileGlob.breakChildCount);
-			scrCompileGlob.breakChildBlocks[(*scrCompileGlob.breakChildCount)++] = block;
-		}
-	}
-}
-
-void Scr_AppendChildBlocks(scr_block_s **childBlocks, int childCount, scr_block_s *block)
-{
-	unsigned int var;
-	int i;
-	int k;
-	int j;
-
-	if ( childCount && !block->abortLevel )
-	{
-		for ( i = 0; i < childCount; ++i )
-			childBlocks[i]->abortLevel = SCR_ABORT_NONE;
-
-		for ( j = 0; j < (*childBlocks)->localVarsCount; ++j )
-		{
-			var = (*childBlocks)->localVars[j];
-
-			if ( Scr_FindLocalVar(block, 0, var) < 0 )
-			{
-				for ( k = 1; k < childCount; ++k )
-				{
-					if ( Scr_FindLocalVar(childBlocks[k], 0, var) < 0 )
-						goto out;
-				}
-
-				block->localVars[block->localVarsCount++] = var;
-			}
-out:
-			;
-		}
-	}
-}
-
-void Scr_InitFromChildBlocks(scr_block_s **childBlocks, int childCount, scr_block_s *block)
-{
-	int count;
-	scr_block_s *childBlock;
-	int i;
-	int k;
-	int j;
-
-	if ( childCount )
-	{
-		count = (*childBlocks)->localVarsPublicCount;
-
-		for ( i = 1; i < childCount; ++i )
-		{
-			childBlock = childBlocks[i];
-			if ( childBlock->localVarsPublicCount < count )
-				count = childBlock->localVarsPublicCount;
-		}
-
-		block->localVarsCreateCount = count;
-
-		for ( j = 0; j < count; ++j )
-		{
-			if ( (((int)*((unsigned char *)block->localVarsInitBits + (j >> 3)) >> (j & 7)) & 1) == 0 )
-			{
-				for ( k = 0; k < childCount; ++k )
-				{
-					if ( (((unsigned char)((int)*((unsigned char *)childBlocks[k]->localVarsInitBits + (j >> 3)) >> (j & 7)) ^ 1) & 1) != 0 )
-						goto out;
-				}
-
-				*((byte *)block->localVarsInitBits + (j >> 3)) |= 1 << (j & 7);
-			}
-out:
-			;
-		}
-	}
-}
-
-void Scr_CreateVector(VariableCompileValue *constValue, VariableValue *value)
-{
-	int type;
-	int i;
-	float vec[3];
-
-	for ( i = 0; i < 3; ++i )
-	{
-		type = constValue[i].value.type;
-
-		if ( type == VAR_FLOAT )
-		{
-			vec[2 - i] = constValue[i].value.u.floatValue;
-		}
-		else
-		{
-			if ( type != VAR_INTEGER )
-			{
-				CompileError(constValue[i].sourcePos.sourcePosValue, "type %s is not a float", var_typename[type]);
-				return;
-			}
-
-			vec[2 - i] = (float)constValue[i].value.u.intValue;
-		}
+		EmitPrimitiveExpressionFieldObject(expr.node[1], expr.node[2], block);
+		return;
 	}
 
-	value->type = VAR_VECTOR;
-	value->u.vectorValue = Scr_AllocVector(vec);
+	CompileError(sourcePos.sourcePosValue, "not an object");
 }
 
-void Scr_AddContinueBlock(scr_block_s *block)
+/*
+============
+EmitArrayPrimitiveExpressionRef
+============
+*/
+void EmitArrayPrimitiveExpressionRef( sval_u expr, sval_u sourcePos, scr_block_s *block )
 {
-	if ( !block->abortLevel )
+	if ( expr.node[0].type == ENUM_variable )
 	{
-		if ( scrCompileGlob.continueChildBlocks )
-		{
-			Scr_CheckMaxSwitchCases(*scrCompileGlob.continueChildCount);
-			scrCompileGlob.continueChildBlocks[(*scrCompileGlob.continueChildCount)++] = block;
-		}
+		EmitVariableExpressionRef(expr.node[1], block);
+		return;
 	}
+
+	if ( expr.node[0].type == ENUM_game )
+	{
+		EmitGameRef(expr.node[1]);
+		return;
+	}
+
+	CompileError(sourcePos.sourcePosValue, "not an lvalue");
 }
 
-bool EvalPrimitiveExpression(sval_u expr, VariableCompileValue *constValue)
-{
-	switch ( expr.node->type )
-	{
-	case ENUM_integer:
-		EvalInteger(expr.node[1].intValue, expr.node[2], constValue);
-		return 1;
-
-	case ENUM_float:
-		EvalFloat(expr.node[1].floatValue, expr.node[2], constValue);
-		return 1;
-
-	case ENUM_minus_integer:
-		EvalInteger(-expr.node[1].intValue, expr.node[2], constValue);
-		return 1;
-
-	case ENUM_minus_float:
-		EvalFloat(-expr.node[1].floatValue, expr.node[2], constValue);
-		return 1;
-
-	case ENUM_string:
-		EvalString(expr.node[1].stringValue, expr.node[2], constValue);
-		return 1;
-
-	case ENUM_istring:
-		EvalIString(expr.node[1].stringValue, expr.node[2], constValue);
-		return 1;
-
-	case ENUM_undefined:
-		EvalUndefined(expr.node[1], constValue);
-		return 1;
-
-	case ENUM_expression_list:
-		return EvalPrimitiveExpressionList(expr.node[1], expr.node[2], constValue);
-
-	case ENUM_false:
-		EvalInteger(0, expr.node[1], constValue);
-		return 1;
-
-	case ENUM_true:
-		EvalInteger(1, expr.node[1], constValue);
-		return 1;
-
-	default:
-		return 0;
-	}
-}
-
-char EvalBinaryOperatorExpression(sval_u expr1, sval_u expr2, sval_u opcode, sval_u sourcePos, VariableCompileValue *constValue)
+/*
+============
+EvalBinaryOperatorExpression
+============
+*/
+bool EvalBinaryOperatorExpression( sval_u expr1, sval_u expr2, sval_u opcode, sval_u sourcePos, VariableCompileValue *constValue )
 {
 	VariableCompileValue constValue1;
 	VariableCompileValue constValue2;
 
 	if ( !EvalExpression(expr1, &constValue1) )
-		return 0;
+	{
+		return false;
+	}
 
 	if ( !EvalExpression(expr2, &constValue2) )
-		return 0;
+	{
+		return false;
+	}
 
 	AddRefToValue(&constValue1.value);
 	AddRefToValue(&constValue2.value);
@@ -986,167 +2696,1132 @@ char EvalBinaryOperatorExpression(sval_u expr1, sval_u expr2, sval_u opcode, sva
 	if ( scrVarPub.error_message )
 	{
 		CompileError(sourcePos.sourcePosValue, "%s", scrVarPub.error_message);
-		return 0;
+		return false;
 	}
-	else
-	{
-		constValue->value.u = constValue1.value.u;
-		constValue->value.type = constValue1.value.type;
-		constValue->sourcePos = sourcePos;
-		return 1;
-	}
+
+	constValue->value.u = constValue1.value.u;
+	constValue->value.type = constValue1.value.type;
+	constValue->sourcePos = sourcePos;
+
+	return true;
 }
 
-bool EvalExpression(sval_u expr, VariableCompileValue *constValue)
+/*
+============
+EmitExpressionListFieldObject
+============
+*/
+void EmitExpressionListFieldObject( sval_u exprlist, sval_u sourcePos, scr_block_s *block )
 {
-	if ( expr.node->type == ENUM_primitive_expression )
-		return EvalPrimitiveExpression(expr.node[1], constValue);
+	sval_u *node = GetSingleParameter(exprlist);
 
-	if ( expr.node->type == ENUM_binary )
-		return EvalBinaryOperatorExpression(expr.node[1], expr.node[2], expr.node[3], expr.node[4], constValue);
+	if ( node )
+	{
+		EmitExpressionFieldObject(node[0].node[0], node[0].node[1], block);
+		return;
+	}
+
+	CompileError(sourcePos.sourcePosValue, "not an object");
+}
+
+/*
+============
+Scr_CreateVector
+============
+*/
+void Scr_CreateVector( VariableCompileValue *constValue, VariableValue *value )
+{
+	vec3_t vec;
+
+	for ( int i = 0; i < 3; i++ )
+	{
+		switch ( constValue[i].value.type )
+		{
+		case VAR_FLOAT:
+			vec[2 - i] = constValue[i].value.u.floatValue;
+			break;
+
+		case VAR_INTEGER:
+			vec[2 - i] = (float)constValue[i].value.u.intValue;
+			break;
+
+		default:
+			CompileError(constValue[i].sourcePos.sourcePosValue, "type %s is not a float", var_typename[constValue[i].value.type]);
+			return;
+		}
+	}
+
+	value->type = VAR_VECTOR;
+	value->u.vectorValue = Scr_AllocVector(vec);
+}
+
+/*
+============
+SpecifyThreadPosition
+============
+*/
+unsigned int SpecifyThreadPosition( unsigned int posId, unsigned int name, unsigned int sourcePos, int type )
+{
+	unsigned int id;
+	VariableValue pos;
+
+	id = GetVariable(posId, 1);
+	pos = Scr_EvalVariable(id);
+
+	if ( pos.type == VAR_UNDEFINED )
+	{
+		pos.type = type;
+		pos.u.intValue = 0;
+
+		SetNewVariableValue(id, &pos);
+		return id;
+	}
+
+	if ( pos.u.intValue )
+		CompileError(sourcePos, "function '%s' already defined in '%s'", SL_ConvertToString(name), scrParserPub.sourceBufferLookup[Scr_GetSourceBuffer(pos.u.codePosValue)].buf);
+	else
+		CompileError(sourcePos, "function '%s' already defined", SL_ConvertToString(name));
 
 	return 0;
 }
 
-bool EvalPrimitiveExpressionList(sval_u exprlist, sval_u sourcePos, VariableCompileValue *constValue)
+/*
+============
+LinkThread
+============
+*/
+void LinkThread( unsigned int threadCountId, VariableValue *pos, bool allowFarCall )
+{
+	int type, i;
+	VariableUnion *value;
+	unsigned int valueId, countId;
+	VariableValue count;
+
+	countId = FindVariable(threadCountId, 0);
+
+	if ( !countId )
+	{
+		return;
+	}
+
+	count = Scr_EvalVariable(countId);
+	assert(count.type == VAR_INTEGER);
+
+	for ( i = 0; i < count.u.intValue; i++ )
+	{
+		valueId = FindVariable(threadCountId, i + 2);
+		assert(valueId);
+
+		value = GetVariableValueAddress(valueId);
+
+		type = GetObjectType(valueId);
+		assert(type == VAR_CODEPOS || type == VAR_DEVELOPER_CODEPOS);
+		//assert(scrVarPub.developer_script);
+
+		if ( pos->type == VAR_DEVELOPER_CODEPOS && type == VAR_CODEPOS )
+		{
+			CompileError2(value->codePosValue, "normal script cannot reference a function in a /# ... #/ comment");
+		}
+
+		if ( pos->type == VAR_UNDEFINED )
+		{
+			CompileError2(value->codePosValue, "unknown function");
+		}
+
+		if ( !allowFarCall && *(intptr_t *)value->codePosValue == FUNC_SCOPE_FAR )
+		{
+			CompileError2(value->codePosValue, "unknown function");
+		}
+
+		*(const char **)value->codePosValue = pos->u.codePosValue;
+	}
+}
+
+/*
+============
+EmitFunction
+============
+*/
+void EmitFunction(sval_u func, sval_u sourcePos)
+{
+	unsigned int threadId, valueId, filename, fileId, posId, countId;
+	int scope;
+	VariableValue value, pos, count;
+	bool bExists;
+
+	if ( scrCompilePub.developer_statement == SCR_DEV_IGNORE )
+	{
+		Scr_CompileRemoveRefToString(func.node[1].stringValue);
+
+		if ( func.node[0].type == ENUM_far_function )
+		{
+			Scr_CompileRemoveRefToString(func.node[2].stringValue);
+			scrCompilePub.far_function_count--;
+		}
+
+		return;
+	}
+
+	threadId = 0;
+
+	if ( func.node[0].type == ENUM_local_function )
+	{
+		scope = FUNC_SCOPE_LOCAL;
+		valueId = GetVariable(scrCompileGlob.fileId, func.node[1].idValue);
+
+		CompileTransferRefToString(func.node[1].stringValue, 2);
+
+		threadId = GetObjectA(valueId);
+		assert(threadId);
+	}
+	else
+	{
+		assert(func.node[0].type == ENUM_far_function);
+		scope = FUNC_SCOPE_FAR;
+
+		filename = Scr_CreateCanonicalFilename( SL_ConvertToString( func.node[1].stringValue ) );
+		Scr_CompileRemoveRefToString( func.node[1].stringValue );
+
+		value = Scr_EvalVariable( FindVariable( scrCompilePub.loadedscripts, filename ) );
+		bExists = value.type != VAR_UNDEFINED;
+
+		fileId = AddFilePrecache(filename, sourcePos.sourcePosValue, false);
+
+		if ( bExists )
+		{
+			valueId = FindVariable(fileId, func.node[2].idValue);
+
+			if ( !valueId || GetObjectType(valueId) != VAR_POINTER )
+			{
+				CompileError(sourcePos.sourcePosValue, "unknown function");
+				return;
+			}
+		}
+		else
+		{
+			valueId = GetVariable(fileId, func.node[2].idValue);
+		}
+
+		CompileTransferRefToString(func.node[2].stringValue, 2);
+
+		threadId = GetObjectA(valueId);
+		posId = FindVariable(threadId, 1);
+
+		if ( posId )
+		{
+			pos = Scr_EvalVariable(posId);
+			assert((pos.type == VAR_CODEPOS || pos.type == VAR_DEVELOPER_CODEPOS));
+			//assert(pos.u.codePosValue);
+
+			if ( pos.type == VAR_INCLUDE_CODEPOS )
+			{
+				CompileError(sourcePos.sourcePosValue, "unknown function");
+				return;
+			}
+
+			if ( pos.u.codePosValue )
+			{
+				if ( pos.type == VAR_CODEPOS || scrCompilePub.developer_statement != SCR_DEV_NO )
+				{
+					EmitCodepos(pos.u.codePosValue);
+				}
+				else
+				{
+					CompileError(sourcePos.sourcePosValue, "normal script cannot reference a function in a /# ... #/ comment");
+				}
+
+				return;
+			}
+		}
+	}
+
+	EmitCodepos((const char *)scope);
+
+	countId = GetVariable(threadId, 0);
+	count = Scr_EvalVariable(countId);
+	assert((count.type == VAR_UNDEFINED) || (count.type == VAR_INTEGER));
+
+	if ( count.type == VAR_UNDEFINED )
+	{
+		count.type = VAR_INTEGER;
+		count.u.intValue = 0;
+	}
+
+	valueId = GetNewVariable(threadId, count.u.intValue + 2);
+	value.u.codePosValue = (const char *)scrCompileGlob.codePos;
+
+	if ( scrCompilePub.developer_statement != SCR_DEV_NO )
+	{
+		assert(scrVarPub.developer_script);
+		value.type = VAR_DEVELOPER_CODEPOS;
+	}
+	else
+	{
+		value.type = VAR_CODEPOS;
+	}
+
+	SetNewVariableValue(valueId, &value);
+	count.u.intValue++;
+
+	SetVariableValue(countId, &count);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitObject
+============
+*/
+void EmitObject( sval_u expr, sval_u sourcePos )
+{
+	int type, classnum, entnum;
+	const char *s;
+	unsigned int idValue;
+
+	if ( scrCompilePub.script_loading )
+	{
+		CompileError(sourcePos.sourcePosValue, "$ can only be used in the script debugger");
+		return;
+	}
+
+	s = SL_ConvertToString(expr.stringValue);
+
+	if ( s[0] == 't' )
+	{
+		idValue = atoi(s + 1);
+
+		if ( !idValue )
+		{
+			CompileError(sourcePos.sourcePosValue, "bad expression");
+			return;
+		}
+
+		if ( idValue >= VARIABLELIST_CHILD_SIZE )
+		{
+			CompileError(sourcePos.sourcePosValue, "bad expression");
+			return;
+		}
+
+		if ( IsObjectFree((unsigned short)idValue) )
+		{
+			CompileError(sourcePos.sourcePosValue, "bad expression");
+			return;
+		}
+
+		type = GetObjectType((unsigned short)idValue);
+
+		if ( type != VAR_THREAD && type != VAR_NOTIFY_THREAD && type != VAR_TIME_THREAD && type != VAR_CHILD_THREAD && type != VAR_DEAD_THREAD )
+		{
+			CompileError(sourcePos.sourcePosValue, "bad expression");
+			return;
+		}
+
+		EmitOpcode(OP_thread_object, 1, CALL_NONE);
+		EmitShort(idValue);
+	}
+	else
+	{
+		classnum = Scr_GetClassnumForCharId(s[0]);
+
+		if ( classnum < 0 )
+		{
+			CompileError(sourcePos.sourcePosValue, "bad expression");
+			return;
+		}
+
+		entnum = atoi(s + 1);
+
+		if ( entnum == 0 && s[1] != '0' )
+		{
+			CompileError(sourcePos.sourcePosValue, "bad expression");
+			return;
+		}
+
+		EmitOpcode(OP_object, 1, CALL_NONE);
+
+		EmitCodepos((const char *)classnum);
+		EmitCodepos((const char *)entnum);
+	}
+}
+
+/*
+============
+Scr_PushValue
+============
+*/
+void Scr_PushValue( VariableCompileValue *constValue )
+{
+	if ( scrCompilePub.value_count >= VALUE_STACK_SIZE )
+	{
+		CompileError(constValue->sourcePos.sourcePosValue, "VALUE_STACK_SIZE exceeded");
+		return;
+	}
+
+	int valueIndex = scrCompilePub.value_count;
+
+	scrCompileGlob.value_start[valueIndex].value.u = constValue->value.u;
+	scrCompileGlob.value_start[valueIndex].value.type = constValue->value.type;
+	scrCompileGlob.value_start[valueIndex].sourcePos.sourcePosValue = constValue->sourcePos.sourcePosValue;
+
+	scrCompilePub.value_count++;
+}
+
+/*
+============
+Scr_FindLocalVarIndex
+============
+*/
+int Scr_FindLocalVarIndex( unsigned int name, sval_u sourcePos, bool create, scr_block_s *block )
+{
+	int i;
+
+	assert(scrCompilePub.developer_statement != SCR_DEV_EVALUATE);
+
+	if ( !block )
+	{
+		CompileError(sourcePos.sourcePosValue, "unreachable code");
+		return 0;
+	}
+
+	for ( i = 0; ; i++ )
+	{
+		if ( i >= block->localVarsCount )
+		{
+			if ( !create || scrCompileGlob.forceNotCreate )
+			{
+				CompileError(sourcePos.sourcePosValue, "uninitialised variable '%s'", SL_ConvertToString(name));
+				return 0;
+			}
+
+			CompileError(sourcePos.sourcePosValue, "unreachable code");
+			return 0;
+		}
+
+		if ( i == block->localVarsCreateCount )
+		{
+			block->localVarsCreateCount++;
+
+			EmitOpcode(OP_CreateLocalVariable, 0, CALL_NONE);
+			EmitCanonicalStringConst(block->localVars[i].name);
+		}
+
+		if ( block->localVars[i].name == name )
+		{
+			break;
+		}
+	}
+
+	Scr_CompileRemoveRefToString(name);
+
+	if ( block->localVarsInitBits[ i >> 3 ] & 1 << ( i & 7 ) )
+	{
+		assert((block->localVarsCreateCount - 1) >= i);
+		return block->localVarsCreateCount - i - 1;
+	}
+
+	if ( create && !scrCompileGlob.forceNotCreate )
+	{
+		block->localVarsInitBits[ i >> 3 ] |= 1 << ( i & 7 );
+		return block->localVarsCreateCount - i - 1;
+	}
+
+	if ( !create || scrCompileGlob.forceNotCreate )
+	{
+		CompileError(sourcePos.sourcePosValue, "uninitialised variable '%s'", SL_ConvertToString(name));
+		return 0;
+	}
+
+	CompileError(sourcePos.sourcePosValue, "unreachable code");
+	return 0;
+}
+
+/*
+============
+EmitAnimTree
+============
+*/
+void EmitAnimTree( sval_u sourcePos )
+{
+	if ( !scrAnimPub.animTreeIndex )
+	{
+		CompileError(sourcePos.sourcePosValue, "#using_animtree was not specified");
+		return;
+	}
+
+	EmitGetInteger(scrAnimPub.animTreeIndex, sourcePos);
+}
+
+/*
+============
+SpecifyThread
+============
+*/
+void SpecifyThread( sval_u val )
+{
+	unsigned int posId;
+
+	switch ( val.node[0].type )
+	{
+	case ENUM_begin_developer_thread:
+		if ( scrCompileGlob.in_developer_thread )
+		{
+			CompileError(val.node[1].sourcePosValue, "cannot recurse /#");
+			return;
+		}
+
+		scrCompileGlob.in_developer_thread = true;
+		scrCompileGlob.developer_thread_sourcePos = val.node[1].sourcePosValue;
+		break;
+
+	case ENUM_end_developer_thread:
+		if ( !scrCompileGlob.in_developer_thread )
+		{
+			CompileError(val.node[1].sourcePosValue, "#/ has no matching /#");
+			return;
+		}
+
+		scrCompileGlob.in_developer_thread = false;
+		break;
+
+	case ENUM_thread:
+		if ( scrCompileGlob.in_developer_thread && !scrVarPub.developer_script )
+		{
+			return;
+		}
+
+		posId = GetObjectA( GetVariable( scrCompileGlob.fileId, val.node[1].idValue ) );
+
+		if ( scrCompileGlob.in_developer_thread )
+			SpecifyThreadPosition(posId, val.node[1].sourcePosValue, val.node[4].sourcePosValue, VAR_DEVELOPER_CODEPOS);
+		else
+			SpecifyThreadPosition(posId, val.node[1].sourcePosValue, val.node[4].sourcePosValue, VAR_CODEPOS);
+
+		break;
+	}
+}
+
+/*
+============
+EmitSwitchStatementList
+============
+*/
+void EmitSwitchStatementList( sval_u val, bool lastStatement, unsigned int endSourcePos, scr_block_s *block )
+{
+	scr_block_s *oldBreakBlock;
+	int *oldBreakChildCount;
+	scr_block_s **oldBreakChildBlocks;
+	int breakChildCount;
+	scr_block_s **breakChildBlocks;
+	bool hasDefault;
+	sval_u *node, *nextNode;
+
+	oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
+	oldBreakChildCount = scrCompileGlob.breakChildCount;
+	oldBreakBlock = scrCompileGlob.breakBlock;
+
+	breakChildCount = 0;
+	breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+
+	scrCompileGlob.breakChildBlocks = breakChildBlocks;
+	scrCompileGlob.breakChildCount = &breakChildCount;
+
+	scrCompileGlob.breakBlock = NULL;
+	hasDefault = false;
+
+	for ( node = val.node[0].node[1].node; node; node = nextNode )
+	{
+		nextNode = node[1].node;
+
+		if ( node[0].node[0].type == ENUM_case || node[0].node[0].type == ENUM_default )
+		{
+			if ( scrCompileGlob.breakBlock )
+			{
+				assert(scrCompileGlob.bCanBreak);
+				scrCompileGlob.bCanBreak = false;
+				EmitRemoveLocalVars(scrCompileGlob.breakBlock, scrCompileGlob.breakBlock);
+			}
+
+			if ( node[0].node[0].type == ENUM_case )
+			{
+				scrCompileGlob.breakBlock = node[0].node[3].block;
+				EmitCaseStatement(node[0].node[1], node[0].node[2]);
+			}
+
+			else
+			{
+				scrCompileGlob.breakBlock = node[0].node[2].block;
+				hasDefault = true;
+				EmitDefaultStatement(node[0].node[1]);
+			}
+
+			Scr_TransferBlock(block, scrCompileGlob.breakBlock);
+			assert(!scrCompileGlob.bCanBreak);
+			scrCompileGlob.bCanBreak = true;
+		}
+		else
+		{
+			if ( !scrCompileGlob.breakBlock )
+			{
+				CompileError(endSourcePos, "missing case statement");
+				return;
+			}
+
+			if ( lastStatement && Scr_IsLastStatement(nextNode) )
+				EmitStatement(node[0], true, endSourcePos, scrCompileGlob.breakBlock);
+			else
+				EmitStatement(node[0], false, endSourcePos, scrCompileGlob.breakBlock);
+
+			if ( scrCompileGlob.breakBlock && scrCompileGlob.breakBlock->abortLevel )
+			{
+				scrCompileGlob.breakBlock = NULL;
+				assert(scrCompileGlob.bCanBreak);
+				scrCompileGlob.bCanBreak = false;
+			}
+		}
+	}
+
+	if ( scrCompileGlob.breakBlock )
+	{
+		assert(scrCompileGlob.bCanBreak);
+		scrCompileGlob.bCanBreak = false;
+		EmitRemoveLocalVars(scrCompileGlob.breakBlock, scrCompileGlob.breakBlock);
+	}
+
+	if ( hasDefault )
+	{
+		if ( scrCompileGlob.breakBlock )
+		{
+			Scr_AddBreakBlock(scrCompileGlob.breakBlock);
+		}
+
+		Scr_InitFromChildBlocks(breakChildBlocks, breakChildCount, block);
+	}
+
+	scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
+	scrCompileGlob.breakChildCount = oldBreakChildCount;
+	scrCompileGlob.breakBlock = oldBreakBlock;
+}
+
+/*
+============
+EmitOrEvalBinaryOperatorExpression
+============
+*/
+bool EmitOrEvalBinaryOperatorExpression( sval_u expr1, sval_u expr2, sval_u opcode, sval_u sourcePos, VariableCompileValue *constValue, scr_block_s *block )
+{
+	VariableCompileValue constValue1, constValue2;
+
+	if ( !EmitOrEvalExpression(expr1, &constValue1, block) )
+	{
+		EmitExpression(expr2, block);
+
+		EmitOpcode(opcode.type, -1, CALL_NONE);
+		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
+		return false;
+	}
+
+	Scr_PushValue(&constValue1);
+
+	if ( !EmitOrEvalExpression(expr2, &constValue2, block) )
+	{
+		EmitOpcode(opcode.type, -1, CALL_NONE);
+		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
+		return false;
+	}
+
+	Scr_PopValue();
+	Scr_EvalBinaryOperator(opcode.intValue, &constValue1.value, &constValue2.value);
+
+	if ( scrVarPub.error_message )
+	{
+		CompileError(sourcePos.sourcePosValue, "%s", scrVarPub.error_message);
+		return false;
+	}
+
+	constValue->value.u = constValue1.value.u;
+	constValue->value.type = constValue1.value.type;
+	constValue->sourcePos = sourcePos;
+
+	return true;
+}
+
+/*
+============
+EmitOrEvalPrimitiveExpressionList
+============
+*/
+bool EmitOrEvalPrimitiveExpressionList( sval_u exprlist, sval_u sourcePos, VariableCompileValue *constValue, scr_block_s *block )
+{
+	VariableCompileValue constValue2;
+	bool success;
+	sval_u *node;
+
+	assert(constValue);
+	int expr_count = GetExpressionCount(exprlist);
+
+	if ( expr_count == 1 )
+	{
+		return EmitOrEvalExpression(exprlist.node[0].node[0].node[0], constValue, block);
+	}
+
+	if ( expr_count != 3 )
+	{
+		CompileError(sourcePos.sourcePosValue, "expression list must have 1 or 3 parameters");
+		return 0;
+	}
+
+	success = true;
+
+	for ( node = exprlist.node[0].node; node; node = node[1].node )
+	{
+		if ( success )
+		{
+			success = EmitOrEvalExpression(node[0].node[0], &constValue2, block);
+
+			if ( success )
+			{
+				Scr_PushValue(&constValue2);
+			}
+		}
+		else
+		{
+			EmitExpression(node[0].node[0], block);
+		}
+	}
+
+	if ( success )
+	{
+		assert(scrCompilePub.value_count >= 3);
+		scrCompilePub.value_count -= 3;
+		Scr_CreateVector(&scrCompileGlob.value_start[scrCompilePub.value_count], &constValue->value);
+		constValue->sourcePos = sourcePos;
+		return true;
+	}
+
+	EmitOpcode(OP_vector, -2, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+	AddExpressionListOpcodePos(exprlist);
+	return false;
+}
+
+/*
+============
+EvalPrimitiveExpressionList
+============
+*/
+bool EvalPrimitiveExpressionList( sval_u exprlist, sval_u sourcePos, VariableCompileValue *constValue )
 {
 	VariableCompileValue constValue2[3];
-	int i;
 	sval_u *node;
-	int count;
+	int i;
 
-	count = GetExpressionCount(exprlist);
+	assert(constValue);
+	int expr_count = GetExpressionCount(exprlist);
 
-	if ( count == 1 )
-		return EvalExpression(exprlist.node->node->node[0], constValue);
-
-	if ( count != 3 )
-		return 0;
-
-	i = 0;
-
-	for ( node = exprlist.node->node; node; node = node[1].node )
+	if ( expr_count == 1 )
 	{
-		if ( !EvalExpression(node->node[0], &constValue2[i]) )
-			return 0;
-		++i;
+		return EvalExpression(exprlist.node[0].node[0].node[0], constValue);
+	}
+
+	if ( expr_count != 3 )
+	{
+		return false;
+	}
+
+	for ( i = 0, node = exprlist.node[0].node; node; node = node[1].node, i++ )
+	{
+		if ( !EvalExpression(node[0].node[0], &constValue2[i]) )
+		{
+			return false;
+		}
 	}
 
 	Scr_CreateVector(constValue2, &constValue->value);
 	constValue->sourcePos = sourcePos;
 
-	return 1;
+	return true;
 }
 
-void Scr_CalcLocalVarsIncStatement(sval_u expr, scr_block_s *block)
+/*
+============
+LinkFile
+============
+*/
+void LinkFile( unsigned int fileId )
 {
-	Scr_CalcLocalVarsVariableExpressionRef(expr, block);
-}
+	VariableValue pos, emptyValue;
+	unsigned int posId, threadCountId, threadCountPtr;
 
-void Scr_CalcLocalVarsSwitchStatement(sval_u stmtlist, scr_block_s *block)
-{
-	int count;
-	scr_block_s **childBlocks;
-	int abortLevel;
-	bool hasDefault;
-	scr_block_s *currentBlock;
-	int *breakChildCount;
-	scr_block_s **breakChildBlocks;
-	int newChildCount;
-	scr_block_s **newBreakChildBlocks;
-	sval_u *node;
+	emptyValue.type = VAR_UNDEFINED;
+	emptyValue.u.intValue = 0;
 
-	abortLevel = SCR_ABORT_RETURN;
-	breakChildBlocks = scrCompileGlob.breakChildBlocks;
-	breakChildCount = scrCompileGlob.breakChildCount;
-	newChildCount = 0;
-	newBreakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-	scrCompileGlob.breakChildBlocks = newBreakChildBlocks;
-	scrCompileGlob.breakChildCount = &newChildCount;
-	count = 0;
-	currentBlock = 0;
-	hasDefault = 0;
-	childBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-
-	for ( node = stmtlist.node->node[1].node; node; node = node[1].node )
+	for ( threadCountPtr = FindNextSibling(fileId); threadCountPtr; threadCountPtr = FindNextSibling(threadCountPtr) )
 	{
-		if ( node->node->type == ENUM_case || node->node->type == ENUM_default )
+		threadCountId = FindObject(threadCountPtr);
+		assert(threadCountId);
+
+		posId = FindVariable(threadCountId, 1);
+
+		if ( !posId )
 		{
-			currentBlock = 0;
-			Scr_CopyBlock(block, &currentBlock);
-
-			if ( node->node->type == ENUM_case )
-			{
-				node->node[3].block = currentBlock;
-			}
-			else
-			{
-				node->node[2].block = currentBlock;
-				hasDefault = 1;
-			}
+			LinkThread(threadCountId, &emptyValue, true);
+			continue;
 		}
-		else if ( currentBlock )
+
+		pos = Scr_EvalVariable(posId);
+
+		if ( pos.type == VAR_INCLUDE_CODEPOS )
 		{
-			Scr_CalcLocalVarsStatement(node[0], currentBlock);
-
-			if ( currentBlock->abortLevel )
-			{
-				if ( currentBlock->abortLevel == SCR_ABORT_BREAK )
-				{
-					currentBlock->abortLevel = SCR_ABORT_NONE;
-					abortLevel = SCR_ABORT_NONE;
-					Scr_CheckMaxSwitchCases(count);
-					childBlocks[count++] = currentBlock;
-				}
-				else if ( currentBlock->abortLevel <= abortLevel )
-				{
-					abortLevel = currentBlock->abortLevel;
-				}
-
-				currentBlock = 0;
-			}
+			SetVariableValue(threadCountPtr, &emptyValue);
+			continue;
 		}
+
+		assert(pos.type == VAR_CODEPOS || pos.type == VAR_DEVELOPER_CODEPOS);
+		assert(pos.u.codePosValue);
+
+		LinkThread(threadCountId, &pos, true);
+	}
+}
+
+/*
+============
+EmitPostScriptThread
+============
+*/
+void EmitPostScriptThread( sval_u func, int param_count, bool bMethod, sval_u sourcePos )
+{
+	if ( bMethod )
+		EmitOpcode(OP_ScriptMethodThreadCall, -param_count, CALL_THREAD);
+	else
+		EmitOpcode(OP_ScriptThreadCall, 1 - param_count, CALL_THREAD);
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT | SOURCE_TYPE_CALL);
+	EmitFunction(func, sourcePos);
+	EmitCodepos((const char *)param_count);
+}
+
+/*
+============
+EmitPostScriptFunction
+============
+*/
+void EmitPostScriptFunction( sval_u func, int param_count, bool bMethod, sval_u nameSourcePos )
+{
+	if ( bMethod )
+		EmitOpcode(OP_ScriptMethodCall, -param_count - 1, CALL_FUNCTION);
+	else
+		EmitOpcode(OP_ScriptFunctionCall, -param_count, CALL_FUNCTION);
+
+	AddOpcodePos(nameSourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT | SOURCE_TYPE_CALL);
+	EmitFunction(func, nameSourcePos);
+}
+
+/*
+============
+EmitGetFunction
+============
+*/
+void EmitGetFunction( sval_u func, sval_u sourcePos )
+{
+	EmitOpcode(OP_GetFunction, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT | SOURCE_TYPE_CALL);
+	EmitFunction(func, sourcePos);
+}
+
+/*
+============
+EmitAnimation
+============
+*/
+void EmitAnimation( sval_u anim, sval_u sourcePos )
+{
+	EmitOpcode(OP_GetAnimation, 1, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+	EmitCodepos((const char *)0xFFFFFFFF);
+
+	Scr_EmitAnimation((char *)scrCompileGlob.codePos, anim.stringValue, sourcePos.sourcePosValue);
+	Scr_CompileRemoveRefToString(anim.stringValue);
+}
+
+/*
+============
+EmitLocalVariableRef
+============
+*/
+void EmitLocalVariableRef( sval_u expr, sval_u sourcePos, scr_block_s *block )
+{
+	int index = Scr_FindLocalVarIndex(expr.idValue, sourcePos, true, block);
+
+	if ( index )
+	{
+		EmitOpcode(OP_EvalLocalVariableRefCached, 0, CALL_NONE);
+		EmitByte(index);
+	}
+	else
+	{
+		EmitOpcode(OP_EvalLocalVariableRefCached0, 0, CALL_NONE);
 	}
 
-	if ( hasDefault )
-	{
-		if ( currentBlock )
-		{
-			Scr_AddBreakBlock(currentBlock);
-			Scr_CheckMaxSwitchCases(count);
-			childBlocks[count++] = currentBlock;
-		}
-
-		if ( !block->abortLevel )
-			block->abortLevel = abortLevel;
-
-		Scr_AppendChildBlocks(newBreakChildBlocks, newChildCount, block);
-		Scr_MergeChildBlocks(childBlocks, count, block);
-	}
-
-	scrCompileGlob.breakChildBlocks = breakChildBlocks;
-	scrCompileGlob.breakChildCount = breakChildCount;
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 }
 
-void Scr_CalcLocalVarsForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, scr_block_s *block, sval_u *forStatBlock, sval_u *forStatPostBlock)
+/*
+============
+EmitLocalVariable
+============
+*/
+void EmitLocalVariable( sval_u expr, sval_u sourcePos, scr_block_s *block )
 {
-	int i;
-	int *continueChildCount;
-	scr_block_s **continueChildBlocks;
-	int newContinueChildCount;
-	scr_block_s **newContinueChildBlocks;
-	int newBreakChildCount;
-	scr_block_s **newBreakChildBlocks;
-	int *breakChildCount;
-	scr_block_s **breakChildBlocks;
+	int index = Scr_FindLocalVarIndex(expr.idValue, sourcePos, false, block);
+
+	if ( index > 5 )
+	{
+		EmitOpcode(OP_EvalLocalVariableCached, 1, CALL_NONE);
+		EmitByte(index);
+	}
+	else
+	{
+		EmitOpcode(OP_EvalLocalVariableCached0 + index, 1, CALL_NONE);
+	}
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+}
+
+/*
+============
+EmitSafeSetWaittillVariableField
+============
+*/
+void EmitSafeSetWaittillVariableField( sval_u expr, sval_u sourcePos, scr_block_s *block )
+{
+	byte index = Scr_FindLocalVarIndex(expr.idValue, sourcePos, true, block);
+
+	EmitOpcode(OP_SafeSetWaittillVariableFieldCached, 0, CALL_NONE);
+	EmitByte(index);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitSafeSetVariableField
+============
+*/
+void EmitSafeSetVariableField( sval_u expr, sval_u sourcePos, scr_block_s *block )
+{
+	int index = Scr_FindLocalVarIndex(expr.idValue, sourcePos, true, block);
+
+	if ( index )
+	{
+		EmitOpcode(OP_SafeSetVariableFieldCached, 0, CALL_NONE);
+		EmitByte(index);
+	}
+	else
+	{
+		EmitOpcode(OP_SafeSetVariableFieldCached0, 0, CALL_NONE);
+	}
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitFormalWaittillParameterListRefInternal
+============
+*/
+void EmitFormalWaittillParameterListRefInternal( sval_u *node, scr_block_s *block )
+{
+	while ( 1 )
+	{
+		node = node[1].node;
+
+		if ( !node )
+		{
+			break;
+		}
+
+		EmitSafeSetWaittillVariableField(node[0].node[0], node[0].node[1], block);
+	}
+}
+
+/*
+============
+EmitFormalParameterListInternal
+============
+*/
+void EmitFormalParameterListInternal( sval_u *node, scr_block_s *block )
+{
+	while ( 1 )
+	{
+		node = node[1].node;
+
+		if ( !node )
+		{
+			break;
+		}
+
+		EmitSafeSetVariableField(node[0].node[0], node[0].node[1], block);
+	}
+}
+
+/*
+============
+EvalPrimitiveExpression
+============
+*/
+bool EvalPrimitiveExpression( sval_u expr, VariableCompileValue *constValue )
+{
+	switch ( expr.node[0].type )
+	{
+	case ENUM_integer:
+		EvalInteger( expr.node[1].intValue, expr.node[2], constValue );
+		return true;
+
+	case ENUM_float:
+		EvalFloat( expr.node[1].floatValue, expr.node[2], constValue );
+		return true;
+
+	case ENUM_minus_integer:
+		EvalInteger( -expr.node[1].intValue, expr.node[2], constValue );
+		return true;
+
+	case ENUM_minus_float:
+		EvalFloat( -expr.node[1].floatValue, expr.node[2], constValue );
+		return true;
+
+	case ENUM_string:
+		EvalString( expr.node[1].stringValue, expr.node[2], constValue );
+		return true;
+
+	case ENUM_istring:
+		EvalIString( expr.node[1].stringValue, expr.node[2], constValue );
+		return true;
+
+	case ENUM_undefined:
+		EvalUndefined( expr.node[1], constValue );
+		return true;
+
+	case ENUM_expression_list:
+		return EvalPrimitiveExpressionList( expr.node[1], expr.node[2], constValue );
+
+	case ENUM_false:
+		EvalInteger( false, expr.node[1], constValue );
+		return true;
+
+	case ENUM_true:
+		EvalInteger( true, expr.node[1], constValue );
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+/*
+============
+EmitPostScriptThreadCall
+============
+*/
+void EmitPostScriptThreadCall( sval_u func_name, int param_count, bool bMethod, sval_u sourcePos, sval_u nameSourcePos, scr_block_s *block )
+{
+	if ( func_name.node[0].type == ENUM_function )
+	{
+		EmitPostScriptThread(func_name.node[1], param_count, bMethod, nameSourcePos);
+	}
+	else if ( func_name.node[0].type == ENUM_function_pointer )
+	{
+		EmitPostScriptThreadPointer(func_name.node[1], param_count, bMethod, func_name.node[2], block);
+	}
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitPostScriptFunctionCall
+============
+*/
+void EmitPostScriptFunctionCall( sval_u func_name, int param_count, bool bMethod, sval_u nameSourcePos, scr_block_s *block )
+{
+	if ( func_name.node[0].type == ENUM_function )
+	{
+		EmitPostScriptFunction(func_name.node[1], param_count, bMethod, nameSourcePos);
+	}
+	else if ( func_name.node[0].type == ENUM_function_pointer )
+	{
+		EmitPostScriptFunctionPointer(func_name.node[1], param_count, bMethod, nameSourcePos, func_name.node[2], block);
+	}
+}
+
+/*
+============
+EmitFormalParameterList
+============
+*/
+void EmitFormalParameterList( sval_u exprlist, sval_u sourcePos, scr_block_s *block )
+{
+	EmitFormalParameterListInternal(exprlist.node[0].node, block);
+
+	EmitOpcode(OP_checkclearparams, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EvalExpression
+============
+*/
+bool EvalExpression( sval_u expr, VariableCompileValue *constValue )
+{
+	if ( expr.node[0].type == ENUM_primitive_expression )
+	{
+		return EvalPrimitiveExpression( expr.node[1], constValue );
+	}
+
+	if ( expr.node[0].type == ENUM_binary )
+	{
+		return EvalBinaryOperatorExpression( expr.node[1], expr.node[2], expr.node[3], expr.node[4], constValue );
+	}
+
+	return false;
+}
+
+/*
+============
+EmitPostFunctionCall
+============
+*/
+void EmitPostFunctionCall( sval_u func_name, int param_count, bool bMethod, scr_block_s *block )
+{
+	if ( func_name.node[0].type == ENUM_script_call )
+	{
+		EmitPostScriptFunctionCall( func_name.node[1], param_count, bMethod, func_name.node[2], block );
+	}
+	else if ( func_name.node[0].type == ENUM_script_thread_call )
+	{
+		EmitPostScriptThreadCall( func_name.node[1], param_count, bMethod, func_name.node[2], func_name.node[3], block );
+	}
+}
+
+/*
+============
+Scr_CalcLocalVarsForStatement
+============
+*/
+void Scr_CalcLocalVarsForStatement( sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, scr_block_s *block, sval_u *forStatBlock, sval_u *forStatPostBlock )
+{
+	scr_block_s **oldContinueChildBlocks, **continueChildBlocks, **breakChildBlocks, **oldBreakChildBlocks;
+	int continueChildCount, breakChildCount, abortLevel, i;
+	int *oldBreakChildCount, *oldContinueChildCount;
 	VariableCompileValue constValue;
 	bool constConditional;
 
 	Scr_CalcLocalVarsStatement(stmt1, block);
 
-	if ( expr.node->type == ENUM_expression )
+	if ( expr.node[0].type == ENUM_expression )
 	{
-		constConditional = 0;
+		constConditional = false;
 
 		if ( EvalExpression(expr.node[1], &constValue) )
 		{
@@ -1155,7 +3830,9 @@ void Scr_CalcLocalVarsForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval
 				Scr_CastBool(&constValue.value);
 
 				if ( constValue.value.u.intValue )
-					constConditional = 1;
+				{
+					constConditional = true;
+				}
 			}
 
 			RemoveRefToValue(&constValue.value);
@@ -1163,67 +3840,81 @@ void Scr_CalcLocalVarsForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval
 	}
 	else
 	{
-		constConditional = 1;
+		constConditional = true;
 	}
 
-	breakChildBlocks = scrCompileGlob.breakChildBlocks;
-	breakChildCount = scrCompileGlob.breakChildCount;
-	continueChildBlocks = scrCompileGlob.continueChildBlocks;
-	continueChildCount = scrCompileGlob.continueChildCount;
-	newBreakChildCount = 0;
-	newContinueChildCount = 0;
-	newContinueChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-	scrCompileGlob.continueChildBlocks = newContinueChildBlocks;
-	scrCompileGlob.continueChildCount = &newContinueChildCount;
+	oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
+	oldBreakChildCount = scrCompileGlob.breakChildCount;
+
+	oldContinueChildBlocks = scrCompileGlob.continueChildBlocks;
+	oldContinueChildCount = scrCompileGlob.continueChildCount;
+
+	breakChildCount = 0;
+	continueChildCount = 0;
+
+	continueChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+
+	scrCompileGlob.continueChildBlocks = continueChildBlocks;
+	scrCompileGlob.continueChildCount = &continueChildCount;
+
+	abortLevel = block->abortLevel;
 
 	if ( constConditional )
 	{
-		newBreakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-		scrCompileGlob.breakChildCount = &newBreakChildCount;
+		breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+		scrCompileGlob.breakChildCount = &breakChildCount;
 	}
 	else
 	{
-		newBreakChildBlocks = 0;
+		breakChildBlocks = NULL;
 	}
 
-	scrCompileGlob.breakChildBlocks = newBreakChildBlocks;
-	Scr_CopyBlock(block, (scr_block_s **)forStatBlock);
-	Scr_CopyBlock(block, (scr_block_s **)forStatPostBlock);
+	scrCompileGlob.breakChildBlocks = breakChildBlocks;
+
+	Scr_CopyBlock(block, &forStatBlock->block);
+	Scr_CopyBlock(block, &forStatPostBlock->block);
+
 	Scr_CalcLocalVarsStatement(stmt, forStatBlock->block);
 	Scr_AddContinueBlock(forStatBlock->block);
 
-	for ( i = 0; i < newContinueChildCount; ++i )
-		Scr_AppendChildBlocks(&newContinueChildBlocks[i], 1, block);
+	for ( i = 0; i < continueChildCount; i++ )
+	{
+		Scr_AppendChildBlocks(&continueChildBlocks[i], 1, block);
+	}
 
 	Scr_CalcLocalVarsStatement(stmt2, forStatPostBlock->block);
-	Scr_AppendChildBlocks((scr_block_s **)forStatPostBlock, 1, block);
-	Scr_MergeChildBlocks((scr_block_s **)forStatPostBlock, 1, block);
+
+	Scr_AppendChildBlocks(&forStatPostBlock->block, 1, block);
+	Scr_MergeChildBlocks(&forStatPostBlock->block, 1, block);
 
 	if ( constConditional )
-		Scr_AppendChildBlocks(newBreakChildBlocks, newBreakChildCount, block);
+	{
+		Scr_AppendChildBlocks(breakChildBlocks, breakChildCount, block);
+	}
 
-	Scr_MergeChildBlocks((scr_block_s **)forStatBlock, 1, block);
-	scrCompileGlob.breakChildBlocks = breakChildBlocks;
-	scrCompileGlob.breakChildCount = breakChildCount;
-	scrCompileGlob.continueChildBlocks = continueChildBlocks;
-	scrCompileGlob.continueChildCount = continueChildCount;
+	Scr_MergeChildBlocks(&forStatBlock->block, 1, block);
+
+	scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
+	scrCompileGlob.breakChildCount = oldBreakChildCount;
+
+	scrCompileGlob.continueChildBlocks = oldContinueChildBlocks;
+	scrCompileGlob.continueChildCount = oldContinueChildCount;
 }
 
-void Scr_CalcLocalVarsWhileStatement(sval_u expr, sval_u stmt, scr_block_s *block, sval_u *whileStatBlock)
+/*
+============
+Scr_CalcLocalVarsWhileStatement
+============
+*/
+void Scr_CalcLocalVarsWhileStatement( sval_u expr, sval_u stmt, scr_block_s *block, sval_u *whileStatBlock )
 {
-	int breakChildCount;
-	int *continueChildCount;
-	scr_block_s **continueChildBlocks;
-	int initial_count;
-	scr_block_s **newBlock;
-	int childCount;
-	scr_block_s **newChildBlock;
-	int *oldBreakChildCount;
-	scr_block_s **breakChildBlocks;
+	scr_block_s **oldContinueChildBlocks, **continueChildBlocks, **breakChildBlocks, **oldBreakChildBlocks;
+	int continueChildCount, breakChildCount, abortLevel, i;
+	int *oldBreakChildCount, *oldContinueChildCount;
 	VariableCompileValue constValue;
-	bool hasChildren;
+	bool constConditional;
 
-	hasChildren = 0;
+	constConditional = false;
 
 	if ( EvalExpression(expr, &constValue) )
 	{
@@ -1232,129 +3923,302 @@ void Scr_CalcLocalVarsWhileStatement(sval_u expr, sval_u stmt, scr_block_s *bloc
 			Scr_CastBool(&constValue.value);
 
 			if ( constValue.value.u.intValue )
-				hasChildren = 1;
+			{
+				constConditional = true;
+			}
 		}
 
 		RemoveRefToValue(&constValue.value);
 	}
 
-	breakChildBlocks = scrCompileGlob.breakChildBlocks;
+	oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
 	oldBreakChildCount = scrCompileGlob.breakChildCount;
-	continueChildBlocks = scrCompileGlob.continueChildBlocks;
-	continueChildCount = scrCompileGlob.continueChildCount;
-	childCount = 0;
-	initial_count = 0;
-	newBlock = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-	scrCompileGlob.continueChildBlocks = newBlock;
-	scrCompileGlob.continueChildCount = &initial_count;
 
-	if ( hasChildren )
+	oldContinueChildBlocks = scrCompileGlob.continueChildBlocks;
+	oldContinueChildCount = scrCompileGlob.continueChildCount;
+
+	breakChildCount = 0;
+	continueChildCount = 0;
+
+	continueChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+
+	scrCompileGlob.continueChildBlocks = continueChildBlocks;
+	scrCompileGlob.continueChildCount = &continueChildCount;
+
+	abortLevel = block->abortLevel;
+
+	if ( constConditional )
 	{
-		newChildBlock = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-		scrCompileGlob.breakChildCount = &childCount;
+		breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+		scrCompileGlob.breakChildCount = &breakChildCount;
 	}
 	else
 	{
-		newChildBlock = 0;
+		breakChildBlocks = NULL;
 	}
 
-	scrCompileGlob.breakChildBlocks = newChildBlock;
-	Scr_CopyBlock(block, (scr_block_s **)whileStatBlock);
+	scrCompileGlob.breakChildBlocks = breakChildBlocks;
+
+	Scr_CopyBlock(block, &whileStatBlock->block);
+
 	Scr_CalcLocalVarsStatement(stmt, whileStatBlock->block);
 	Scr_AddContinueBlock(whileStatBlock->block);
 
-	for ( breakChildCount = 0; breakChildCount < initial_count; ++breakChildCount )
-		Scr_AppendChildBlocks(&newBlock[breakChildCount], 1, block);
-	if ( hasChildren )
-		Scr_AppendChildBlocks(newChildBlock, childCount, block);
+	for ( i = 0; i < continueChildCount; i++ )
+	{
+		Scr_AppendChildBlocks(&continueChildBlocks[i], 1, block);
+	}
 
-	Scr_MergeChildBlocks((scr_block_s **)whileStatBlock, 1, block);
-	scrCompileGlob.breakChildBlocks = breakChildBlocks;
+	if ( constConditional )
+	{
+		Scr_AppendChildBlocks(breakChildBlocks, breakChildCount, block);
+	}
+
+	Scr_MergeChildBlocks(&whileStatBlock->block, 1, block);
+
+	scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
 	scrCompileGlob.breakChildCount = oldBreakChildCount;
-	scrCompileGlob.continueChildBlocks = continueChildBlocks;
-	scrCompileGlob.continueChildCount = continueChildCount;
+
+	scrCompileGlob.continueChildBlocks = oldContinueChildBlocks;
+	scrCompileGlob.continueChildCount = oldContinueChildCount;
 }
 
-
-void Scr_CalcLocalVarsIfElseStatement(sval_u stmt1, sval_u stmt2, scr_block_s *block, sval_u *ifStatBlock, sval_u *elseStatBlock)
+/*
+============
+EmitMethod
+============
+*/
+void EmitMethod( sval_u expr, sval_u func_name, sval_u params, sval_u methodSourcePos, bool bStatement, scr_block_s *block )
 {
-	int abortLevel;
-	int childCount;
-	scr_block_s *childBlocks[2];
+	VariableValue value;
+	unsigned int methId, name;
+	char *savedPos = NULL;
+	void (*meth)(scr_entref_t);
+	int type, param_count;
+	const char *pName;
+	sval_u sourcePos;
 
-	childCount = 0;
-	abortLevel = SCR_ABORT_RETURN;
+	name = Scr_GetBuiltin(func_name);
 
-	Scr_CopyBlock(block, (scr_block_s **)ifStatBlock);
-	Scr_CalcLocalVarsStatement(stmt1, ifStatBlock->block);
-
-	if ( ifStatBlock->node->intValue < 4 )
+	if ( !name )
 	{
-		abortLevel = ifStatBlock->node->intValue;
+		EmitPreFunctionCall(func_name);
 
-		if ( !abortLevel )
+		param_count = EmitExpressionList(params, block);
+
+		EmitPrimitiveExpression(expr, block);
+		EmitPostFunctionCall(func_name, param_count, true, block);
+
+		AddOpcodePos(methodSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+		AddExpressionListOpcodePos(params);
+
+		if ( bStatement )
 		{
-			childBlocks[0] = ifStatBlock->block;
-			childCount = 1;
+			EmitDecTop();
+		}
+
+		return;
+	}
+
+	pName = SL_ConvertToString(name);
+	sourcePos = func_name.node[2];
+
+	methId = FindVariable(scrCompilePub.builtinMeth, name);
+
+	if ( methId )
+	{
+		value = Scr_EvalVariable(methId);
+		type = Scr_GetUncacheType(value.type);
+
+		meth = (void (*)(scr_entref_t))value.u.pointerValue;
+	}
+	else
+	{
+		type = BUILTIN_ANY;
+		meth = Scr_GetMethod(&pName, &type);
+
+		methId = GetNewVariable(scrCompilePub.builtinMeth, name);
+
+		value.type = Scr_GetCacheType(type);
+		value.u.pointerValue = (intptr_t)meth;
+
+		SetVariableValue(methId, &value);
+	}
+
+	if ( !meth )
+	{
+		EmitPreFunctionCall(func_name);
+
+		param_count = EmitExpressionList(params, block);
+
+		EmitPrimitiveExpression(expr, block);
+		EmitPostFunctionCall(func_name, param_count, true, block);
+
+		AddOpcodePos(methodSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+		AddExpressionListOpcodePos(params);
+
+		if ( bStatement )
+		{
+			EmitDecTop();
+		}
+
+		return;
+	}
+
+	if ( type == BUILTIN_DEVELOPER_ONLY )
+	{
+		Scr_BeginDevScript(&type, &savedPos);
+
+		if ( type == BUILTIN_DEVELOPER_ONLY && !bStatement )
+		{
+			CompileError(sourcePos.sourcePosValue, "return value of developer command can not be accessed if not in a /# ... #/ comment");
+			return;
 		}
 	}
 
-	Scr_CopyBlock(block, (scr_block_s **)elseStatBlock);
-	Scr_CalcLocalVarsStatement(stmt2, elseStatBlock->block);
+	param_count = EmitExpressionList(params, block);
+	EmitPrimitiveExpression(expr, block);
 
-	if ( elseStatBlock->node->intValue <= abortLevel )
+	if ( param_count > 256 )
 	{
-		abortLevel = elseStatBlock->node->intValue;
-
-		if ( !abortLevel )
-			childBlocks[childCount++] = elseStatBlock->block;
+		CompileError(sourcePos.sourcePosValue, "parameter count exceeds 256");
+		return;
 	}
 
-	if ( !block->abortLevel )
-		block->abortLevel = abortLevel;
+	Scr_CompileRemoveRefToString(name);
+	EmitCallBuiltinMethodOpcode(param_count, sourcePos);
 
-	Scr_AppendChildBlocks(childBlocks, childCount, block);
-	Scr_MergeChildBlocks(childBlocks, childCount, block);
+	EmitUnsignedShort( AddFunction( (intptr_t)meth ) );
+
+	AddOpcodePos(methodSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddExpressionListOpcodePos(params);
+
+	if ( bStatement )
+	{
+		EmitDecTop();
+	}
+
+	Scr_EndDevScript(type, &savedPos);
 }
 
-void Scr_CalcLocalVarsIfStatement(sval_u stmt, scr_block_s *block, sval_u *ifStatBlock)
+/*
+============
+EmitCall
+============
+*/
+void EmitCall( sval_u func_name, sval_u params, bool bStatement, scr_block_s *block )
 {
-	Scr_CopyBlock(block, (scr_block_s **)ifStatBlock);
-	Scr_CalcLocalVarsStatement(stmt, ifStatBlock->block);
-	Scr_MergeChildBlocks((scr_block_s **)ifStatBlock, 1, block);
+	VariableValue value;
+	unsigned int funcId, name;
+	char *savedPos = NULL;
+	void (*func)();
+	int type, param_count;
+	const char *pName;
+	sval_u sourcePos;
+
+	name = Scr_GetBuiltin(func_name);
+
+	if ( !name )
+	{
+		EmitPreFunctionCall(func_name);
+
+		param_count = EmitExpressionList(params, block);
+
+		EmitPostFunctionCall(func_name, param_count, 0, block);
+		AddExpressionListOpcodePos(params);
+
+		if ( bStatement )
+		{
+			EmitDecTop();
+		}
+
+		return;
+	}
+
+	pName = SL_ConvertToString(name);
+	sourcePos = func_name.node[2];
+
+	funcId = FindVariable(scrCompilePub.builtinFunc, name);
+
+	if ( funcId )
+	{
+		value = Scr_EvalVariable(funcId);
+		type = Scr_GetUncacheType(value.type);
+
+		func = (void (*)())value.u.pointerValue;
+	}
+	else
+	{
+		type = BUILTIN_ANY;
+		func = Scr_GetFunction(&pName, &type);
+
+		funcId = GetNewVariable(scrCompilePub.builtinFunc, name);
+
+		value.type = Scr_GetCacheType(type);
+		value.u.pointerValue = (intptr_t)func;
+
+		SetVariableValue(funcId, &value);
+	}
+
+	if ( !func )
+	{
+		EmitPreFunctionCall(func_name);
+
+		param_count = EmitExpressionList(params, block);
+
+		EmitPostFunctionCall(func_name, param_count, false, block);
+		AddExpressionListOpcodePos(params);
+
+		if ( bStatement )
+		{
+			EmitDecTop();
+		}
+
+		return;
+	}
+
+	if ( type == BUILTIN_DEVELOPER_ONLY )
+	{
+		Scr_BeginDevScript(&type, &savedPos);
+
+		if ( type == BUILTIN_DEVELOPER_ONLY && !bStatement )
+		{
+			CompileError(sourcePos.sourcePosValue, "return value of developer command can not be accessed if not in a /# ... #/ comment");
+			return;
+		}
+	}
+
+	param_count = EmitExpressionList(params, block);
+
+	if ( param_count > 256 )
+	{
+		CompileError(sourcePos.stringValue, "parameter count exceeds 256");
+		return;
+	}
+
+	Scr_CompileRemoveRefToString(name);
+	EmitCallBuiltinOpcode(param_count, sourcePos);
+
+	EmitUnsignedShort( AddFunction( (intptr_t)func ) );
+
+	AddExpressionListOpcodePos(params);
+
+	if ( bStatement )
+	{
+		EmitDecTop();
+	}
+
+	Scr_EndDevScript(type, &savedPos);
 }
 
-void Scr_CalcLocalVarsStatementList(sval_u val, scr_block_s *block)
+/*
+============
+Scr_CalcLocalVarsStatement
+============
+*/
+void Scr_CalcLocalVarsStatement( sval_u val, scr_block_s *block )
 {
-	sval_u *node;
-
-	for ( node = val.node->node[1].node; node; node = node[1].node )
-		Scr_CalcLocalVarsStatement(node[0], block);
-}
-
-void Scr_CalcLocalVarsDeveloperStatementList(sval_u val, scr_block_s *block, sval_u *devStatBlock)
-{
-	Scr_CopyBlock(block, (scr_block_s **)devStatBlock);
-	Scr_CalcLocalVarsStatementList(val, devStatBlock->block);
-	Scr_MergeChildBlocks((scr_block_s **)devStatBlock, 1, block);
-}
-
-void Scr_CalcLocalVarsThread(sval_u exprlist, sval_u stmtlist, sval_u *stmttblock)
-{
-	scrCompileGlob.forceNotCreate = 0;
-	stmttblock->block = (scr_block_s *)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s));
-	stmttblock->block->abortLevel = SCR_ABORT_NONE;
-	stmttblock->block->localVarsCreateCount = 0;
-	stmttblock->block->localVarsCount = 0;
-	stmttblock->block->localVarsPublicCount = 0;
-	memset(stmttblock->block->localVarsInitBits, 0, sizeof(stmttblock->block->localVarsInitBits));
-	Scr_CalcLocalVarsFormalParameterList(exprlist, stmttblock->block);
-	Scr_CalcLocalVarsStatementList(stmtlist, stmttblock->block);
-}
-
-void Scr_CalcLocalVarsStatement(sval_u val, scr_block_s *block)
-{
-	switch ( val.node->type )
+	switch ( val.node[0].type )
 	{
 	case ENUM_assignment:
 		Scr_CalcLocalVarsAssignmentStatement(val.node[1], val.node[2], block);
@@ -1415,903 +4279,114 @@ void Scr_CalcLocalVarsStatement(sval_u val, scr_block_s *block)
 		if ( block->abortLevel == SCR_ABORT_NONE )
 			block->abortLevel = SCR_ABORT_CONTINUE;
 		break;
-
-	default:
-		return;
 	}
 }
 
-sval_u *GetSingleParameter(sval_u exprlist)
+/*
+============
+EmitCallExpressionFieldObject
+============
+*/
+void EmitCallExpressionFieldObject( sval_u expr, scr_block_s *block )
 {
-	if ( !exprlist.node->node )
-		return 0;
-
-	if ( exprlist.node->node[1].node )
-		return 0;
-
-	return exprlist.node->node;
-}
-
-void EmitCastFieldObject(sval_u sourcePos)
-{
-	EmitOpcode(OP_CastFieldObject, -1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitSelfObject(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetSelfObject, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitLevelObject(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetLevelObject, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitAnimObject(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetAnimObject, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitBoolComplement(sval_u sourcePos)
-{
-	EmitOpcode(OP_BoolComplement, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitBoolNot(sval_u sourcePos)
-{
-	EmitOpcode(OP_BoolNot, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitDecTop()
-{
-	EmitOpcode(OP_DecTop, -1, CALL_NONE);
-}
-
-void EmitEnd()
-{
-	EmitOpcode(OP_End, 0, CALL_NONE);
-}
-
-void EmitSafeSetVariableField(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	int opcode;
-	int index;
-
-	index = Scr_FindLocalVarIndex(expr.sourcePosValue, sourcePos, 1, block);
-
-	if ( index )
-		opcode = OP_SafeSetVariableFieldCached;
-	else
-		opcode = OP_SafeSetVariableFieldCached0;
-
-	EmitOpcode(opcode, 0, CALL_NONE);
-
-	if ( index )
-		EmitByte(index);
-
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitCanonicalStringConst(unsigned int stringValue)
-{
-	bool count;
-
-	count = scrCompileGlob.bConstRefCount;
-	scrCompileGlob.bConstRefCount = 1;
-	EmitCanonicalString(stringValue);
-	scrCompileGlob.bConstRefCount = count;
-}
-
-void EmitEvalArray(sval_u sourcePos, sval_u indexSourcePos)
-{
-	EmitOpcode(OP_EvalArray, -1, CALL_NONE);
-	AddOpcodePos(indexSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-unsigned int Scr_GetBuiltin(sval_u func_name)
-{
-	sval_u *func_namea;
-	sval_u *func_nameb;
-
-	if ( func_name.node->type != ENUM_script_call )
-		return 0;
-
-	func_namea = func_name.node[1].node;
-
-	if ( func_namea->type != ENUM_function )
-		return 0;
-
-	func_nameb = func_namea[1].node;
-
-	if ( func_nameb->type != ENUM_local_function )
-		return 0;
-
-	if ( FindVariable(scrCompileGlob.filePosId, func_nameb[1].idValue) )
-		return 0;
-
-	return func_nameb[1].idValue;
-}
-
-int Scr_FindLocalVarIndex(unsigned int name, sval_u sourcePos, bool create, scr_block_s *block)
-{
-	int i;
-
-	if ( !block )
-		goto unreachable;
-
-	for ( i = 0; ; ++i )
+	if ( expr.node[0].type == ENUM_call )
 	{
-		if ( i >= block->localVarsCount )
-			goto out;
-
-		if ( i == block->localVarsCreateCount )
-		{
-			++block->localVarsCreateCount;
-			EmitOpcode(OP_CreateLocalVariable, 0, CALL_NONE);
-			EmitCanonicalStringConst(block->localVars[i]);
-		}
-
-		if ( block->localVars[i] == name )
-			break;
+		EmitCall( expr.node[1], expr.node[2], false, block );
+		EmitCastFieldObject( expr.node[3] );
 	}
-
-	Scr_CompileRemoveRefToString(name);
-
-	if ( (*((byte *)block->localVarsInitBits + (i >> 3)) & (unsigned char)(1 << (i & 7))) != 0 )
-		return block->localVarsCreateCount - i - 1;
-
-	if ( create && !scrCompileGlob.forceNotCreate )
+	else if ( expr.node[0].type == ENUM_method )
 	{
-		*((byte *)block->localVarsInitBits + (i >> 3)) |= 1 << (i & 7);
-		return block->localVarsCreateCount - i - 1;
+		EmitMethod( expr.node[1], expr.node[2], expr.node[3], expr.node[4], false, block );
+		EmitCastFieldObject( expr.node[5] );
 	}
-out:
-	if ( !create || scrCompileGlob.forceNotCreate )
+}
+
+/*
+============
+EmitCallExpression
+============
+*/
+void EmitCallExpression( sval_u expr, bool bStatement, scr_block_s *block )
+{
+	if ( expr.node[0].type == ENUM_call )
 	{
-		CompileError(sourcePos.sourcePosValue, "uninitialised variable '%s'", SL_ConvertToString(name));
-		return 0;
+		EmitCall( expr.node[1], expr.node[2], bStatement, block );
 	}
-	else
+	else if ( expr.node[0].type == ENUM_method )
 	{
-unreachable:
-		CompileError(sourcePos.sourcePosValue, "unreachable code");
-		return 0;
+		EmitMethod( expr.node[1], expr.node[2], expr.node[3], expr.node[4], bStatement, block );
 	}
 }
 
-void AddExpressionListOpcodePos(sval_u exprlist)
+/*
+============
+Scr_CalcLocalVarsStatementList
+============
+*/
+void Scr_CalcLocalVarsStatementList( sval_u val, scr_block_s *block )
 {
-	sval_u *node;
-
-	if ( scrVarPub.developer )
+	for ( sval_u *node = val.node[0].node[1].node; node; node = node[1].node )
 	{
-		for ( node = exprlist.node->node; node; node = node[1].node )
-			AddOpcodePos(node->node[1].sourcePosValue, SOURCE_TYPE_NONE);
+		Scr_CalcLocalVarsStatement( node[0], block );
 	}
 }
 
-void Scr_BeginDevScript(int *type, char **savedPos)
+/*
+============
+EmitCallExpressionStatement
+============
+*/
+void EmitCallExpressionStatement( sval_u expr, scr_block_s *block )
 {
-	if ( scrCompilePub.developer_statement )
-	{
-		*type = BUILTIN_ANY;
-	}
-	else
-	{
-		if ( scrVarPub.developer_script )
-		{
-			scrCompilePub.developer_statement = 1;
-		}
-		else
-		{
-			*savedPos = (char *)TempMalloc(0);
-			scrCompilePub.developer_statement = 2;
-		}
-
-		*type = BUILTIN_DEVELOPER_ONLY;
-	}
+	EmitCallExpression( expr, true, block );
 }
 
-void Scr_EndDevScript(int type, char **savedPos)
+/*
+============
+EmitPrimitiveExpressionFieldObject
+============
+*/
+void EmitPrimitiveExpressionFieldObject( sval_u expr, sval_u sourcePos, scr_block_s *block )
 {
-	if ( type == BUILTIN_DEVELOPER_ONLY )
-	{
-		scrCompilePub.developer_statement = 0;
-
-		if ( !scrVarPub.developer_script )
-			TempMemorySetPos(*savedPos);
-	}
-}
-
-int Scr_GetCacheType(int type)
-{
-	if ( type )
-		return VAR_DEVELOPER_CODEPOS;
-	else
-		return VAR_CODEPOS;
-}
-
-bool Scr_IsVariable(int type)
-{
-	return type != VAR_CODEPOS;
-}
-
-void EmitCallBuiltinOpcode(int param_count, sval_u sourcePos)
-{
-	int opcode;
-
-	if ( param_count > 5 )
-		opcode = OP_CallBuiltin;
-	else
-		opcode = param_count + OP_CallBuiltin0;
-
-	EmitOpcode(opcode, 1 - param_count, CALL_BUILTIN);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-
-	if ( opcode == OP_CallBuiltin )
-		EmitByte(param_count);
-}
-
-void EmitCallBuiltinMethodOpcode(int param_count, sval_u sourcePos)
-{
-	int opcode;
-
-	if ( param_count > 5 )
-		opcode = OP_CallBuiltinMethod;
-	else
-		opcode = param_count + OP_CallBuiltinMethod0;
-
-	EmitOpcode(opcode, -param_count, CALL_BUILTIN);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-
-	if ( opcode == OP_CallBuiltinMethod )
-		EmitByte(param_count);
-}
-
-void EmitSelf(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetSelf, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitLevel(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetLevel, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitGame(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetGame, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitAnim(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetAnim, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitEmptyArray(sval_u sourcePos)
-{
-	EmitOpcode(OP_EmptyArray, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitAnimation(sval_u anim, sval_u sourcePos)
-{
-	EmitOpcode(OP_GetAnimation, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	EmitCodepos((const char *)0xFFFFFFFF);
-	Scr_EmitAnimation(scrCompileGlob.codePos, anim.stringValue, sourcePos.sourcePosValue);
-	Scr_CompileRemoveRefToString(anim.stringValue);
-}
-
-void EmitCastBool(sval_u sourcePos)
-{
-	EmitOpcode(OP_CastBool, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitAnimTree(sval_u sourcePos)
-{
-	if ( scrAnimPub.animTreeIndex )
-		EmitGetInteger(scrAnimPub.animTreeIndex, sourcePos);
-	else
-		CompileError(sourcePos.sourcePosValue, "#using_animtree was not specified");
-}
-
-void EmitBreakOn(sval_u expr, sval_u param, sval_u sourcePos)
-{
-	CompileError(sourcePos.sourcePosValue, "illegal function name");
-}
-
-void Scr_PushValue(VariableCompileValue *constValue)
-{
-	int index;
-
-	if ( scrCompilePub.value_count < 32 )
-	{
-		index = scrCompilePub.value_count;
-		scrCompileGlob.value_start[index].value.u = constValue->value.u;
-		scrCompileGlob.value_start[index].value.type = constValue->value.type;
-		scrCompileGlob.value_start[index].sourcePos.sourcePosValue = constValue->sourcePos.sourcePosValue;
-		++scrCompilePub.value_count;
-	}
-	else
-	{
-		CompileError(constValue->sourcePos.sourcePosValue, "VALUE_STACK_SIZE exceeded");
-	}
-}
-
-void Scr_PopValue()
-{
-	--scrCompilePub.value_count;
-}
-
-bool EmitOrEvalPrimitiveExpressionList(sval_u exprlist, sval_u sourcePos, VariableCompileValue *constValue, scr_block_s *block)
-{
-	VariableCompileValue constValue2;
-	bool success;
-	sval_u *node;
-	int expr_count;
-
-	expr_count = GetExpressionCount(exprlist);
-
-	if ( expr_count == 1 )
-		return EmitOrEvalExpression(exprlist.node->node->node[0], constValue, block);
-
-	if ( expr_count == 3 )
-	{
-		success = 1;
-
-		for ( node = exprlist.node->node; node; node = node[1].node )
-		{
-			if ( success )
-			{
-				success = EmitOrEvalExpression(node->node[0], &constValue2, block);
-
-				if ( success )
-					Scr_PushValue(&constValue2);
-			}
-			else
-			{
-				EmitExpression(node->node[0], block);
-			}
-		}
-
-		if ( success )
-		{
-			scrCompilePub.value_count -= 3;
-			Scr_CreateVector(&scrCompileGlob.value_start[scrCompilePub.value_count], &constValue->value);
-			constValue->sourcePos = sourcePos;
-			return 1;
-		}
-		else
-		{
-			EmitOpcode(OP_vector, -2, CALL_NONE);
-			AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-			AddExpressionListOpcodePos(exprlist);
-			return 0;
-		}
-	}
-	else
-	{
-		CompileError(sourcePos.sourcePosValue, "expression list must have 1 or 3 parameters");
-		return 0;
-	}
-}
-
-void EmitBoolOrExpression(sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sval_u expr2sourcePos, scr_block_s *block)
-{
-	unsigned short nextPos;
-	char *pos;
-
-	EmitExpression(expr1, block);
-	EmitOpcode(OP_JumpOnTrueExpr, -1, CALL_NONE);
-	AddOpcodePos(expr1sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitShort(0);
-	pos = scrCompileGlob.codePos;
-	nextPos = (intptr_t)TempMalloc(0);
-	EmitExpression(expr2, block);
-	EmitCastBool(expr2sourcePos);
-	*(uint16_t *)pos = (intptr_t)TempMalloc(0) - nextPos;
-}
-
-void EmitBoolAndExpression(sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sval_u expr2sourcePos, scr_block_s *block)
-{
-	unsigned short nextPos;
-	char *pos;
-
-	EmitExpression(expr1, block);
-	EmitOpcode(OP_JumpOnFalseExpr, -1, CALL_NONE);
-	AddOpcodePos(expr1sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitShort(0);
-	pos = scrCompileGlob.codePos;
-	nextPos = (intptr_t)TempMalloc(0);
-	EmitExpression(expr2, block);
-	EmitCastBool(expr2sourcePos);
-	*(uint16_t *)pos = (intptr_t)TempMalloc(0) - nextPos;
-}
-
-bool EmitOrEvalBinaryOperatorExpression(sval_u expr1, sval_u expr2, sval_u opcode, sval_u sourcePos, VariableCompileValue *constValue, scr_block_s *block)
-{
-	VariableCompileValue constValue2;
-	VariableCompileValue constValue1;
-
-	if ( !EmitOrEvalExpression(expr1, &constValue1, block) )
-	{
-		EmitExpression(expr2, block);
-		EmitOpcode(opcode.type, -1, CALL_NONE);
-		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-		return 0;
-	}
-
-	Scr_PushValue(&constValue1);
-
-	if ( !EmitOrEvalExpression(expr2, &constValue2, block) )
-	{
-		EmitOpcode(opcode.type, -1, CALL_NONE);
-		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-		return 0;
-	}
-
-	Scr_PopValue();
-	Scr_EvalBinaryOperator(opcode.intValue, &constValue1.value, &constValue2.value);
-
-	if ( scrVarPub.error_message )
-	{
-		CompileError(sourcePos.sourcePosValue, "%s", scrVarPub.error_message);
-		return 0;
-	}
-	else
-	{
-		constValue->value.u = constValue1.value.u;
-		constValue->value.type = constValue1.value.type;
-		constValue->sourcePos = sourcePos;
-		return 1;
-	}
-}
-
-void EmitSize(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	EmitPrimitiveExpression(expr, block);
-	EmitOpcode(OP_size, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitGetFunction(sval_u func, sval_u sourcePos)
-{
-	EmitOpcode(OP_GetFunction, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT|SOURCE_TYPE_CALL);
-	EmitFunction(func, sourcePos);
-}
-
-void EmitCallExpression(sval_u expr, bool bStatement, scr_block_s *block)
-{
-	if ( expr.node->type == ENUM_call )
-	{
-		EmitCall(expr.node[1], expr.node[2], bStatement, block);
-	}
-	else if ( expr.node->type == ENUM_method )
-	{
-		EmitMethod(expr.node[1], expr.node[2], expr.node[3], expr.node[4], bStatement, block);
-	}
-}
-
-bool EmitOrEvalPrimitiveExpression(sval_u expr, VariableCompileValue *constValue, scr_block_s *block)
-{
-	switch ( expr.node->type )
+	switch ( expr.node[0].type )
 	{
 	case ENUM_variable:
 		EmitVariableExpression(expr.node[1], block);
-		return 0;
-
-	case ENUM_function:
-		EmitGetFunction(expr.node[1], expr.node[2]);
-		return 0;
+		EmitCastFieldObject(expr.node[2]);
+		break;
 
 	case ENUM_call_expression:
-		EmitCallExpression(expr.node[1], 0, block);
-		return 0;
+		EmitCallExpressionFieldObject(expr.node[1], block);
+		break;
 
 	case ENUM_self:
-		EmitSelf(expr.node[1]);
-		return 0;
+		EmitSelfObject(expr.node[1]);
+		break;
 
 	case ENUM_level:
-		EmitLevel(expr.node[1]);
-		return 0;
-
-	case ENUM_game:
-		EmitGame(expr.node[1]);
-		return 0;
+		EmitLevelObject(expr.node[1]);
+		break;
 
 	case ENUM_anim:
-		EmitAnim(expr.node[1]);
-		return 0;
+		EmitAnimObject(expr.node[1]);
+		break;
 
 	case ENUM_expression_list:
-		return EmitOrEvalPrimitiveExpressionList(expr.node[1], expr.node[2], constValue, block);
-
-	case ENUM_size_field:
-		EmitSize(expr.node[1], expr.node[2], block);
-		return 0;
-
-	case ENUM_empty_array:
-		EmitEmptyArray(expr.node[1]);
-		return 0;
-
-	case ENUM_animation:
-		EmitAnimation(expr.node[1], expr.node[2]);
-		return 0;
-
-	case ENUM_animtree:
-		EmitAnimTree(expr.node[1]);
-		return 0;
-
-	case ENUM_breakon:
-		EmitBreakOn(expr.node[1], expr.node[2], expr.node[3]);
-		return 0;
+		EmitExpressionListFieldObject(expr.node[1], sourcePos, block);
+		break;
 
 	default:
-		return EvalPrimitiveExpression(expr, constValue);
+		CompileError(sourcePos.sourcePosValue, "not an object");
+		break;
 	}
 }
 
-bool EmitOrEvalExpression(sval_u expr, VariableCompileValue *constValue, scr_block_s *block)
-{
-	switch ( expr.node->type )
-	{
-	case ENUM_primitive_expression:
-		return EmitOrEvalPrimitiveExpression(expr.node[1], constValue, block);
-
-	case ENUM_bool_or:
-		EmitBoolOrExpression(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
-		return 0;
-
-	case ENUM_bool_and:
-		EmitBoolAndExpression(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
-		return 0;
-
-	case ENUM_binary:
-		return EmitOrEvalBinaryOperatorExpression(expr.node[1], expr.node[2], expr.node[3], expr.node[4], constValue, block);
-
-	case ENUM_bool_not:
-		EmitExpression(expr.node[1], block);
-		EmitBoolNot(expr.node[2]);
-		return 0;
-
-	case ENUM_bool_complement:
-		EmitExpression(expr.node[1], block);
-		EmitBoolComplement(expr.node[2]);
-		return 0;
-
-	default:
-		return 0;
-	}
-}
-
-void EmitPostScriptFunction(sval_u func, int param_count, bool bMethod, sval_u nameSourcePos)
-{
-	if ( bMethod )
-		EmitOpcode(OP_ScriptMethodCall, -param_count - 1, CALL_FUNCTION);
-	else
-		EmitOpcode(OP_ScriptFunctionCall, -param_count, CALL_FUNCTION);
-
-	AddOpcodePos(nameSourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT|SOURCE_TYPE_CALL);
-	EmitFunction(func, nameSourcePos);
-}
-
-void EmitPostScriptFunctionPointer(sval_u expr, int param_count, bool bMethod, sval_u nameSourcePos, sval_u sourcePos, scr_block_s *block)
-{
-	EmitExpression(expr, block);
-
-	if ( bMethod )
-		EmitOpcode(OP_ScriptMethodCallPointer, -param_count - 2, CALL_FUNCTION);
-	else
-		EmitOpcode(OP_ScriptFunctionCallPointer, -param_count - 1, CALL_FUNCTION);
-
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(nameSourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitPostScriptFunctionCall(sval_u func_name, int param_count, bool bMethod, sval_u nameSourcePos, scr_block_s *block)
-{
-	if ( func_name.node->type == ENUM_function )
-	{
-		EmitPostScriptFunction(func_name.node[1], param_count, bMethod, nameSourcePos);
-	}
-	else if ( func_name.node->type == ENUM_function_pointer )
-	{
-		EmitPostScriptFunctionPointer(func_name.node[1], param_count, bMethod, nameSourcePos, func_name.node[2], block);
-	}
-}
-
-void EmitPostScriptThread(sval_u func, int param_count, bool bMethod, sval_u sourcePos)
-{
-	if ( bMethod )
-		EmitOpcode(OP_ScriptMethodThreadCall, -param_count, CALL_THREAD);
-	else
-		EmitOpcode(OP_ScriptThreadCall, 1 - param_count, CALL_THREAD);
-
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT|SOURCE_TYPE_CALL);
-	EmitFunction(func, sourcePos);
-	EmitCodepos((const char *)param_count);
-}
-
-void EmitPostScriptThreadPointer(sval_u expr, int param_count, bool bMethod, sval_u sourcePos, scr_block_s *block)
-{
-	EmitExpression(expr, block);
-
-	if ( bMethod )
-		EmitOpcode(OP_ScriptMethodThreadCallPointer, -param_count - 1, CALL_THREAD);
-	else
-		EmitOpcode(OP_ScriptThreadCallPointer, -param_count, CALL_THREAD);
-
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	EmitCodepos((const char *)param_count);
-}
-
-
-void EmitPostScriptThreadCall(sval_u func_name, int param_count, bool bMethod, sval_u sourcePos, sval_u nameSourcePos, scr_block_s *block)
-{
-	if ( func_name.node->type == ENUM_function )
-	{
-		EmitPostScriptThread(func_name.node[1], param_count, bMethod, nameSourcePos);
-	}
-	else if ( func_name.node->type == ENUM_function_pointer )
-	{
-		EmitPostScriptThreadPointer(func_name.node[1], param_count, bMethod, func_name.node[2], block);
-	}
-
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitFieldVariable(sval_u expr, sval_u field, sval_u sourcePos, scr_block_s *block)
-{
-	EmitPrimitiveExpressionFieldObject(expr, sourcePos, block);
-	EmitOpcode(OP_EvalFieldVariable, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitCanonicalString(field.stringValue);
-}
-
-void EmitCallExpressionFieldObject(sval_u expr, scr_block_s *block)
-{
-	if ( expr.node->type == ENUM_call )
-	{
-		EmitCall(expr.node[1], expr.node[2], 0, block);
-		EmitCastFieldObject(expr.node[3]);
-	}
-	else if ( expr.node->type == ENUM_method )
-	{
-		EmitMethod(expr.node[1], expr.node[2], expr.node[3], expr.node[4], 0, block);
-		EmitCastFieldObject(expr.node[5]);
-	}
-}
-
-void EmitObject(sval_u expr, sval_u sourcePos)
-{
-	int type;
-	const char *s;
-	unsigned int idValue;
-	const char *entnum;
-	const char *classnum;
-
-	if ( scrCompilePub.script_loading )
-	{
-		CompileError(sourcePos.sourcePosValue, "$ can only be used in the script debugger");
-		return;
-	}
-
-	s = SL_ConvertToString(expr.stringValue);
-
-	if ( *s == 116 )
-	{
-		idValue = atoi(s + 1);
-
-		if ( idValue )
-		{
-			if ( idValue <= 0xFFFD && !IsObjectFree((unsigned short)idValue) )
-			{
-				type = GetValueType((unsigned short)idValue);
-
-				if ( type >= VAR_THREAD && (type <= VAR_CHILD_THREAD || type == VAR_REMOVED_THREAD) )
-				{
-					EmitOpcode(OP_thread_object, 1, CALL_NONE);
-					EmitShort(idValue);
-					return;
-				}
-			}
-		}
-
-		goto error;
-	}
-
-	classnum = (const char *)Scr_GetClassnumForCharId(*s);
-
-	if ( (intptr_t)classnum < 0 || (entnum = (const char *)atoi(s + 1)) == 0 && s[1] != 48 )
-	{
-error:
-		CompileError(sourcePos.sourcePosValue, "bad expression");
-		return;
-	}
-
-	EmitOpcode(OP_object, 1, CALL_NONE);
-	EmitCodepos(classnum);
-	EmitCodepos(entnum);
-}
-
-void EmitLocalVariable(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	int opcode;
-	int index;
-
-	index = Scr_FindLocalVarIndex(expr.sourcePosValue, sourcePos, 0, block);
-
-	if ( index > OP_GetNegByte )
-		opcode = OP_EvalLocalVariableCached;
-	else
-		opcode = index + OP_EvalLocalVariableCached0;
-
-	EmitOpcode(opcode, 1, CALL_NONE);
-
-	if ( opcode == OP_EvalLocalVariableCached )
-		EmitByte(index);
-
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitFormalParameterListInternal(sval_u *node, scr_block_s *block)
-{
-	while ( 1 )
-	{
-		node = node[1].node;
-
-		if ( !node )
-			break;
-
-		EmitSafeSetVariableField(node->node[0], node->node[1], block);
-	}
-}
-
-void EmitFormalParameterList(sval_u exprlist, sval_u sourcePos, scr_block_s *block)
-{
-	EmitFormalParameterListInternal(exprlist.node->node, block);
-	EmitOpcode(OP_checkclearparams, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-bool Scr_IsLastStatement(sval_u *node)
-{
-	if ( !node )
-		return 1;
-
-	if ( scrVarPub.developer_script )
-		return 0;
-
-	while ( node )
-	{
-		if ( node->node->type != ENUM_developer_statement_list )
-			return 0;
-
-		node = node[1].node;
-	}
-
-	return 1;
-}
-
-bool IsUndefinedPrimitiveExpression(sval_u expr)
-{
-	return expr.node->type == ENUM_undefined;
-}
-
-bool IsUndefinedExpression(sval_u expr)
-{
-	if ( expr.node->type == ENUM_primitive_expression && IsUndefinedPrimitiveExpression(expr.node[1]) )
-		return true;
-
-	return false;
-}
-
-void EmitEvalArrayRef(sval_u sourcePos, sval_u indexSourcePos)
-{
-	EmitOpcode(OP_EvalArrayRef, -1, CALL_NONE);
-	AddOpcodePos(indexSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitArrayVariableRef(sval_u expr, sval_u index, sval_u sourcePos, sval_u indexSourcePos, scr_block_s *block)
-{
-	EmitExpression(index, block);
-	EmitArrayPrimitiveExpressionRef(expr, sourcePos, block);
-	EmitEvalArrayRef(sourcePos, indexSourcePos);
-}
-
-void EmitLocalVariableRef(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	int opcode;
-	int index;
-
-	index = Scr_FindLocalVarIndex(expr.idValue, sourcePos, 1, block);
-
-	if ( index )
-		opcode = OP_EvalLocalVariableRefCached;
-	else
-		opcode = OP_EvalLocalVariableRefCached0;
-
-	EmitOpcode(opcode, 0, CALL_NONE);
-
-	if ( index )
-		EmitByte(index);
-
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitFieldVariableRef(sval_u expr, sval_u field, sval_u sourcePos, scr_block_s *block)
-{
-	EmitPrimitiveExpressionFieldObject(expr, sourcePos, block);
-	EmitOpcode(OP_EvalFieldVariableRef, 0, CALL_NONE);
-	EmitCanonicalString(field.stringValue);
-}
-
-void EmitVariableExpressionRef(sval_u expr, scr_block_s *block)
-{
-	if ( expr.node->type == ENUM_field_variable )
-	{
-		EmitFieldVariableRef(expr.node[1], expr.node[2], expr.node[3], block);
-	}
-	else if ( expr.node->type > ENUM_field_variable )
-	{
-		if ( expr.node->type == ENUM_self_field || expr.node->type == ENUM_object )
-		{
-			if ( scrCompilePub.script_loading )
-				CompileError(expr.node[2].sourcePosValue, "$ and self field can only be used in the script debugger");
-			else
-				CompileError(expr.node[2].sourcePosValue, "not an lvalue");
-		}
-	}
-	else if ( expr.node->type == ENUM_local_variable )
-	{
-		EmitLocalVariableRef(expr.node[1], expr.node[2], block);
-	}
-	else if ( expr.node->type == ENUM_array_variable )
-	{
-		EmitArrayVariableRef(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
-	}
-}
-
-
-void EmitGameRef(sval_u sourcePos)
-{
-	EmitOpcode(OP_GetGameRef, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
-
-void EmitArrayPrimitiveExpressionRef(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	if ( expr.node->type == ENUM_variable )
-	{
-		EmitVariableExpressionRef(expr.node[1], block);
-	}
-	else if ( expr.node->type == ENUM_game )
-	{
-		EmitGameRef(expr.node[1]);
-	}
-	else
-	{
-		CompileError(sourcePos.sourcePosValue, "not an lvalue");
-	}
-}
-
-void EmitClearFieldVariable(sval_u expr, sval_u field, sval_u sourcePos, sval_u rhsSourcePos, scr_block_s *block)
+/*
+============
+EmitClearFieldVariable
+============
+*/
+void EmitClearFieldVariable( sval_u expr, sval_u field, sval_u sourcePos, sval_u rhsSourcePos, scr_block_s *block )
 {
 	EmitPrimitiveExpressionFieldObject(expr, sourcePos, block);
 	EmitOpcode(OP_ClearFieldVariable, 0, CALL_NONE);
@@ -2319,565 +4394,836 @@ void EmitClearFieldVariable(sval_u expr, sval_u field, sval_u sourcePos, sval_u 
 	EmitCanonicalString(field.stringValue);
 }
 
-void EmitClearArray(sval_u sourcePos, sval_u indexSourcePos)
+/*
+============
+EmitFieldVariableRef
+============
+*/
+void EmitFieldVariableRef( sval_u expr, sval_u field, sval_u sourcePos, scr_block_s *block )
 {
-	EmitOpcode(OP_ClearArray, -1, CALL_NONE);
-	AddOpcodePos(indexSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	EmitPrimitiveExpressionFieldObject(expr, sourcePos, block);
+	EmitOpcode(OP_EvalFieldVariableRef, 0, CALL_NONE);
+	EmitCanonicalString(field.stringValue);
 }
 
-void EmitSetVariableField(sval_u sourcePos)
+/*
+============
+EmitFieldVariable
+============
+*/
+void EmitFieldVariable( sval_u expr, sval_u field, sval_u sourcePos, scr_block_s *block )
 {
-	EmitOpcode(OP_SetVariableField, -1, CALL_NONE);
+	EmitPrimitiveExpressionFieldObject(expr, sourcePos, block);
+	EmitOpcode(OP_EvalFieldVariable, 1, CALL_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	EmitCanonicalString(field.stringValue);
 }
 
-void EmitClearArrayVariable(sval_u expr, sval_u index, sval_u sourcePos, sval_u indexSourcePos, scr_block_s *block)
+/*
+============
+Scr_CalcLocalVarsThread
+============
+*/
+void Scr_CalcLocalVarsThread( sval_u exprlist, sval_u stmtlist, sval_u *stmttblock )
+{
+	scrCompileGlob.forceNotCreate = false;
+
+	stmttblock->block = (scr_block_s *)Hunk_AllocateTempMemoryHighInternal( sizeof( *stmttblock->block ) );
+
+	stmttblock->block->abortLevel = SCR_ABORT_NONE;
+	stmttblock->block->localVarsCreateCount = 0;
+	stmttblock->block->localVarsCount = 0;
+	stmttblock->block->localVarsPublicCount = 0;
+
+	memset(stmttblock->block->localVarsInitBits, 0, sizeof(stmttblock->block->localVarsInitBits));
+
+	Scr_CalcLocalVarsFormalParameterList(exprlist, stmttblock->block);
+	Scr_CalcLocalVarsStatementList(stmtlist, stmttblock->block);
+}
+
+/*
+============
+EmitVariableExpression
+============
+*/
+void EmitVariableExpression( sval_u expr, scr_block_s *block )
+{
+	switch ( expr.node[0].type )
+	{
+	case ENUM_local_variable:
+		EmitLocalVariable(expr.node[1], expr.node[2], block);
+		break;
+
+	case ENUM_array_variable:
+		EmitArrayVariable(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
+		break;
+
+	case ENUM_field_variable:
+		EmitFieldVariable(expr.node[1], expr.node[2], expr.node[3], block);
+		break;
+
+	case ENUM_self_field:
+		if ( scrCompilePub.script_loading )
+			CompileError(expr.node[2].sourcePosValue, "self field can only be used in the script debugger");
+		else
+			CompileError(expr.node[2].sourcePosValue, "self field in assignment expression not currently supported");
+		break;
+
+	case ENUM_object:
+		EmitObject(expr.node[1], expr.node[2]);
+		break;
+	}
+}
+
+/*
+============
+EmitOrEvalPrimitiveExpression
+============
+*/
+bool EmitOrEvalPrimitiveExpression( sval_u expr, VariableCompileValue *constValue, scr_block_s *block )
+{
+	switch ( expr.node[0].type )
+	{
+	case ENUM_variable:
+		EmitVariableExpression(expr.node[1], block);
+		return false;
+
+	case ENUM_function:
+		EmitGetFunction(expr.node[1], expr.node[2]);
+		return false;
+
+	case ENUM_call_expression:
+		EmitCallExpression(expr.node[1], false, block);
+		return false;
+
+	case ENUM_self:
+		EmitSelf(expr.node[1]);
+		return false;
+
+	case ENUM_level:
+		EmitLevel(expr.node[1]);
+		return false;
+
+	case ENUM_game:
+		EmitGame(expr.node[1]);
+		return false;
+
+	case ENUM_anim:
+		EmitAnim(expr.node[1]);
+		return false;
+
+	case ENUM_expression_list:
+		return EmitOrEvalPrimitiveExpressionList(expr.node[1], expr.node[2], constValue, block);
+
+	case ENUM_size_field:
+		EmitSize(expr.node[1], expr.node[2], block);
+		return false;
+
+	case ENUM_empty_array:
+		EmitEmptyArray(expr.node[1]);
+		return false;
+
+	case ENUM_animation:
+		EmitAnimation(expr.node[1], expr.node[2]);
+		return false;
+
+	case ENUM_animtree:
+		EmitAnimTree(expr.node[1]);
+		return false;
+
+	case ENUM_breakon:
+		EmitBreakOn(expr.node[1], expr.node[2], expr.node[3]);
+		return false;
+
+	default:
+		return EvalPrimitiveExpression(expr, constValue);
+	}
+}
+
+/*
+============
+EmitOrEvalExpression
+============
+*/
+bool EmitOrEvalExpression( sval_u expr, VariableCompileValue *constValue, scr_block_s *block )
+{
+	switch ( expr.node[0].type )
+	{
+	case ENUM_primitive_expression:
+		return EmitOrEvalPrimitiveExpression(expr.node[1], constValue, block);
+
+	case ENUM_bool_or:
+		EmitBoolOrExpression(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
+		return false;
+
+	case ENUM_bool_and:
+		EmitBoolAndExpression(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
+		return false;
+
+	case ENUM_binary:
+		return EmitOrEvalBinaryOperatorExpression(expr.node[1], expr.node[2], expr.node[3], expr.node[4], constValue, block);
+
+	case ENUM_bool_not:
+		EmitExpression(expr.node[1], block);
+		EmitBoolNot(expr.node[2]);
+		return false;
+
+	case ENUM_bool_complement:
+		EmitExpression(expr.node[1], block);
+		EmitBoolComplement(expr.node[2]);
+		return false;
+
+	default:
+		return false;
+	}
+}
+
+/*
+============
+EmitBreakOn
+============
+*/
+void EmitBreakOn( sval_u expr, sval_u param, sval_u sourcePos )
+{
+	CompileError(sourcePos.sourcePosValue, "illegal function name");
+}
+
+/*
+============
+EmitForStatement
+============
+*/
+void EmitForStatement( sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, sval_u sourcePos, sval_u forSourcePos, scr_block_s *block, sval_u *forStatBlock, sval_u *forStatPostBlock )
+{
+	scr_block_s *oldBreakBlock, **oldContinueChildBlocks, **continueChildBlocks, **breakChildBlocks, **oldBreakChildBlocks;
+	int *oldContinueChildCount, *oldBreakChildCount;
+	int continueChildCount, breakChildCount;
+	VariableCompileValue constValue;
+	bool constConditional, bOldCanIgnoreContinue, bOldCanContinue, bOldCanIgnoreBreak, bOldCanBreak;
+	ContinueStatementInfo *oldContinueStatement;
+	BreakStatementInfo *oldBreakStatement;
+	const char *pos1, *pos2, *nextPos2;
+	unsigned int offset;
+
+	bOldCanBreak = scrCompileGlob.bCanBreak;
+	bOldCanIgnoreBreak = scrCompileGlob.bCanIgnoreBreak;
+
+	oldBreakStatement = scrCompileGlob.currentBreakStatement;
+
+	scrCompileGlob.bCanBreak = false;
+	scrCompileGlob.bCanIgnoreBreak = false;
+
+	bOldCanContinue = scrCompileGlob.bCanContinue;
+	bOldCanIgnoreContinue = scrCompileGlob.bCanIgnoreContinue;
+
+	oldContinueStatement = scrCompileGlob.currentContinueStatement;
+
+	scrCompileGlob.bCanContinue = false;
+	scrCompileGlob.bCanIgnoreContinue = false;
+
+	EmitStatement(stmt1, false, 0, block);
+	Scr_TransferBlock(block, forStatBlock->block);
+
+	EmitCreateLocalVars(forStatBlock->block);
+	assert(forStatBlock->block->localVarsCreateCount <= block->localVarsCount);
+
+	block->localVarsCreateCount = forStatBlock->block->localVarsCreateCount;
+	Scr_TransferBlock(block, forStatPostBlock->block);
+
+	pos1 = TempMalloc(0);
+
+	if ( expr.node[0].type == ENUM_expression )
+	{
+		constConditional = false;
+
+		if ( EmitOrEvalExpression(expr.node[1], &constValue, block) )
+		{
+			if ( constValue.value.type == VAR_INTEGER || constValue.value.type == VAR_FLOAT )
+			{
+				Scr_CastBool(&constValue.value);
+
+				if ( !constValue.value.u.intValue )
+				{
+					CompileError(sourcePos.sourcePosValue, "conditional expression cannot be always false");
+				}
+
+				constConditional = true;
+			}
+			else
+			{
+				EmitValue(&constValue);
+			}
+		}
+	}
+	else
+	{
+		constConditional = true;
+	}
+
+	oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
+	oldBreakChildCount = scrCompileGlob.breakChildCount;
+
+	oldBreakBlock = scrCompileGlob.breakBlock;
+
+	oldContinueChildBlocks = scrCompileGlob.continueChildBlocks;
+	oldContinueChildCount = scrCompileGlob.continueChildCount;
+
+	breakChildCount = 0;
+	continueChildCount = 0;
+
+	continueChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+
+	scrCompileGlob.continueChildBlocks = continueChildBlocks;
+	scrCompileGlob.continueChildCount = &continueChildCount;
+
+	scrCompileGlob.breakBlock = forStatBlock->block;
+
+	if ( constConditional )
+	{
+		pos2 = NULL;
+		nextPos2 = NULL;
+
+		breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+		scrCompileGlob.breakChildCount = &breakChildCount;
+	}
+	else
+	{
+		EmitOpcode(OP_JumpOnFalse, -1, CALL_NONE);
+		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
+		EmitUnsignedShort(0);
+		pos2 = (const char *)scrCompileGlob.codePos;
+
+		nextPos2 = TempMalloc(0);
+		breakChildBlocks = NULL;
+	}
+
+	scrCompileGlob.breakChildBlocks = breakChildBlocks;
+
+	scrCompileGlob.bCanBreak = true;
+	scrCompileGlob.bCanIgnoreBreak = scrCompilePub.developer_statement != SCR_DEV_NO;
+	scrCompileGlob.currentBreakStatement = 0;
+
+	scrCompileGlob.bCanContinue = true;
+	scrCompileGlob.bCanIgnoreContinue = scrCompilePub.developer_statement != SCR_DEV_NO;
+	scrCompileGlob.currentContinueStatement = 0;
+
+	EmitStatement(stmt, false, 0, forStatBlock->block);
+	Scr_AddContinueBlock(forStatBlock->block);
+
+	scrCompileGlob.bCanBreak = false;
+	scrCompileGlob.bCanIgnoreBreak = false;
+
+	scrCompileGlob.bCanContinue = false;
+	scrCompileGlob.bCanIgnoreContinue = false;
+
+	ConnectContinueStatements();
+
+	Scr_InitFromChildBlocks(continueChildBlocks, continueChildCount, forStatPostBlock->block);
+
+	EmitStatement(stmt2, false, 0, forStatPostBlock->block);
+	EmitOpcode(OP_jumpback, 0, CALL_NONE);
+	AddOpcodePos(forSourcePos.stringValue, SOURCE_TYPE_NONE);
+
+	if ( stmt.node[0].type == ENUM_statement_list )
+	{
+		AddOpcodePos(stmt.node[3].sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+	}
+
+	EmitUnsignedShort(0);
+
+	offset = TempMallocAlignStrict(0) - pos1;
+	assert(offset < 65536);
+
+	*(unsigned short *)scrCompileGlob.codePos = offset;
+
+	if ( pos2 )
+	{
+		offset = TempMallocAlignStrict(0) - nextPos2;
+		assert(offset < 65536);
+
+		*(unsigned short *)pos2 = offset;
+	}
+
+	ConnectBreakStatements();
+
+	scrCompileGlob.bCanBreak = bOldCanBreak;
+	scrCompileGlob.bCanIgnoreBreak = bOldCanIgnoreBreak;
+
+	scrCompileGlob.currentBreakStatement = oldBreakStatement;
+
+	scrCompileGlob.bCanContinue = bOldCanContinue;
+	scrCompileGlob.bCanIgnoreContinue = bOldCanIgnoreContinue;
+
+	scrCompileGlob.currentContinueStatement = oldContinueStatement;
+
+	if ( constConditional )
+	{
+		Scr_InitFromChildBlocks(breakChildBlocks, breakChildCount, block);
+	}
+
+	scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
+	scrCompileGlob.breakChildCount = oldBreakChildCount;
+
+	scrCompileGlob.breakBlock = oldBreakBlock;
+
+	scrCompileGlob.continueChildBlocks = oldContinueChildBlocks;
+	scrCompileGlob.continueChildCount = oldContinueChildCount;
+}
+
+/*
+============
+EmitWhileStatement
+============
+*/
+void EmitWhileStatement( sval_u expr, sval_u stmt, sval_u sourcePos, sval_u whileSourcePos, scr_block_s *block, sval_u *whileStatBlock )
+{
+	scr_block_s *oldBreakBlock, **oldContinueChildBlocks, **breakChildBlocks, **oldBreakChildBlocks;
+	int *oldContinueChildCount, *oldBreakChildCount;
+	int breakChildCount;
+	VariableCompileValue constValue;
+	bool constConditional, bOldCanIgnoreContinue, bOldCanContinue, bOldCanIgnoreBreak, bOldCanBreak;
+	ContinueStatementInfo *oldContinueStatement;
+	BreakStatementInfo *oldBreakStatement;
+	const char *pos1, *pos2, *nextPos2;
+	unsigned int offset;
+
+	bOldCanBreak = scrCompileGlob.bCanBreak;
+	bOldCanIgnoreBreak = scrCompileGlob.bCanIgnoreBreak;
+
+	oldBreakStatement = scrCompileGlob.currentBreakStatement;
+
+	scrCompileGlob.bCanBreak = false;
+	scrCompileGlob.bCanIgnoreBreak = false;
+
+	bOldCanContinue = scrCompileGlob.bCanContinue;
+	bOldCanIgnoreContinue = scrCompileGlob.bCanIgnoreContinue;
+
+	oldContinueStatement = scrCompileGlob.currentContinueStatement;
+
+	scrCompileGlob.bCanContinue = false;
+	scrCompileGlob.bCanIgnoreContinue = false;
+
+	Scr_TransferBlock(block, whileStatBlock->block);
+
+	EmitCreateLocalVars(whileStatBlock->block);
+	assert(whileStatBlock->block->localVarsCreateCount <= block->localVarsCount);
+	block->localVarsCreateCount = whileStatBlock->block->localVarsCreateCount;
+
+	pos1 = TempMalloc(0);
+	constConditional = false;
+
+	if ( EmitOrEvalExpression(expr, &constValue, block) )
+	{
+		if ( constValue.value.type == VAR_INTEGER || constValue.value.type == VAR_FLOAT )
+		{
+			Scr_CastBool(&constValue.value);
+
+			if ( !constValue.value.u.intValue )
+			{
+				CompileError(sourcePos.sourcePosValue, "conditional expression cannot be always false");
+			}
+
+			constConditional = true;
+		}
+		else
+		{
+			EmitValue(&constValue);
+		}
+	}
+
+	oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
+	oldBreakChildCount = scrCompileGlob.breakChildCount;
+
+	oldBreakBlock = scrCompileGlob.breakBlock;
+
+	oldContinueChildBlocks = scrCompileGlob.continueChildBlocks;
+	oldContinueChildCount = scrCompileGlob.continueChildCount;
+
+	breakChildCount = 0;
+	scrCompileGlob.continueChildBlocks = 0;
+
+	scrCompileGlob.breakBlock = whileStatBlock->block;
+
+	if ( constConditional )
+	{
+		pos2 = NULL;
+		nextPos2 = NULL;
+
+		breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal( sizeof( scr_block_s ** ) * MAX_SWITCH_CASES );
+		scrCompileGlob.breakChildCount = &breakChildCount;
+	}
+	else
+	{
+		EmitOpcode(OP_JumpOnFalse, -1, CALL_NONE);
+		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
+		EmitUnsignedShort(0);
+
+		pos2 = (const char *)scrCompileGlob.codePos;
+		nextPos2 = TempMalloc(0);
+
+		breakChildBlocks = NULL;
+	}
+
+	scrCompileGlob.breakChildBlocks = breakChildBlocks;
+
+	scrCompileGlob.bCanBreak = true;
+	scrCompileGlob.bCanIgnoreBreak = scrCompilePub.developer_statement != SCR_DEV_NO;
+
+	scrCompileGlob.currentBreakStatement = 0;
+
+	scrCompileGlob.bCanContinue = true;
+	scrCompileGlob.bCanIgnoreContinue = scrCompilePub.developer_statement != SCR_DEV_NO;
+
+	scrCompileGlob.currentContinueStatement = 0;
+
+	EmitStatement(stmt, false, 0, whileStatBlock->block);
+
+	if ( whileStatBlock->block->abortLevel != SCR_ABORT_RETURN )
+	{
+		whileStatBlock->block->abortLevel = SCR_ABORT_NONE;
+	}
+
+	scrCompileGlob.bCanBreak = false;
+	scrCompileGlob.bCanIgnoreBreak = false;
+
+	scrCompileGlob.bCanContinue = false;
+	scrCompileGlob.bCanIgnoreContinue = false;
+
+	ConnectContinueStatements();
+
+	EmitOpcode(OP_jumpback, 0, CALL_NONE);
+	AddOpcodePos(whileSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
+	if ( stmt.node[0].type == ENUM_statement_list )
+	{
+		AddOpcodePos(stmt.node[3].sourcePosValue, SOURCE_TYPE_BREAKPOINT);
+	}
+
+	EmitUnsignedShort(0);
+
+	offset = TempMallocAlignStrict(0) - pos1;
+	assert(offset < 65536);
+
+	*(unsigned short *)scrCompileGlob.codePos = offset;
+
+	if ( pos2 )
+	{
+		offset = TempMallocAlignStrict(0) - nextPos2;
+		assert(offset < 65536);
+
+		*(unsigned short *)pos2 = offset;
+	}
+
+	ConnectBreakStatements();
+
+	scrCompileGlob.bCanBreak = bOldCanBreak;
+	scrCompileGlob.bCanIgnoreBreak = bOldCanIgnoreBreak;
+
+	scrCompileGlob.currentBreakStatement = oldBreakStatement;
+
+	scrCompileGlob.bCanContinue = bOldCanContinue;
+	scrCompileGlob.bCanIgnoreContinue = bOldCanIgnoreContinue;
+
+	scrCompileGlob.currentContinueStatement = oldContinueStatement;
+
+	if ( constConditional )
+	{
+		Scr_InitFromChildBlocks(breakChildBlocks, breakChildCount, block);
+	}
+
+	scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
+	scrCompileGlob.breakChildCount = oldBreakChildCount;
+
+	scrCompileGlob.breakBlock = oldBreakBlock;
+
+	scrCompileGlob.continueChildBlocks = oldContinueChildBlocks;
+	scrCompileGlob.continueChildCount = oldContinueChildCount;
+}
+
+/*
+============
+EmitExpression
+============
+*/
+void EmitExpression( sval_u expr, scr_block_s *block )
+{
+	VariableCompileValue constValue;
+
+	if ( EmitOrEvalExpression(expr, &constValue, block) )
+	{
+		EmitValue(&constValue);
+	}
+}
+
+/*
+============
+EmitClearArrayVariable
+============
+*/
+void EmitClearArrayVariable( sval_u expr, sval_u index, sval_u sourcePos, sval_u indexSourcePos, scr_block_s *block )
 {
 	EmitExpression(index, block);
 	EmitArrayPrimitiveExpressionRef(expr, sourcePos, block);
 	EmitClearArray(sourcePos, indexSourcePos);
 }
 
-bool EmitClearVariableExpression(sval_u expr, sval_u rhsSourcePos, scr_block_s *block)
+/*
+============
+EmitArrayVariableRef
+============
+*/
+void EmitArrayVariableRef( sval_u expr, sval_u index, sval_u sourcePos, sval_u indexSourcePos, scr_block_s *block )
 {
-	if ( expr.node->type == ENUM_field_variable )
+	EmitExpression(index, block);
+	EmitArrayPrimitiveExpressionRef(expr, sourcePos, block);
+	EmitEvalArrayRef(sourcePos, indexSourcePos);
+}
+
+/*
+============
+EmitSwitchStatement
+============
+*/
+void EmitSwitchStatement( sval_u expr, sval_u stmtlist, sval_u sourcePos, bool lastStatement, unsigned int endSourcePos, scr_block_s *block )
+{
+	int num;
+	const char *nextPos1, *pos1, *pos2;
+	char *pos3;
+	BreakStatementInfo *oldBreakStatement;
+	bool oldbCanIgnoreBreak, oldbCanBreak, oldbCanIgnoreCase;
+	CaseStatementInfo *caseStatement, *oldCaseStatement;
+
+	oldbCanIgnoreCase = scrCompileGlob.bCanIgnoreCase;
+	oldCaseStatement = scrCompileGlob.currentCaseStatement;
+
+	scrCompileGlob.bCanIgnoreCase = false;
+	oldbCanBreak = scrCompileGlob.bCanBreak;
+
+	oldbCanIgnoreBreak = scrCompileGlob.bCanIgnoreBreak;
+	oldBreakStatement = scrCompileGlob.currentBreakStatement;
+
+	scrCompileGlob.bCanBreak = false;
+	scrCompileGlob.bCanIgnoreBreak = false;
+
+	EmitExpression(expr, block);
+	EmitOpcode(OP_switch, -1, CALL_NONE);
+	EmitCodepos(0);
+
+	pos1 = (const char *)scrCompileGlob.codePos;
+	nextPos1 = TempMalloc(0);
+
+	scrCompileGlob.bCanIgnoreCase = scrCompilePub.developer_statement != SCR_DEV_NO;
+	scrCompileGlob.currentCaseStatement = NULL;
+
+	scrCompileGlob.bCanIgnoreBreak = scrCompilePub.developer_statement != SCR_DEV_NO;
+	scrCompileGlob.currentBreakStatement = NULL;
+
+	EmitSwitchStatementList(stmtlist, lastStatement, endSourcePos, block);
+
+	scrCompileGlob.bCanIgnoreCase = false;
+	scrCompileGlob.bCanIgnoreBreak = false;
+
+	EmitOpcode(OP_endswitch, 0, CALL_NONE);
+	AddOpcodePos(sourcePos.stringValue, SOURCE_TYPE_NONE);
+	EmitShort(0);
+
+	pos2 = (const char *)scrCompileGlob.codePos;
+	*(intptr_t *)pos1 = scrCompileGlob.codePos - (byte *)nextPos1;
+	pos3 = TempMallocAlignStrict(0);
+
+	for ( num = 0, caseStatement = scrCompileGlob.currentCaseStatement; caseStatement; caseStatement = caseStatement->next, num++ )
 	{
-		EmitClearFieldVariable(expr.node[1], expr.node[2], expr.node[3], rhsSourcePos, block);
-		return 1;
+		EmitCodepos((const char *)caseStatement->name);
+		EmitCodepos(caseStatement->codePos);
 	}
 
-	if ( expr.node->type > ENUM_field_variable )
+	*(unsigned short *)pos2 = num;
+	qsort(pos3, num, 8, CompareCaseInfo);
+
+	// FIXME: This is bad!!
+	while ( num > 1 )
 	{
-		if ( expr.node->type == ENUM_self_field || expr.node->type == ENUM_object )
+		if ( *(intptr_t *)pos3 == *((intptr_t *)pos3 + 2) )
 		{
-			if ( scrCompilePub.script_loading )
-				CompileError(expr.node[2].sourcePosValue, "$ and self field can only be used in the script debugger");
-			else
-				CompileError(expr.node[2].sourcePosValue, "not an lvalue");
+			for ( caseStatement = scrCompileGlob.currentCaseStatement; caseStatement; caseStatement = caseStatement->next )
+			{
+				if ( caseStatement->name == *(intptr_t *)pos3 )
+				{
+					CompileError(caseStatement->sourcePos, "duplicate case expression");
+					return;
+				}
+			}
 		}
-		return 1;
+
+		--num;
+		pos3 += 8;
 	}
 
-	if ( expr.node->type != ENUM_local_variable )
-	{
-		if ( expr.node->type == ENUM_array_variable )
-			EmitClearArrayVariable(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
+	ConnectBreakStatements();
 
-		return 1;
-	}
+	scrCompileGlob.bCanIgnoreCase = oldbCanIgnoreCase;
+	scrCompileGlob.currentCaseStatement = oldCaseStatement;
 
-	return 0;
+	scrCompileGlob.bCanBreak = oldbCanBreak;
+	scrCompileGlob.bCanIgnoreBreak = oldbCanIgnoreBreak;
+
+	scrCompileGlob.currentBreakStatement = oldBreakStatement;
 }
 
-void EmitCallExpressionStatement(sval_u expr, scr_block_s *block)
+/*
+============
+EmitEndOnStatement
+============
+*/
+void EmitEndOnStatement( sval_u obj, sval_u expr, sval_u sourcePos, sval_u exprSourcePos, scr_block_s *block )
 {
-	EmitCallExpression(expr, 1, block);
+	EmitExpression(expr, block);
+	EmitPrimitiveExpression(obj, block);
+	EmitOpcode(OP_endon, -2, CALL_NONE);
+	AddOpcodePos(exprSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
 }
 
-void EmitReturn()
+/*
+============
+EmitNotifyStatement
+============
+*/
+void EmitNotifyStatement( sval_u obj, sval_u exprlist, sval_u sourcePos, sval_u notifySourcePos, scr_block_s *block )
 {
-	EmitOpcode(OP_Return, -1, CALL_NONE);
-}
+	sval_u *node, *start_node;
+	int expr_count;
 
-void EmitEndStatement(sval_u sourcePos, scr_block_s *block)
-{
-	if ( block->abortLevel == SCR_ABORT_NONE )
-		block->abortLevel = SCR_ABORT_RETURN;
-
-	EmitEnd();
+	EmitOpcode(OP_voidCodepos, 1, CALL_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-}
 
-void EmitRemoveLocalVars(scr_block_s *block, scr_block_s *outerBlock)
-{
-	int removeCount;
+	expr_count = 0;
+	start_node = NULL;
 
-	if ( block->abortLevel == SCR_ABORT_NONE )
+	for ( node = exprlist.node[0].node; node; node = node[1].node )
 	{
-		removeCount = block->localVarsCreateCount - outerBlock->localVarsPublicCount;
-
-		if ( removeCount )
-		{
-			EmitOpcode(OP_RemoveLocalVariables, 0, CALL_NONE);
-			EmitByte(removeCount);
-			block->localVarsCreateCount = block->localVarsPublicCount;
-		}
-	}
-}
-
-void EmitNOP2(bool lastStatement, unsigned int endSourcePos, scr_block_s *block)
-{
-	unsigned int checksum;
-
-	checksum = scrVarPub.checksum;
-
-	if ( lastStatement )
-	{
-		EmitEnd();
-		AddOpcodePos(endSourcePos, SOURCE_TYPE_BREAKPOINT);
-	}
-	else
-	{
-		EmitRemoveLocalVars(block, block);
+		start_node = node;
+		EmitExpression(node[0].node[0], block);
+		expr_count++;
 	}
 
-	scrVarPub.checksum = checksum + 1;
-}
+	assert(start_node);
 
-void EmitIfStatement(sval_u expr, sval_u stmt, sval_u sourcePos, bool lastStatement, unsigned int endSourcePos, scr_block_s *block, sval_u *ifStatBlock)
-{
-	unsigned short nextPos;
-	char *pos;
+	EmitPrimitiveExpression(obj, block);
+	EmitOpcode(OP_notify, -expr_count - 2, CALL_NONE);
 
-	EmitExpression(expr, block);
-	EmitOpcode(OP_JumpOnFalse, -1, CALL_NONE);
+	AddOpcodePos(notifySourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(start_node[0].node[1].sourcePosValue, SOURCE_TYPE_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitShort(0);
-	pos = scrCompileGlob.codePos;
-	nextPos = (intptr_t)TempMalloc(0);
-	Scr_TransferBlock(block, ifStatBlock->block);
-	EmitStatement(stmt, lastStatement, endSourcePos, ifStatBlock->block);
-	EmitNOP2(lastStatement, endSourcePos, ifStatBlock->block);
-	*(uint16_t *)pos = (intptr_t)TempMalloc(0) - nextPos;
 }
 
-void EmitWaitStatement(sval_u expr, sval_u sourcePos, sval_u waitSourcePos, scr_block_s *block)
+/*
+============
+EmitWaittillmatchStatement
+============
+*/
+void EmitWaittillmatchStatement( sval_u obj, sval_u exprlist, sval_u sourcePos, sval_u waitSourcePos, scr_block_s *block )
 {
-	EmitExpression(expr, block);
-	EmitOpcode(OP_wait, -1, CALL_NONE);
+	sval_u *node;
+	int exprCount;
+
+	node = exprlist.node[0].node[1].node;
+	assert(node);
+
+	for ( exprCount = 0; ; exprCount++ )
+	{
+		node = node[1].node;
+
+		if ( !node )
+		{
+			break;
+		}
+
+		EmitExpression(node[0].node[0], block);
+	}
+
+	node = exprlist.node[0].node[1].node;
+	assert(node);
+
+	EmitExpression(node[0].node[0], block);
+	EmitPrimitiveExpression(obj, block);
+
+	EmitOpcode(OP_waittillmatch, -2 - exprCount, CALL_NONE);
+
 	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
 	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(node[0].node[1].sourcePosValue, SOURCE_TYPE_NONE);
+
+	while ( 1 )
+	{
+		node = node[1].node;
+
+		if ( !node )
+		{
+			break;
+		}
+
+		AddOpcodePos(node[0].node[1].sourcePosValue, SOURCE_TYPE_NONE);
+	}
+
+	assert(exprCount < 256);
+
+	EmitByte(exprCount);
+	EmitOpcode(OP_clearparams, 0, CALL_NONE);
 }
 
-void EmitReturnStatement(sval_u expr, sval_u sourcePos, scr_block_s *block)
+/*
+============
+EmitWaittillStatement
+============
+*/
+void EmitWaittillStatement( sval_u obj, sval_u exprlist, sval_u sourcePos, sval_u waitSourcePos, scr_block_s *block )
 {
-	if ( block->abortLevel == SCR_ABORT_NONE )
-		block->abortLevel = SCR_ABORT_RETURN;
+	sval_u *node = exprlist.node[0].node[1].node;
+	assert(node);
 
-	EmitExpression(expr, block);
-	EmitReturn();
+	EmitExpression(node[0].node[0], block);
+	EmitPrimitiveExpression(obj, block);
+	EmitOpcode(OP_waittill, -2, CALL_NONE);
+
+	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	AddOpcodePos(node[0].node[1].sourcePosValue, SOURCE_TYPE_NONE);
+
+	EmitFormalWaittillParameterListRefInternal(node, block);
+	EmitOpcode(OP_clearparams, 0, CALL_NONE);
 }
 
-void EmitAssignmentStatement(sval_u lhs, sval_u rhs, sval_u sourcePos, sval_u rhsSourcePos, scr_block_s *block)
+/*
+============
+EmitIfElseStatement
+============
+*/
+void EmitIfElseStatement( sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourcePos, sval_u elseSourcePos, bool lastStatement, unsigned int endSourcePos, scr_block_s *block, sval_u *ifStatBlock, sval_u *elseStatBlock )
 {
-	if ( !IsUndefinedExpression(rhs) || !EmitClearVariableExpression(lhs, rhsSourcePos, block) )
-	{
-		EmitExpression(rhs, block);
-		EmitVariableExpressionRef(lhs, block);
-		EmitSetVariableField(sourcePos);
-	}
-}
-
-void EmitCaseStatementInfo(unsigned int name, sval_u sourcePos)
-{
-	sval_u *statement;
-
-	if ( scrCompilePub.developer_statement != 2 )
-	{
-		statement = (sval_u *)Hunk_AllocateTempMemoryHighInternal(sizeof(CaseStatementInfo));
-		statement->idValue = name;
-		statement[1].idValue = (intptr_t)TempMalloc(0);
-		statement[2].sourcePosValue = sourcePos.sourcePosValue;
-		statement[3].codePosValue = (const char *)scrCompileGlob.currentCaseStatement;
-		scrCompileGlob.currentCaseStatement = (CaseStatementInfo *)statement;
-	}
-}
-
-void EmitDefaultStatement(sval_u sourcePos)
-{
-	EmitCaseStatementInfo(0, sourcePos);
-}
-
-void EmitCaseStatement(sval_u expr, sval_u sourcePos)
-{
-	unsigned int index;
-
-	if ( expr.node->type == ENUM_integer )
-	{
-		if ( !IsValidArrayIndex(expr.node[1].idValue) )
-		{
-			CompileError(sourcePos.sourcePosValue, va("case index %d out of range", expr.node[1].idValue));
-			return;
-		}
-
-		index = GetInternalVariableIndex(expr.node[1].sourcePosValue);
-	}
-	else
-	{
-		if ( expr.node->type != ENUM_string )
-		{
-			CompileError(sourcePos.sourcePosValue, "case expression must be an int or string");
-			return;
-		}
-
-		index = expr.node[1].idValue;
-		CompileTransferRefToString(index, 1u);
-	}
-
-	EmitCaseStatementInfo(index, sourcePos);
-}
-
-void EmitCreateLocalVars(scr_block_s *block)
-{
-	int i;
-
-	if ( block->localVarsCreateCount != block->localVarsPublicCount )
-	{
-		for ( i = block->localVarsCreateCount; i < block->localVarsPublicCount; ++i )
-		{
-			EmitOpcode(OP_CreateLocalVariable, 0, CALL_NONE);
-			EmitCanonicalStringConst(block->localVars[i]);
-		}
-
-		block->localVarsCreateCount = block->localVarsPublicCount;
-	}
-}
-
-void EmitBinaryEqualsOperatorExpression(sval_u lhs, sval_u rhs, sval_u opcode, sval_u sourcePos, scr_block_s *block)
-{
-	scrCompileGlob.bConstRefCount = 1;
-	EmitVariableExpression(lhs, block);
-	scrCompileGlob.bConstRefCount = 0;
-	EmitExpression(rhs, block);
-	EmitOpcode(opcode.type, -1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitVariableExpressionRef(lhs, block);
-	EmitSetVariableField(sourcePos);
-}
-
-void EmitIncStatement(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	scrCompileGlob.forceNotCreate = 1;
-	EmitVariableExpressionRef(expr, block);
-	scrCompileGlob.forceNotCreate = 0;
-	EmitOpcode(OP_inc, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitSetVariableField(sourcePos);
-}
-
-void EmitDecStatement(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	scrCompileGlob.forceNotCreate = 1;
-	EmitVariableExpressionRef(expr, block);
-	scrCompileGlob.forceNotCreate = 0;
-	EmitOpcode(OP_dec, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitSetVariableField(sourcePos);
-}
-
-void ConnectContinueStatements()
-{
-	ContinueStatementInfo *statement;
-	char *codePos;
-
-	codePos = (char *)TempMalloc(0);
-
-	for ( statement = scrCompileGlob.currentContinueStatement; statement; statement = statement->next )
-		*(intptr_t *)statement->codePos = codePos - statement->nextCodePos;
-}
-
-void ConnectBreakStatements()
-{
-	BreakStatementInfo *statement;
-	char *codePos;
-
-	codePos = (char *)TempMalloc(0);
-
-	for ( statement = scrCompileGlob.currentBreakStatement; statement; statement = statement->next )
-		*(intptr_t *)statement->codePos = codePos - statement->nextCodePos;
-}
-
-void EmitForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, sval_u sourcePos, sval_u forSourcePos, scr_block_s *block, sval_u *forStatBlock, sval_u *forStatPostBlock)
-{
-	scr_block_s *breakBlock;
-	int *continueChildCount;
-	scr_block_s **continueChildBlocks;
-	int newContinueChildCount;
-	scr_block_s **childBlocks;
-	int newBreakChildCount;
-	scr_block_s **oldContinueChildBlocks;
-	int *oldBreakChildCount;
-	scr_block_s **oldBreakChildBlocks;
-	VariableCompileValue value;
-	bool constConditional;
-	ContinueStatementInfo *currentContinueStatement;
-	bool cont2;
-	bool cont1;
-	BreakStatementInfo *currentBreakStatement;
-	bool break2;
-	bool break1;
-	char *nextPos2;
-	char *codePos;
-	char *nextPos;
-
-	break1 = scrCompileGlob.bCanBreak[0];
-	break2 = scrCompileGlob.bCanBreak[1];
-	currentBreakStatement = scrCompileGlob.currentBreakStatement;
-	scrCompileGlob.bCanBreak[0] = 0;
-	scrCompileGlob.bCanBreak[1] = 0;
-	cont1 = scrCompileGlob.bCanContinue[0];
-	cont2 = scrCompileGlob.bCanContinue[1];
-	currentContinueStatement = scrCompileGlob.currentContinueStatement;
-	scrCompileGlob.bCanContinue[0] = 0;
-	scrCompileGlob.bCanContinue[1] = 0;
-	EmitStatement(stmt1, 0, 0, block);
-	Scr_TransferBlock(block, forStatBlock->block);
-	EmitCreateLocalVars(forStatBlock->block);
-	block->localVarsCreateCount = forStatBlock->block->localVarsCreateCount;
-	Scr_TransferBlock(block, forStatPostBlock->block);
-	nextPos = (char *)TempMalloc(0);
-
-	if ( expr.node->type == ENUM_expression )
-	{
-		constConditional = 0;
-
-		if ( EmitOrEvalExpression(expr.node[1], &value, block) )
-		{
-			if ( value.value.type == VAR_INTEGER || value.value.type == VAR_FLOAT )
-			{
-				Scr_CastBool(&value.value);
-
-				if ( !value.value.u.intValue )
-					CompileError(sourcePos.sourcePosValue, "conditional expression cannot be always false");
-
-				constConditional = 1;
-			}
-			else
-			{
-				EmitValue(&value);
-			}
-		}
-	}
-	else
-	{
-		constConditional = 1;
-	}
-
-	oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
-	oldBreakChildCount = scrCompileGlob.breakChildCount;
-	breakBlock = scrCompileGlob.breakBlock;
-	continueChildBlocks = scrCompileGlob.continueChildBlocks;
-	continueChildCount = scrCompileGlob.continueChildCount;
-	newBreakChildCount = 0;
-	newContinueChildCount = 0;
-	childBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-	scrCompileGlob.continueChildBlocks = childBlocks;
-	scrCompileGlob.continueChildCount = &newContinueChildCount;
-	scrCompileGlob.breakBlock = forStatBlock->block;
-
-	if ( constConditional )
-	{
-		codePos = 0;
-		nextPos2 = 0;
-		oldContinueChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-		scrCompileGlob.breakChildCount = &newBreakChildCount;
-	}
-	else
-	{
-		EmitOpcode(OP_JumpOnFalse, -1, CALL_NONE);
-		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-		EmitShort(0);
-		codePos = scrCompileGlob.codePos;
-		nextPos2 = (char *)TempMalloc(0);
-		oldContinueChildBlocks = 0;
-	}
-
-	scrCompileGlob.breakChildBlocks = oldContinueChildBlocks;
-	scrCompileGlob.bCanBreak[0] = 1;
-	scrCompileGlob.bCanBreak[1] = scrCompilePub.developer_statement != 0;
-	scrCompileGlob.currentBreakStatement = 0;
-	scrCompileGlob.bCanContinue[0] = 1;
-	scrCompileGlob.bCanContinue[1] = scrCompilePub.developer_statement != 0;
-	scrCompileGlob.currentContinueStatement = 0;
-	EmitStatement(stmt, 0, 0, forStatBlock->block);
-	Scr_AddContinueBlock(forStatBlock->block);
-	scrCompileGlob.bCanBreak[0] = 0;
-	scrCompileGlob.bCanBreak[1] = 0;
-	scrCompileGlob.bCanContinue[0] = 0;
-	scrCompileGlob.bCanContinue[1] = 0;
-	ConnectContinueStatements();
-	Scr_InitFromChildBlocks(childBlocks, newContinueChildCount, forStatPostBlock->block);
-	EmitStatement(stmt2, 0, 0, forStatPostBlock->block);
-	EmitOpcode(OP_jumpback, 0, CALL_NONE);
-	AddOpcodePos(forSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-
-	if ( stmt.node->type == ENUM_statement_list )
-		AddOpcodePos(stmt.node[3].sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-
-	EmitShort(0);
-
-	*(uint16_t *)scrCompileGlob.codePos = (intptr_t)TempMalloc(0) - (intptr_t)nextPos;
-
-	if ( codePos )
-		*(uint16_t *)codePos = (intptr_t)TempMalloc(0) - (intptr_t)nextPos2;
-
-	ConnectBreakStatements();
-	scrCompileGlob.bCanBreak[0] = break1;
-	scrCompileGlob.bCanBreak[1] = break2;
-	scrCompileGlob.currentBreakStatement = currentBreakStatement;
-	scrCompileGlob.bCanContinue[0] = cont1;
-	scrCompileGlob.bCanContinue[1] = cont2;
-	scrCompileGlob.currentContinueStatement = currentContinueStatement;
-
-	if ( constConditional )
-		Scr_InitFromChildBlocks(oldContinueChildBlocks, newBreakChildCount, block);
-
-	scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
-	scrCompileGlob.breakChildCount = oldBreakChildCount;
-	scrCompileGlob.breakBlock = breakBlock;
-	scrCompileGlob.continueChildBlocks = continueChildBlocks;
-	scrCompileGlob.continueChildCount = continueChildCount;
-}
-
-void EmitWhileStatement(sval_u expr, sval_u stmt, sval_u sourcePos, sval_u whileSourcePos, scr_block_s *block, sval_u *whileStatBlock)
-{
-	scr_block_s *breakBlock;
-	int *continueChildCount;
-	scr_block_s **continueChildBlocks;
-	int childCount;
-	scr_block_s **childBlocks;
-	int *breakChildCount;
-	scr_block_s **breakChildBlocks;
-	VariableCompileValue value;
-	bool constConditional;
-	ContinueStatementInfo *currentContinueStatement;
-	bool cont2;
-	bool cont1;
-	BreakStatementInfo *currentBreakStatement;
-	bool break2;
-	bool break1;
-	char *nextPos2;
-	char *codePos;
-	char *nextPos;
-
-	break1 = scrCompileGlob.bCanBreak[0];
-	break2 = scrCompileGlob.bCanBreak[1];
-	currentBreakStatement = scrCompileGlob.currentBreakStatement;
-	scrCompileGlob.bCanBreak[0] = 0;
-	scrCompileGlob.bCanBreak[1] = 0;
-	cont1 = scrCompileGlob.bCanContinue[0];
-	cont2 = scrCompileGlob.bCanContinue[1];
-	currentContinueStatement = scrCompileGlob.currentContinueStatement;
-	scrCompileGlob.bCanContinue[0] = 0;
-	scrCompileGlob.bCanContinue[1] = 0;
-	Scr_TransferBlock(block, whileStatBlock->block);
-	EmitCreateLocalVars(whileStatBlock->block);
-	block->localVarsCreateCount = whileStatBlock->block->localVarsCreateCount;
-	nextPos = (char *)TempMalloc(0);
-	constConditional = 0;
-
-	if ( EmitOrEvalExpression(expr, &value, block) )
-	{
-		if ( value.value.type == VAR_INTEGER || value.value.type == VAR_FLOAT )
-		{
-			Scr_CastBool(&value.value);
-
-			if ( !value.value.u.intValue )
-				CompileError(sourcePos.sourcePosValue, "conditional expression cannot be always false");
-
-			constConditional = 1;
-		}
-		else
-		{
-			EmitValue(&value);
-		}
-	}
-
-	breakChildBlocks = scrCompileGlob.breakChildBlocks;
-	breakChildCount = scrCompileGlob.breakChildCount;
-	breakBlock = scrCompileGlob.breakBlock;
-	continueChildBlocks = scrCompileGlob.continueChildBlocks;
-	continueChildCount = scrCompileGlob.continueChildCount;
-	childCount = 0;
-	scrCompileGlob.continueChildBlocks = 0;
-	scrCompileGlob.breakBlock = whileStatBlock->block;
-
-	if ( constConditional )
-	{
-		codePos = 0;
-		nextPos2 = 0;
-		childBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-		scrCompileGlob.breakChildCount = &childCount;
-	}
-	else
-	{
-		EmitOpcode(OP_JumpOnFalse, -1, CALL_NONE);
-		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-		EmitShort(0);
-		codePos = scrCompileGlob.codePos;
-		nextPos2 = (char *)TempMalloc(0);
-		childBlocks = 0;
-	}
-
-	scrCompileGlob.breakChildBlocks = childBlocks;
-	scrCompileGlob.bCanBreak[0] = 1;
-	scrCompileGlob.bCanBreak[1] = scrCompilePub.developer_statement != 0;
-	scrCompileGlob.currentBreakStatement = 0;
-	scrCompileGlob.bCanContinue[0] = 1;
-	scrCompileGlob.bCanContinue[1] = scrCompilePub.developer_statement != 0;
-	scrCompileGlob.currentContinueStatement = 0;
-	EmitStatement(stmt, 0, 0, whileStatBlock->block);
-
-	if ( whileStatBlock->block->abortLevel != SCR_ABORT_RETURN )
-		whileStatBlock->block->abortLevel = SCR_ABORT_NONE;
-
-	scrCompileGlob.bCanBreak[0] = 0;
-	scrCompileGlob.bCanBreak[1] = 0;
-	scrCompileGlob.bCanContinue[0] = 0;
-	scrCompileGlob.bCanContinue[1] = 0;
-	ConnectContinueStatements();
-	EmitOpcode(OP_jumpback, 0, CALL_NONE);
-	AddOpcodePos(whileSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-
-	if ( stmt.node->type == ENUM_statement_list )
-		AddOpcodePos(stmt.node[3].sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-
-	EmitShort(0);
-	*(uint16_t *)scrCompileGlob.codePos = (intptr_t)TempMalloc(0) - (intptr_t)nextPos;
-
-	if ( codePos )
-		*(uint16_t *)codePos = (intptr_t)TempMalloc(0) - (intptr_t)nextPos2;
-
-	ConnectBreakStatements();
-	scrCompileGlob.bCanBreak[0] = break1;
-	scrCompileGlob.bCanBreak[1] = break2;
-	scrCompileGlob.currentBreakStatement = currentBreakStatement;
-	scrCompileGlob.bCanContinue[0] = cont1;
-	scrCompileGlob.bCanContinue[1] = cont2;
-	scrCompileGlob.currentContinueStatement = currentContinueStatement;
-
-	if ( constConditional )
-		Scr_InitFromChildBlocks(childBlocks, childCount, block);
-
-	scrCompileGlob.breakChildBlocks = breakChildBlocks;
-	scrCompileGlob.breakChildCount = breakChildCount;
-	scrCompileGlob.breakBlock = breakBlock;
-	scrCompileGlob.continueChildBlocks = continueChildBlocks;
-	scrCompileGlob.continueChildCount = continueChildCount;
-}
-
-void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourcePos, sval_u elseSourcePos, bool lastStatement, unsigned int endSourcePos, scr_block_s *block, sval_u *ifStatBlock, sval_u *elseStatBlock)
-{
-	char *pos;
-	int childCount;
+	int childCount, checksum;
 	scr_block_s *childBlocks[2];
-	unsigned int checksum;
-	char *nextPos;
-	char *pos1;
-	char *pos2;
-	char *codePos;
+	const char *pos1, *pos2, *nextPos1, *nextPos2;
+	unsigned int offset;
 
 	childCount = 0;
+
 	EmitExpression(expr, block);
 	EmitOpcode(OP_JumpOnFalse, -1, CALL_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitShort(0);
-	codePos = scrCompileGlob.codePos;
-	pos1 = (char *)TempMalloc(0);
+	EmitUnsignedShort(0);
+
+	pos1 = (const char *)scrCompileGlob.codePos;
+	nextPos1 = TempMalloc(0);
+
 	Scr_TransferBlock(block, ifStatBlock->block);
+
 	EmitStatement(stmt1, lastStatement, endSourcePos, ifStatBlock->block);
 	EmitRemoveLocalVars(ifStatBlock->block, ifStatBlock->block);
 
@@ -2894,467 +5240,260 @@ void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourceP
 		EmitEnd();
 		EmitCodepos(0);
 		AddOpcodePos(endSourcePos, SOURCE_TYPE_BREAKPOINT);
-		pos2 = 0;
-		nextPos = 0;
+
+		pos2 = NULL;
+		nextPos2 = NULL;
 	}
 	else
 	{
 		EmitOpcode(OP_jump, 0, CALL_NONE);
 		AddOpcodePos(elseSourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 		EmitCodepos(0);
-		pos2 = scrCompileGlob.codePos;
-		nextPos = (char *)TempMalloc(0);
+
+		pos2 = (const char *)scrCompileGlob.codePos;
+		nextPos2 = TempMalloc(0);
 	}
 
 	scrVarPub.checksum = checksum + 1;
-	*(uint16_t *)codePos = (intptr_t)TempMalloc(0) - (intptr_t)pos1;
+
+	offset = TempMallocAlignStrict(0) - nextPos1;
+	assert(offset < 65536);
+	*(unsigned short *)pos1 = offset;
+
 	Scr_TransferBlock(block, elseStatBlock->block);
+
 	EmitStatement(stmt2, lastStatement, endSourcePos, elseStatBlock->block);
 	EmitNOP2(lastStatement, endSourcePos, elseStatBlock->block);
 
 	if ( elseStatBlock->block->abortLevel == SCR_ABORT_NONE )
-		childBlocks[childCount++] = elseStatBlock->block;
+	{
+		childBlocks[childCount] = elseStatBlock->block;
+		childCount++;
+	}
 
 	if ( !lastStatement )
 	{
-		pos = pos2;
-		*(intptr_t *)pos = (char *)TempMalloc(0) - nextPos;
+		offset = TempMallocAlignStrict(0) - nextPos2;
+		*(intptr_t *)pos2 = offset;
 	}
 
 	Scr_InitFromChildBlocks(childBlocks, childCount, block);
 }
 
-void EmitSwitchStatementList(sval_u val, bool lastStatement, unsigned int endSourcePos, scr_block_s *block)
+/*
+============
+EmitIfStatement
+============
+*/
+void EmitIfStatement( sval_u expr, sval_u stmt, sval_u sourcePos, bool lastStatement, unsigned int endSourcePos, scr_block_s *block, sval_u *ifStatBlock )
 {
-	scr_block_s *breakBlock;
-	int *breakChildCount;
-	scr_block_s **breakChildBlocks;
-	int childCount;
-	scr_block_s **childBlocks;
-	bool hasDefault;
-	sval_u *node;
-	sval_u *nextNode;
+	const char *pos, *nextPos;
+	unsigned int offset;
 
-	breakChildBlocks = scrCompileGlob.breakChildBlocks;
-	breakChildCount = scrCompileGlob.breakChildCount;
-	breakBlock = scrCompileGlob.breakBlock;
-	childCount = 0;
-	childBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHighInternal(sizeof(scr_block_s) * 16);
-	scrCompileGlob.breakChildBlocks = childBlocks;
-	scrCompileGlob.breakChildCount = &childCount;
-	scrCompileGlob.breakBlock = 0;
-	hasDefault = 0;
-
-	for ( nextNode = val.node->node[1].node; nextNode; nextNode = node )
-	{
-		node = nextNode[1].node;
-
-		if ( nextNode->node->type == ENUM_case || nextNode->node->type == ENUM_default )
-		{
-			if ( scrCompileGlob.breakBlock )
-			{
-				scrCompileGlob.bCanBreak[0] = 0;
-				EmitRemoveLocalVars(scrCompileGlob.breakBlock, scrCompileGlob.breakBlock);
-			}
-
-			if ( nextNode->node->type == ENUM_case )
-			{
-				scrCompileGlob.breakBlock = nextNode->node[3].block;
-				EmitCaseStatement(nextNode->node[1], nextNode->node[2]);
-			}
-			else
-			{
-				scrCompileGlob.breakBlock = nextNode->node[2].block;
-				hasDefault = 1;
-				EmitDefaultStatement(nextNode->node[1]);
-			}
-
-			Scr_TransferBlock(block, scrCompileGlob.breakBlock);
-			scrCompileGlob.bCanBreak[0] = 1;
-		}
-		else
-		{
-			if ( !scrCompileGlob.breakBlock )
-			{
-				CompileError(endSourcePos, "missing case statement");
-				return;
-			}
-
-			if ( lastStatement && Scr_IsLastStatement(node) )
-				EmitStatement(nextNode[0], 1, endSourcePos, scrCompileGlob.breakBlock);
-			else
-				EmitStatement(nextNode[0], 0, endSourcePos, scrCompileGlob.breakBlock);
-
-			if ( scrCompileGlob.breakBlock && scrCompileGlob.breakBlock->abortLevel )
-			{
-				scrCompileGlob.breakBlock = 0;
-				scrCompileGlob.bCanBreak[0] = 0;
-			}
-		}
-	}
-
-	if ( scrCompileGlob.breakBlock )
-	{
-		scrCompileGlob.bCanBreak[0] = 0;
-		EmitRemoveLocalVars(scrCompileGlob.breakBlock, scrCompileGlob.breakBlock);
-	}
-
-	if ( hasDefault )
-	{
-		if ( scrCompileGlob.breakBlock )
-			Scr_AddBreakBlock(scrCompileGlob.breakBlock);
-
-		Scr_InitFromChildBlocks(childBlocks, childCount, block);
-	}
-
-	scrCompileGlob.breakChildBlocks = breakChildBlocks;
-	scrCompileGlob.breakChildCount = breakChildCount;
-	scrCompileGlob.breakBlock = breakBlock;
-}
-
-int CompareCaseInfo(const void *elem1, const void *elem2)
-{
-	if ( *(intptr_t *)elem1 <= *(intptr_t *)elem2 )
-		return *(intptr_t *)elem1 < *(intptr_t *)elem2;
-	else
-		return -1;
-}
-
-void EmitSwitchStatement(sval_u expr, sval_u stmtlist, sval_u sourcePos, bool lastStatement, unsigned int endSourcePos, scr_block_s *block)
-{
-	int num;
-	char *nextPos;
-	char *pos3;
-	char *pos2;
-	char *pos1;
-	BreakStatementInfo *currentBreakStatement;
-	bool bCanBreak2;
-	bool bCanBreak1;
-	CaseStatementInfo *currentStatement;
-	CaseStatementInfo *nextStatement;
-	CaseStatementInfo *currentCaseStatement;
-	bool bOldThread;
-
-	bOldThread = scrCompileGlob.firstThread[2];
-	currentCaseStatement = scrCompileGlob.currentCaseStatement;
-	scrCompileGlob.firstThread[2] = 0;
-	bCanBreak1 = scrCompileGlob.bCanBreak[0];
-	bCanBreak2 = scrCompileGlob.bCanBreak[1];
-	currentBreakStatement = scrCompileGlob.currentBreakStatement;
-	scrCompileGlob.bCanBreak[0] = 0;
-	scrCompileGlob.bCanBreak[1] = 0;
 	EmitExpression(expr, block);
-	EmitOpcode(OP_switch, -1, CALL_NONE);
-	EmitCodepos(0);
-	pos1 = scrCompileGlob.codePos;
-	nextPos = (char *)TempMalloc(0);
-	scrCompileGlob.firstThread[2] = scrCompilePub.developer_statement != 0;
-	scrCompileGlob.currentCaseStatement = 0;
-	scrCompileGlob.bCanBreak[1] = scrCompilePub.developer_statement != 0;
-	scrCompileGlob.currentBreakStatement = 0;
-	EmitSwitchStatementList(stmtlist, lastStatement, endSourcePos, block);
-	scrCompileGlob.firstThread[2] = 0;
-	scrCompileGlob.bCanBreak[1] = 0;
-	EmitOpcode(OP_endswitch, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	EmitShort(0);
-	pos2 = scrCompileGlob.codePos;
-	*(intptr_t *)pos1 = scrCompileGlob.codePos - nextPos;
-	pos3 = TempMallocAlignStrict(0);
-	num = 0;
-	currentStatement = scrCompileGlob.currentCaseStatement;
+	EmitOpcode(OP_JumpOnFalse, -1, CALL_NONE);
+	AddOpcodePos(sourcePos.stringValue, SOURCE_TYPE_NONE);
+	EmitUnsignedShort(0);
 
-	while ( currentStatement )
-	{
-		EmitCodepos((const char *)currentStatement->name);
-		EmitCodepos(currentStatement->codePos);
-		currentStatement = currentStatement->next;
-		++num;
-	}
+	pos = (const char *)scrCompileGlob.codePos;
+	nextPos = TempMallocAlignStrict(0);
 
-	*(uint16_t *)pos2 = num;
-	qsort(pos3, num, sizeof(intptr_t) * sizeof(uint16_t), CompareCaseInfo);
+	Scr_TransferBlock(block, ifStatBlock->block);
 
-	while ( num > 1 )
-	{
-		if ( *(intptr_t *)pos3 == *((intptr_t *)pos3 + sizeof(uint16_t)) )
-		{
-			for ( nextStatement = scrCompileGlob.currentCaseStatement; nextStatement; nextStatement = nextStatement->next )
-			{
-				if ( nextStatement->name == *(intptr_t *)pos3 )
-				{
-					CompileError(nextStatement->sourcePos, "duplicate case expression");
-					return;
-				}
-			}
-		}
+	EmitStatement(stmt, lastStatement, endSourcePos, ifStatBlock->block);
+	assert(ifStatBlock->block->localVarsPublicCount == block->localVarsCreateCount);
+	EmitNOP2(lastStatement, endSourcePos, ifStatBlock->block);
 
-		--num;
-		pos3 += sizeof(intptr_t) * sizeof(uint16_t);
-	}
-
-	ConnectBreakStatements();
-	scrCompileGlob.firstThread[2] = bOldThread;
-	scrCompileGlob.currentCaseStatement = currentCaseStatement;
-	scrCompileGlob.bCanBreak[0] = bCanBreak1;
-	scrCompileGlob.bCanBreak[1] = bCanBreak2;
-	scrCompileGlob.currentBreakStatement = currentBreakStatement;
+	offset = TempMallocAlignStrict(0) - nextPos;
+	assert(offset < 65536);
+	*(unsigned short *)pos = offset;
 }
 
-void EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
-{
-	BreakStatementInfo *newBreakStatement;
-
-	if ( scrCompileGlob.bCanBreak[0] && block->abortLevel == SCR_ABORT_NONE )
-	{
-		Scr_AddBreakBlock(block);
-		EmitRemoveLocalVars(block, scrCompileGlob.breakBlock);
-		block->abortLevel = SCR_ABORT_BREAK;
-		EmitOpcode(OP_jump, 0, CALL_NONE);
-		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-		EmitCodepos(0);
-		newBreakStatement = (BreakStatementInfo *)Hunk_AllocateTempMemoryHighInternal(sizeof(BreakStatementInfo));
-		newBreakStatement->codePos = scrCompileGlob.codePos;
-		newBreakStatement->nextCodePos = (char *)TempMalloc(0);
-		newBreakStatement->next = scrCompileGlob.currentBreakStatement;
-		scrCompileGlob.currentBreakStatement = newBreakStatement;
-	}
-	else
-	{
-		CompileError(sourcePos.sourcePosValue, "illegal break statement");
-	}
-}
-
-void EmitContinueStatement(sval_u sourcePos, scr_block_s *block)
-{
-	ContinueStatementInfo *newContinueStatement;
-
-	if ( scrCompileGlob.bCanContinue[0] && block->abortLevel == SCR_ABORT_NONE )
-	{
-		Scr_AddContinueBlock(block);
-		EmitRemoveLocalVars(block, block);
-		block->abortLevel = SCR_ABORT_CONTINUE;
-		EmitOpcode(OP_jump, 0, CALL_NONE);
-		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-		EmitCodepos(0);
-		newContinueStatement = (ContinueStatementInfo *)Hunk_AllocateTempMemoryHighInternal(sizeof(ContinueStatementInfo));
-		newContinueStatement->codePos = scrCompileGlob.codePos;
-		newContinueStatement->nextCodePos = (char *)TempMalloc(0);
-		newContinueStatement->next = scrCompileGlob.currentContinueStatement;
-		scrCompileGlob.currentContinueStatement = newContinueStatement;
-	}
-	else
-	{
-		CompileError(sourcePos.sourcePosValue, "illegal continue statement");
-	}
-}
-
-void EmitBreakpointStatement(sval_u sourcePos)
-{
-	if ( scrVarPub.developer_script )
-	{
-		EmitOpcode(OP_breakpoint, 0, CALL_NONE);
-		AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	}
-}
-
-void EmitProfStatement(sval_u profileName, sval_u sourcePos, int op)
-{
-	if ( scrVarPub.developer_script )
-	{
-		Scr_CompileRemoveRefToString(profileName.stringValue);
-		EmitOpcode(op, 0, CALL_NONE);
-		EmitByte(0);
-	}
-	else
-	{
-		Scr_CompileRemoveRefToString(profileName.stringValue);
-	}
-}
-
-void EmitProfBeginStatement(sval_u profileName, sval_u sourcePos)
-{
-	EmitProfStatement(profileName, sourcePos, OP_prof_begin);
-}
-
-void EmitProfEndStatement(sval_u profileName, sval_u sourcePos)
-{
-	EmitProfStatement(profileName, sourcePos, OP_prof_end);
-}
-
-void EmitStatementList(sval_u val, bool lastStatement, unsigned int endSourcePos, scr_block_s *block)
-{
-	sval_u *node;
-	sval_u *nextNode;
-
-	for ( nextNode = val.node->node[1].node; nextNode; nextNode = node )
-	{
-		node = nextNode[1].node;
-
-		if ( lastStatement && Scr_IsLastStatement(node) )
-			EmitStatement(nextNode[0], 1, endSourcePos, block);
-		else
-			EmitStatement(nextNode[0], 0, endSourcePos, block);
-	}
-}
-
-void EmitWaittillFrameEnd(sval_u sourcePos)
-{
-	EmitOpcode(OP_waittillFrameEnd, 0, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitNotifyStatement(sval_u obj, sval_u exprlist, sval_u sourcePos, sval_u notifySourcePos, scr_block_s *block)
-{
-	int expr_count;
-	sval_u *node;
-	sval_u *startNode;
-
-	EmitOpcode(OP_voidCodepos, 1, CALL_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-	expr_count = 0;
-	startNode = 0;
-
-	for ( node = exprlist.node->node; node; node = node[1].node )
-	{
-		startNode = node;
-		EmitExpression(node->node[0], block);
-		++expr_count;
-	}
-
-	EmitPrimitiveExpression(obj, block);
-	EmitOpcode(OP_notify, -expr_count - 2, CALL_NONE);
-	AddOpcodePos(notifySourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(startNode->node[1].sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitEndOnStatement(sval_u obj, sval_u expr, sval_u sourcePos, sval_u exprSourcePos, scr_block_s *block)
+/*
+============
+EmitWaitStatement
+============
+*/
+void EmitWaitStatement( sval_u expr, sval_u sourcePos, sval_u waitSourcePos, scr_block_s *block )
 {
 	EmitExpression(expr, block);
-	EmitPrimitiveExpression(obj, block);
-	EmitOpcode(OP_endon, -2, CALL_NONE);
-	AddOpcodePos(exprSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
+	EmitOpcode(OP_wait, -1, CALL_NONE);
 
-void EmitWaittillmatchStatement(sval_u obj, sval_u exprlist, sval_u sourcePos, sval_u waitSourcePos, scr_block_s *block)
-{
-	int exprCount;
-	sval_u *nextNode;
-	sval_u *node;
-
-	nextNode = exprlist.node->node[1].node;
-
-	for ( exprCount = 0; ; ++exprCount )
-	{
-		nextNode = nextNode[1].node;
-
-		if ( !nextNode )
-			break;
-
-		EmitExpression(nextNode->node[0], block);
-	}
-
-	node = exprlist.node->node[1].node;
-	EmitExpression(node->node[0], block);
-	EmitPrimitiveExpression(obj, block);
-	EmitOpcode(OP_waittillmatch, -2 - exprCount, CALL_NONE);
 	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
 	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(node->node[1].sourcePosValue, SOURCE_TYPE_NONE);
-
-	while ( 1 )
-	{
-		node = node[1].node;
-
-		if ( !node )
-			break;
-
-		AddOpcodePos(node->node[1].sourcePosValue, SOURCE_TYPE_NONE);
-	}
-
-	EmitByte(exprCount);
-	EmitOpcode(OP_clearparams, 0, CALL_NONE);
 }
 
-void EmitDeveloperStatementList(sval_u val, sval_u sourcePos, scr_block_s *block, sval_u *devStatBlock)
+/*
+============
+EmitReturnStatement
+============
+*/
+void EmitReturnStatement( sval_u expr, sval_u sourcePos, scr_block_s *block )
 {
-	char *savedPos;
-	unsigned int savedChecksum;
-
-	if ( scrCompilePub.developer_statement )
+	if ( block->abortLevel == SCR_ABORT_NONE )
 	{
-		CompileError(sourcePos.sourcePosValue, "cannot recurse /#");
+		block->abortLevel = SCR_ABORT_RETURN;
 	}
-	else
-	{
-		savedChecksum = scrVarPub.checksum;
-		Scr_TransferBlock(block, devStatBlock->block);
 
-		if ( scrVarPub.developer_script )
-		{
-			scrCompilePub.developer_statement = 1;
-			EmitStatementList(val, 0, 0, devStatBlock->block);
-			EmitRemoveLocalVars(devStatBlock->block, devStatBlock->block);
-		}
+	EmitExpression(expr, block);
+	EmitReturn();
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+}
+
+/*
+============
+EmitClearVariableExpression
+============
+*/
+bool EmitClearVariableExpression( sval_u expr, sval_u rhsSourcePos, scr_block_s *block )
+{
+	switch ( expr.node[0].type )
+	{
+	case ENUM_local_variable:
+		return false;
+
+	case ENUM_array_variable:
+		EmitClearArrayVariable(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
+		return true;
+
+	case ENUM_field_variable:
+		EmitClearFieldVariable(expr.node[1], expr.node[2], expr.node[3], rhsSourcePos, block);
+		return true;
+
+	case ENUM_self_field:
+	case ENUM_object:
+		if ( scrCompilePub.script_loading )
+			CompileError(expr.node[2].sourcePosValue, "$ and self field can only be used in the script debugger");
 		else
-		{
-			savedPos = (char *)TempMalloc(0);
-			scrCompilePub.developer_statement = 2;
-			EmitStatementList(val, 0, 0, devStatBlock->block);
-			TempMemorySetPos(savedPos);
-		}
+			CompileError(expr.node[2].sourcePosValue, "not an lvalue");
+		return true;
 
-		scrCompilePub.developer_statement = 0;
-		scrVarPub.checksum = savedChecksum;
+	default:
+		return true;
 	}
 }
 
-void EmitSafeSetWaittillVariableField(sval_u expr, sval_u sourcePos, scr_block_s *block)
+/*
+============
+EmitVariableExpressionRef
+============
+*/
+void EmitVariableExpressionRef( sval_u expr, scr_block_s *block )
 {
-	unsigned char index;
-
-	index = Scr_FindLocalVarIndex(expr.sourcePosValue, sourcePos, 1, block);
-	EmitOpcode(OP_SafeSetWaittillVariableFieldCached, 0, CALL_NONE);
-	EmitByte(index);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitFormalWaittillParameterListRefInternal(sval_u *node, scr_block_s *block)
-{
-	while ( 1 )
+	switch ( expr.node[0].type )
 	{
-		node = node[1].node;
+	case ENUM_local_variable:
+		EmitLocalVariableRef(expr.node[1], expr.node[2], block);
+		break;
 
-		if ( !node )
-			break;
+	case ENUM_array_variable:
+		EmitArrayVariableRef(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
+		break;
 
-		EmitSafeSetWaittillVariableField(node->node[0], node->node[1], block);
+	case ENUM_field_variable:
+		EmitFieldVariableRef(expr.node[1], expr.node[2], expr.node[3], block);
+		break;
+
+	case ENUM_self_field:
+	case ENUM_object:
+		if ( scrCompilePub.script_loading )
+			CompileError(expr.node[2].sourcePosValue, "$ and self field can only be used in the script debugger");
+		else
+			CompileError(expr.node[2].sourcePosValue, "not an lvalue");
+		break;
 	}
 }
 
-void EmitWaittillStatement(sval_u obj, sval_u exprlist, sval_u sourcePos, sval_u waitSourcePos, scr_block_s *block)
+/*
+============
+EmitBinaryEqualsOperatorExpression
+============
+*/
+void EmitBinaryEqualsOperatorExpression( sval_u lhs, sval_u rhs, sval_u opcode, sval_u sourcePos, scr_block_s *block )
 {
-	sval_u *node;
+	assert(!scrCompileGlob.bConstRefCount);
+	scrCompileGlob.bConstRefCount = true;
+	EmitVariableExpression(lhs, block);
 
-	node = exprlist.node->node[1].node;
-	EmitExpression(node->node[0], block);
-	EmitPrimitiveExpression(obj, block);
-	EmitOpcode(OP_waittill, -2, CALL_NONE);
-	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(waitSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	assert(scrCompileGlob.bConstRefCount);
+	scrCompileGlob.bConstRefCount = false;
+	EmitExpression(rhs, block);
+
+	EmitOpcode(opcode.type, -1, CALL_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-	AddOpcodePos(node->node[1].sourcePosValue, SOURCE_TYPE_NONE);
-	EmitFormalWaittillParameterListRefInternal(node, block);
-	EmitOpcode(OP_clearparams, 0, CALL_NONE);
+
+	EmitVariableExpressionRef(lhs, block);
+	EmitSetVariableField(sourcePos);
 }
 
-void EmitStatement(sval_u val, bool lastStatement, unsigned int endSourcePos, scr_block_s *block)
+/*
+============
+EmitDecStatement
+============
+*/
+void EmitDecStatement( sval_u expr, sval_u sourcePos, scr_block_s *block )
 {
-	switch ( val.node->type )
+	assert(!scrCompileGlob.forceNotCreate);
+	scrCompileGlob.forceNotCreate = true;
+	EmitVariableExpressionRef(expr, block);
+
+	assert(scrCompileGlob.forceNotCreate);
+	scrCompileGlob.forceNotCreate = false;
+	EmitOpcode(OP_dec, 1, CALL_NONE);
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	EmitSetVariableField(sourcePos);
+}
+
+/*
+============
+EmitIncStatement
+============
+*/
+void EmitIncStatement( sval_u expr, sval_u sourcePos, scr_block_s *block )
+{
+	assert(!scrCompileGlob.forceNotCreate);
+	scrCompileGlob.forceNotCreate = true;
+	EmitVariableExpressionRef(expr, block);
+
+	assert(scrCompileGlob.forceNotCreate);
+	scrCompileGlob.forceNotCreate = false;
+	EmitOpcode(OP_inc, 1, CALL_NONE);
+
+	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
+	EmitSetVariableField(sourcePos);
+}
+
+/*
+============
+EmitAssignmentStatement
+============
+*/
+void EmitAssignmentStatement( sval_u lhs, sval_u rhs, sval_u sourcePos, sval_u rhsSourcePos, scr_block_s *block )
+{
+	if ( IsUndefinedExpression(rhs) )
+	{
+		if ( EmitClearVariableExpression(lhs, rhsSourcePos, block) )
+		{
+			return;
+		}
+	}
+
+	EmitExpression(rhs, block);
+	EmitVariableExpressionRef(lhs, block);
+	EmitSetVariableField(sourcePos);
+}
+
+/*
+============
+EmitStatement
+============
+*/
+void EmitStatement( sval_u val, bool lastStatement, unsigned int endSourcePos, scr_block_s *block )
+{
+	switch ( val.node[0].type )
 	{
 	case ENUM_assignment:
 		EmitAssignmentStatement(val.node[1], val.node[2], val.node[3], val.node[4], block);
@@ -3469,716 +5608,187 @@ void EmitStatement(sval_u val, bool lastStatement, unsigned int endSourcePos, sc
 	}
 }
 
-void EmitArrayVariable(sval_u expr, sval_u index, sval_u sourcePos, sval_u indexSourcePos, scr_block_s *block)
+/*
+============
+EmitStatementList
+============
+*/
+void EmitStatementList( sval_u val, bool lastStatement, unsigned int endSourcePos, scr_block_s *block )
 {
-	EmitExpression(index, block);
-	EmitPrimitiveExpression(expr, block);
-	EmitEvalArray(sourcePos, indexSourcePos);
-}
+	sval_u *node, *next_node;
 
-void EmitVariableExpression(sval_u expr, scr_block_s *block)
-{
-	if ( expr.node->type == ENUM_field_variable )
+	for ( next_node = val.node[0].node[1].node; next_node; next_node = node )
 	{
-		EmitFieldVariable(expr.node[1], expr.node[2], expr.node[3], block);
-	}
-	else if ( expr.node->type > ENUM_field_variable )
-	{
-		if ( expr.node->type == ENUM_self_field )
-		{
-			if ( scrCompilePub.script_loading )
-				CompileError(expr.node[2].sourcePosValue, "self field can only be used in the script debugger");
-			else
-				CompileError(expr.node[2].sourcePosValue, "self field in assignment expression not currently supported");
-		}
-		else if ( expr.node->type == ENUM_object )
-		{
-			EmitObject(expr.node[1], expr.node[2]);
-		}
-	}
-	else if ( expr.node->type == ENUM_local_variable )
-	{
-		EmitLocalVariable(expr.node[1], expr.node[2], block);
-	}
-	else if ( expr.node->type == ENUM_array_variable )
-	{
-		EmitArrayVariable(expr.node[1], expr.node[2], expr.node[3], expr.node[4], block);
-	}
-}
+		node = next_node[1].node;
 
-void EmitExpressionFieldObject(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	if ( expr.node->type == ENUM_primitive_expression )
-		EmitPrimitiveExpressionFieldObject(expr.node[1], expr.node[2], block);
-	else
-		CompileError(sourcePos.sourcePosValue, "not an object");
-}
-
-void EmitExpressionListFieldObject(sval_u exprlist, sval_u sourcePos, scr_block_s *block)
-{
-	sval_u *node;
-
-	node = GetSingleParameter(exprlist);
-
-	if ( node )
-		EmitExpressionFieldObject(node->node[0], node->node[1], block);
-	else
-		CompileError(sourcePos.sourcePosValue, "not an object");
-}
-
-void EmitPrimitiveExpressionFieldObject(sval_u expr, sval_u sourcePos, scr_block_s *block)
-{
-	switch ( expr.node->type )
-	{
-	case ENUM_variable:
-		EmitVariableExpression(expr.node[1], block);
-		EmitCastFieldObject(expr.node[2]);
-		break;
-
-	case ENUM_call_expression:
-		EmitCallExpressionFieldObject(expr.node[1], block);
-		break;
-
-	case ENUM_self:
-		EmitSelfObject(expr.node[1]);
-		break;
-
-	case ENUM_level:
-		EmitLevelObject(expr.node[1]);
-		break;
-
-	case ENUM_anim:
-		EmitAnimObject(expr.node[1]);
-		break;
-
-	case ENUM_expression_list:
-		EmitExpressionListFieldObject(expr.node[1], sourcePos, block);
-		break;
-
-	default:
-		CompileError(sourcePos.sourcePosValue, "not an object");
-		break;
-	}
-}
-
-void EmitPreFunctionCall(sval_u func_name)
-{
-	if ( func_name.node->type == ENUM_script_call )
-		EmitOpcode(OP_PreScriptCall, 1, CALL_NONE);
-}
-
-void EmitExpression(sval_u expr, scr_block_s *block)
-{
-	VariableCompileValue constValue;
-
-	if ( EmitOrEvalExpression(expr, &constValue, block) )
-		EmitValue(&constValue);
-}
-
-void EmitPrimitiveExpression(sval_u expr, scr_block_s *block)
-{
-	VariableCompileValue constValue;
-
-	if ( EmitOrEvalPrimitiveExpression(expr, &constValue, block) )
-		EmitValue(&constValue);
-}
-
-int EmitExpressionList(sval_u exprlist, scr_block_s *block)
-{
-	sval_u *node;
-	int expr_count;
-
-	expr_count = 0;
-
-	for ( node = exprlist.node->node; node; node = node[1].node )
-	{
-		EmitExpression(node->node[0], block);
-		++expr_count;
-	}
-
-	return expr_count;
-}
-
-void EmitPostFunctionCall(sval_u func_name, int param_count, bool bMethod, scr_block_s *block)
-{
-	if ( func_name.node->type == ENUM_script_call )
-	{
-		EmitPostScriptFunctionCall(func_name.node[1], param_count, bMethod, func_name.node[2], block);
-	}
-	else if ( func_name.node->type == ENUM_script_thread_call )
-	{
-		EmitPostScriptThreadCall(func_name.node[1], param_count, bMethod, func_name.node[2], func_name.node[3], block);
-	}
-}
-
-int AddFunction(int func)
-{
-	int i;
-
-	for ( i = 0; i < scrCompilePub.func_table_size; ++i )
-	{
-		if ( scrCompilePub.func_table[i] == func )
-			return i;
-	}
-
-	if ( scrCompilePub.func_table_size == 1024 )
-		Com_Error(ERR_DROP, "SCR_FUNC_TABLE_SIZE exceeded");
-
-	scrCompilePub.func_table[scrCompilePub.func_table_size++] = func;
-	return i;
-}
-
-void EmitCall(sval_u func_name, sval_u params, bool bStatement, scr_block_s *block)
-{
-	short newFuncIndex;
-	VariableValue value;
-	unsigned int funcId;
-	char *savedPos;
-	void (*func)();
-	int type;
-	const char *pName;
-	sval_u sourcePos;
-	unsigned int index;
-	int param_count;
-
-	index = Scr_GetBuiltin(func_name);
-
-	if ( !index )
-		goto script_function;
-
-	pName = SL_ConvertToString(index);
-	sourcePos.sourcePosValue = func_name.node[2].sourcePosValue;
-	funcId = FindVariable(scrCompilePub.builtinFunc, index);
-
-	if ( funcId )
-	{
-		Scr_EvalVariable(&value, funcId);
-		type = Scr_IsVariable(value.type);
-		func = (void (*)())value.u.intValue;
-	}
-	else
-	{
-		type = BUILTIN_ANY;
-		func = Scr_GetFunction(&pName, &type);
-		funcId = GetNewVariable(scrCompilePub.builtinFunc, index);
-		value.type = Scr_GetCacheType(type);
-		value.u.intValue = (intptr_t)func;
-		SetVariableValue(funcId, &value);
-	}
-
-	if ( func )
-	{
-		if ( type == BUILTIN_DEVELOPER_ONLY && (Scr_BeginDevScript(&type, &savedPos), type == BUILTIN_DEVELOPER_ONLY) && !bStatement )
-		{
-			CompileError(
-			    sourcePos.sourcePosValue,
-			    "return value of developer command can not be accessed if not in a /# ... #/ comment");
-		}
+		if ( lastStatement && Scr_IsLastStatement(node) )
+			EmitStatement(next_node[0], true, endSourcePos, block);
 		else
-		{
-			param_count = EmitExpressionList(params, block);
-
-			if ( param_count < 256 )
-			{
-				Scr_CompileRemoveRefToString(index);
-				EmitCallBuiltinOpcode(param_count, sourcePos);
-				newFuncIndex = AddFunction((intptr_t)func);
-				EmitShort(newFuncIndex);
-				AddExpressionListOpcodePos(params);
-
-				if ( bStatement )
-					EmitDecTop();
-
-				Scr_EndDevScript(type, &savedPos);
-			}
-			else
-			{
-				CompileError(sourcePos.sourcePosValue, "parameter count exceeds 256");
-			}
-		}
-	}
-	else
-	{
-script_function:
-		EmitPreFunctionCall(func_name);
-		param_count = EmitExpressionList(params, block);
-		EmitPostFunctionCall(func_name, param_count, 0, block);
-		AddExpressionListOpcodePos(params);
-
-		if ( bStatement )
-			EmitDecTop();
+			EmitStatement(next_node[0], false, endSourcePos, block);
 	}
 }
 
-void EmitFunction(sval_u func, sval_u sourcePos)
+/*
+============
+EmitThreadInternal
+============
+*/
+void EmitThreadInternal( unsigned int threadId, sval_u val, sval_u sourcePos, sval_u endSourcePos, scr_block_s *block )
 {
-	const char *funcName;
-	int scope;
-	bool bExists;
-	unsigned int name;
-	unsigned int fileId;
-	unsigned int id;
-	unsigned int countId;
-	unsigned int threadName;
-	unsigned int threadId;
-	unsigned int posId;
-	VariableValue value;
-	VariableValue count;
-
-	if ( scrCompilePub.developer_statement == 2 )
-	{
-		Scr_CompileRemoveRefToString(func.node[1].stringValue);
-
-		if ( func.node->type == ENUM_far_function )
-		{
-			Scr_CompileRemoveRefToString(func.node[2].stringValue);
-			--scrCompilePub.far_function_count;
-		}
-
-		return;
-	}
-
-	threadId = 0;
-
-	if ( func.node->type == ENUM_local_function )
-	{
-		scope = 0;
-		threadName = GetVariable(scrCompileGlob.filePosId, func.node[1].idValue);
-		CompileTransferRefToString(func.node[1].stringValue, 2u);
-		threadId = GetObjectA(threadName);
-	}
-	else
-	{
-		scope = 1;
-		funcName = SL_ConvertToString(func.node[1].stringValue);
-		name = Scr_CreateCanonicalFilename(funcName);
-		Scr_CompileRemoveRefToString(func.node[1].stringValue);
-		Scr_EvalVariable(&value, FindVariable(scrCompilePub.loadedscripts, name));
-		bExists = value.type != VAR_UNDEFINED;
-		fileId = AddFilePrecache(name, sourcePos.sourcePosValue, 0);
-
-		if ( bExists )
-		{
-			threadName = FindVariable(fileId, func.node[2].idValue);
-
-			if ( !threadName || GetValueType(threadName) != VAR_OBJECT )
-			{
-				CompileError(sourcePos.sourcePosValue, "unknown function");
-				return;
-			}
-		}
-		else
-		{
-			threadName = GetVariable(fileId, func.node[2].idValue);
-		}
-
-		CompileTransferRefToString(func.node[2].stringValue, 2u);
-		threadId = GetObjectA(threadName);
-		posId = FindVariable(threadId, 1u);
-
-		if ( posId )
-		{
-			Scr_EvalVariable(&value, posId);
-
-			if ( value.type == VAR_INCLUDE_CODEPOS )
-			{
-				CompileError(sourcePos.sourcePosValue, "unknown function");
-				return;
-			}
-
-			if ( value.u.intValue )
-			{
-				if ( value.type == VAR_CODEPOS || scrCompilePub.developer_statement )
-					EmitCodepos(value.u.codePosValue);
-				else
-					CompileError(sourcePos.sourcePosValue, "normal script cannot reference a function in a /# ... #/ comment");
-
-				return;
-			}
-		}
-	}
-
-	EmitCodepos((const char *)scope);
-	countId = GetVariable(threadId, 0);
-	Scr_EvalVariable(&count, countId);
-
-	if ( count.type == VAR_UNDEFINED )
-	{
-		count.type = VAR_INTEGER;
-		count.u.intValue = 0;
-	}
-
-	id = GetNewVariable(threadId, count.u.intValue + 2);
-	value.u.codePosValue = scrCompileGlob.codePos;
-
-	if ( scrCompilePub.developer_statement )
-		value.type = VAR_DEVELOPER_CODEPOS;
-	else
-		value.type = VAR_CODEPOS;
-
-	SetNewVariableValue(id, &value);
-	++count.u.intValue;
-	SetVariableValue(countId, &count);
-	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-}
-
-void EmitMethod(sval_u expr, sval_u func_name, sval_u params, sval_u methodSourcePos, bool bStatement, scr_block_s *block)
-{
-	short newMethIndex;
-	VariableValue value;
-	unsigned int methId;
-	char *savedPos;
-	void (*meth)(scr_entref_t);
-	int type;
-	const char *pName;
-	sval_u sourcePos;
-	unsigned int index;
-	int param_count;
-
-	index = Scr_GetBuiltin(func_name);
-
-	if ( !index )
-		goto script_method;
-
-	pName = SL_ConvertToString(index);
-	sourcePos.sourcePosValue = func_name.node[2].sourcePosValue;
-	methId = FindVariable(scrCompilePub.builtinMeth, index);
-
-	if ( methId )
-	{
-		Scr_EvalVariable(&value, methId);
-		type = Scr_IsVariable(value.type);
-		meth = (void (*)(scr_entref_t))value.u.intValue;
-	}
-	else
-	{
-		type = BUILTIN_ANY;
-		meth = Scr_GetMethod(&pName, &type);
-		methId = GetNewVariable(scrCompilePub.builtinMeth, index);
-		value.type = Scr_GetCacheType(type);
-		value.u.intValue = (intptr_t)meth;
-		SetVariableValue(methId, &value);
-	}
-
-	if ( meth )
-	{
-		if ( type == BUILTIN_DEVELOPER_ONLY && (Scr_BeginDevScript(&type, &savedPos), type == BUILTIN_DEVELOPER_ONLY) && !bStatement )
-		{
-			CompileError(
-			    sourcePos.sourcePosValue,
-			    "return value of developer command can not be accessed if not in a /# ... #/ comment");
-		}
-		else
-		{
-			param_count = EmitExpressionList(params, block);
-			EmitPrimitiveExpression(expr, block);
-
-			if ( param_count < 256 )
-			{
-				Scr_CompileRemoveRefToString(index);
-				EmitCallBuiltinMethodOpcode(param_count, sourcePos);
-				newMethIndex = AddFunction((intptr_t)meth);
-				EmitShort(newMethIndex);
-				AddOpcodePos(methodSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-				AddExpressionListOpcodePos(params);
-
-				if ( bStatement )
-					EmitDecTop();
-
-				Scr_EndDevScript(type, &savedPos);
-			}
-			else
-			{
-				CompileError(sourcePos.sourcePosValue, "parameter count exceeds 256");
-			}
-		}
-	}
-	else
-	{
-script_method:
-		EmitPreFunctionCall(func_name);
-		param_count = EmitExpressionList(params, block);
-		EmitPrimitiveExpression(expr, block);
-		EmitPostFunctionCall(func_name, param_count, 1, block);
-		AddOpcodePos(methodSourcePos.sourcePosValue, SOURCE_TYPE_NONE);
-		AddExpressionListOpcodePos(params);
-
-		if ( bStatement )
-			EmitDecTop();
-	}
-}
-
-void InitThread(int type)
-{
-	scrCompileGlob.firstThread[2] = 0;
-	scrCompileGlob.currentCaseStatement = 0;
-	scrCompileGlob.bCanBreak[0] = 0;
-	scrCompileGlob.bCanBreak[1] = 0;
-	scrCompileGlob.currentBreakStatement = 0;
-	scrCompileGlob.bCanContinue[0] = 0;
-	scrCompileGlob.bCanContinue[1] = 0;
-	scrCompileGlob.currentContinueStatement = 0;
-	scrCompileGlob.breakChildBlocks = 0;
-	scrCompileGlob.continueChildBlocks = 0;
-
-	if ( scrCompileGlob.firstThread[type] )
-	{
-		scrCompileGlob.firstThread[type] = 0;
-		EmitEnd();
-		AddOpcodePos(0, SOURCE_TYPE_NONE);
-		AddOpcodePos(0xFFFFFFFE, SOURCE_TYPE_NONE);
-	}
-}
-
-void SetThreadPosition(unsigned int posId)
-{
-	unsigned int nextPosId;
-	VariableValueInternal_u *value;
-
-	nextPosId = FindVariable(posId, 1u);
-	value = GetVariableValueAddress_Bad(nextPosId);
-	value->u.codePosValue = (const char *)TempMalloc(0);
-}
-
-void EmitThreadInternal(unsigned int id, sval_u val, sval_u sourcePos, sval_u endSourcePos, scr_block_s *block)
-{
-	scrCompileGlob.fileCountId = id;
+	scrCompileGlob.threadId = threadId;
 	AddThreadStartOpcodePos(sourcePos.sourcePosValue);
+
 	scrCompileGlob.cumulOffset = 0;
 	scrCompileGlob.maxOffset = 0;
 	scrCompileGlob.maxCallOffset = 0;
-	CompileTransferRefToString(val.node[1].stringValue, 2u);
+
+	CompileTransferRefToString(val.node[1].stringValue, 2);
+
 	EmitFormalParameterList(val.node[2], sourcePos, block);
-	EmitStatementList(val.node[3], 1, endSourcePos.sourcePosValue, block);
+	EmitStatementList(val.node[3], true, endSourcePos.sourcePosValue, block);
+
 	EmitEnd();
+
 	AddOpcodePos(endSourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 	AddOpcodePos(0xFFFFFFFE, SOURCE_TYPE_NONE);
 
-	if ( scrCompileGlob.maxOffset + 32 * scrCompileGlob.maxCallOffset > 2047 )
+	assert(!scrCompileGlob.cumulOffset);
+
+	if ( scrCompileGlob.maxOffset + MAX_VM_STACK_DEPTH * scrCompileGlob.maxCallOffset >= MAX_VM_OPERAND_STACK )
+	{
 		CompileError(sourcePos.sourcePosValue, "function exceeds operand stack size");
+	}
 }
 
-void EmitNormalThread(sval_u val, sval_u *stmttblock)
+/*
+============
+EmitDeveloperThread
+============
+*/
+void EmitDeveloperThread( sval_u val, sval_u *stmttblock )
 {
-	unsigned int posId;
-	unsigned int threadId;
+	unsigned int posId, threadId, savedChecksum;
+	char *begin_pos;
 
-	InitThread(0);
-	posId = FindVariable(scrCompileGlob.filePosId, val.node[1].sourcePosValue);
-	threadId = FindObject(posId);
-	SetThreadPosition(threadId);
-	EmitThreadInternal(threadId, val, val.node[4], val.node[5], stmttblock->block);
-}
-
-void EmitDeveloperThread(sval_u val, sval_u *stmttblock)
-{
-	unsigned int posId;
-	char *pos;
-	unsigned int threadId;
-	unsigned int checksum;
+	assert(scrCompilePub.developer_statement == SCR_DEV_NO);
 
 	if ( scrVarPub.developer_script )
 	{
-		scrCompilePub.developer_statement = 1;
+		scrCompilePub.developer_statement = SCR_DEV_YES;
 		InitThread(1);
-		posId = FindVariable(scrCompileGlob.filePosId, val.node[1].sourcePosValue);
+
+		posId = FindVariable(scrCompileGlob.fileId, val.node[1].sourcePosValue);
 		threadId = FindObject(posId);
+
 		SetThreadPosition(threadId);
 		EmitThreadInternal(threadId, val, val.node[4], val.node[5], stmttblock->block);
 	}
 	else
 	{
-		pos = (char *)TempMalloc(0);
-		checksum = scrVarPub.checksum;
-		scrCompilePub.developer_statement = 2;
+		begin_pos = TempMalloc(0);
+		savedChecksum = scrVarPub.checksum;
+
+		scrCompilePub.developer_statement = SCR_DEV_IGNORE;
 		InitThread(1);
+
 		EmitThreadInternal(0, val, val.node[4], val.node[5], stmttblock->block);
-		TempMemorySetPos(pos);
-		scrVarPub.checksum = checksum;
+
+		TempMemorySetPos(begin_pos);
+		scrVarPub.checksum = savedChecksum;
 	}
 
-	scrCompilePub.developer_statement = 0;
+	scrCompilePub.developer_statement = SCR_DEV_NO;
 }
 
-void EmitThread(sval_u val)
+/*
+============
+EmitNormalThread
+============
+*/
+void EmitNormalThread( sval_u val, sval_u *stmttblock )
 {
-	if ( val.node->type == ENUM_begin_developer_thread )
-	{
-		scrCompileGlob.in_developer_thread = 1;
-	}
-	else if ( val.node->type > ENUM_begin_developer_thread )
-	{
-		if ( val.node->type == ENUM_end_developer_thread )
-		{
-			scrCompileGlob.in_developer_thread = 0;
-		}
-		else if ( val.node->type == ENUM_usingtree )
-		{
-			if ( scrCompileGlob.in_developer_thread )
-			{
-				CompileError(val.node[2].sourcePosValue, "cannot put #using_animtree inside /# ... #/ comment");
-			}
-			else
-			{
-				Scr_UsingTree(SL_ConvertToString(val.node[1].stringValue), val.node[3].sourcePosValue);
-				Scr_CompileRemoveRefToString(val.node[1].stringValue);
-			}
-		}
-	}
-	else if ( val.node->type == ENUM_thread )
-	{
-		Scr_CalcLocalVarsThread(val.node[2], val.node[3], &val.node[6]);
+	unsigned int posId, threadId;
 
+	InitThread(0);
+
+	posId = FindVariable(scrCompileGlob.fileId, val.node[1].sourcePosValue);
+	threadId = FindObject(posId);
+
+	SetThreadPosition(threadId);
+	EmitThreadInternal(threadId, val, val.node[4], val.node[5], stmttblock->block);
+}
+
+/*
+============
+EmitThread
+============
+*/
+void EmitThread( sval_u val )
+{
+	switch ( val.node[0].type )
+	{
+	case ENUM_thread:
+		Scr_CalcLocalVarsThread( val.node[2], val.node[3], &val.node[6] );
 		if ( scrCompileGlob.in_developer_thread )
-			EmitDeveloperThread(val, &val.node[6]);
+			EmitDeveloperThread( val, &val.node[6] );
 		else
-			EmitNormalThread(val, &val.node[6]);
+			EmitNormalThread( val, &val.node[6] );
+		break;
+
+	case ENUM_begin_developer_thread:
+		assert(!scrCompileGlob.in_developer_thread);
+		scrCompileGlob.in_developer_thread = true;
+		break;
+
+	case ENUM_end_developer_thread:
+		assert(scrCompileGlob.in_developer_thread);
+		scrCompileGlob.in_developer_thread = false;
+		break;
+
+	case ENUM_usingtree:
+		if ( scrCompileGlob.in_developer_thread )
+			CompileError( val.node[2].sourcePosValue, "cannot put #using_animtree inside /# ... #/ comment" );
+		else
+		{
+			Scr_UsingTree( SL_ConvertToString( val.node[1].stringValue ), val.node[3].sourcePosValue );
+			Scr_CompileRemoveRefToString( val.node[1].stringValue );
+		}
+		break;
 	}
 }
 
-void EmitThreadList(sval_u val)
+/*
+============
+EmitThreadList
+============
+*/
+void EmitThreadList( sval_u val )
 {
 	sval_u *node;
-	sval_u *node2;
 
-	scrCompileGlob.in_developer_thread = 0;
+	scrCompileGlob.in_developer_thread = false;
 
-	for ( node = val.node->node[1].node; node; node = node[1].node )
+	for ( node = val.node[0].node[1].node; node; node = node[1].node )
+	{
 		SpecifyThread(node[0]);
+	}
 
 	if ( scrCompileGlob.in_developer_thread )
+	{
 		CompileError(scrCompileGlob.developer_thread_sourcePos, "/# has no matching #/");
-
-	scrCompileGlob.firstThread[0] = 1;
-	scrCompileGlob.firstThread[1] = 1;
-
-	for ( node2 = val.node->node[1].node; node2; node2 = node2[1].node )
-		EmitThread(node2[0]);
-}
-
-void ScriptCompile(sval_u val, unsigned int filePosId, unsigned int scriptId)
-{
-	VariableValueInternal_u *pos;
-	unsigned int includePosId;
-	unsigned int threadCountId;
-	VariableValue includePos;
-	unsigned int index;
-	unsigned short name;
-	VariableValue value;
-	unsigned int posId;
-	unsigned int id;
-	unsigned int includeFilePosId;
-	PrecacheEntry *precachescript;
-	PrecacheEntry *precachescript2;
-	PrecacheEntry *precachescriptList;
-	unsigned short filename;
-	int func_count;
-	int j;
-	int i;
-
-	scrCompileGlob.filePosId = filePosId;
-	scrCompileGlob.bConstRefCount = 0;
-	scrAnimPub.animTreeIndex = 0;
-	scrCompilePub.developer_statement = 0;
-
-	if ( scrCompilePub.far_function_count )
-		precachescriptList = (PrecacheEntry *)Z_MallocInternal(sizeof(PrecacheEntry) * scrCompilePub.far_function_count);
-	else
-		precachescriptList = 0;
-
-	scrCompileGlob.precachescriptList = precachescriptList;
-
-	if ( precachescriptList )
-	{
-		precachescriptList->next = scrCompileGlob.precachescriptListHead;
-		scrCompileGlob.precachescriptListHead = precachescriptList;
 	}
 
-	EmitIncludeList(val.node[0]);
-	EmitThreadList(val.node[1]);
-	scrCompilePub.programLen = (char *)TempMalloc(0) - scrVarPub.programBuffer;
-	Hunk_ClearTempMemoryHighInternal();
-	func_count = scrCompilePub.far_function_count;
+	scrCompileGlob.firstThread[0] = true;
+	scrCompileGlob.firstThread[1] = true;
 
-	for ( i = 0; i < func_count; ++i )
+	assert(!scrCompileGlob.in_developer_thread);
+
+	for ( node = val.node[0].node[1].node; node; node = node[1].node )
 	{
-		precachescript = &precachescriptList[i];
-		filename = precachescript->filename;
-		includeFilePosId = Scr_LoadScript(SL_ConvertToString(filename));
-
-		if ( !includeFilePosId )
-		{
-			CompileError(precachescript->sourcePos, "Could not find script '%s'", SL_ConvertToString(filename));
-			return;
-		}
-
-		SL_RemoveRefToString(filename);
-
-		if ( precachescript->include )
-		{
-			for ( j = i + 1; j < func_count; ++j )
-			{
-				precachescript2 = &precachescriptList[j];
-
-				if ( !precachescript2->include )
-					break;
-
-				if ( precachescript2->filename == filename )
-				{
-					CompileError(precachescript2->sourcePos, "Duplicate #include");
-					return;
-				}
-			}
-
-			precachescript->include = 0;
-
-			for ( id = FindNextSibling(includeFilePosId); id; id = FindNextSibling(id) )
-			{
-				if ( GetValueType(id) == VAR_OBJECT )
-				{
-					posId = FindObject(id);
-					index = FindVariable(posId, 1);
-
-					if ( index )
-					{
-						Scr_EvalVariable(&includePos, index);
-
-						if ( includePos.type != VAR_INCLUDE_CODEPOS )
-						{
-							name = GetVariableName(id);
-							threadCountId = GetObjectA(GetVariable(filePosId, name));
-							includePosId = SpecifyThreadPosition(threadCountId, name, precachescript->sourcePos, VAR_INCLUDE_CODEPOS);
-							pos = GetVariableValueAddress_Bad(includePosId);
-							*pos = *GetVariableValueAddress_Bad(index);
-							LinkThread(threadCountId, &includePos, 0);
-						}
-					}
-				}
-			}
-		}
+		EmitThread(node[0]);
 	}
 
-	if ( precachescriptList )
-	{
-		scrCompileGlob.precachescriptListHead = precachescriptList->next;
-		Z_FreeInternal(precachescriptList);
-	}
-
-	LinkFile(filePosId);
-	value.type = VAR_INTEGER;
-	SetVariableValue(scriptId, &value);
-}
-
-void Scr_CompileShutdown()
-{
-	PrecacheEntry *precachescriptList;
-
-	while ( scrCompileGlob.precachescriptListHead )
-	{
-		precachescriptList = scrCompileGlob.precachescriptListHead;
-		scrCompileGlob.precachescriptListHead = scrCompileGlob.precachescriptListHead->next;
-		Z_FreeInternal(precachescriptList);
-	}
+	assert(!scrCompileGlob.in_developer_thread);
 }
 
 #pragma GCC pop_options

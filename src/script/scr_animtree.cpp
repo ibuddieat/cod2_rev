@@ -84,7 +84,7 @@ scr_animtree_t Scr_FindAnimTree( const char *filename )
 Scr_FindAnim
 ============
 */
-void Scr_FindAnim( const char *filename, const char *animName, scr_anim_t *anim, int user )
+void Scr_FindAnim( const char *filename, const char *animName, scr_anim_s *anim, int user )
 {
 	unsigned int index, name;
 
@@ -218,7 +218,7 @@ int Scr_GetAnimTreeSize( unsigned int parentNode )
 			continue;
 		}
 
-		if ( GetValueType(node) == VAR_OBJECT )
+		if ( GetObjectType(node) == VAR_POINTER )
 		{
 			arrayNode = FindObject(node);
 			size += Scr_GetAnimTreeSize(arrayNode);
@@ -274,7 +274,7 @@ ConnectScriptToAnim
 */
 void ConnectScriptToAnim( unsigned int names, int index, unsigned int filename, unsigned int name, int treeIndex )
 {
-	scr_anim_t anim;
+	scr_anim_s anim;
 	const char *codePos, *nextCodePos;
 	VariableUnion *value;
 	unsigned int animId;
@@ -419,7 +419,7 @@ int Scr_CreateAnimationTree( unsigned int parentNode, unsigned int names, XAnim 
 
 		ConnectScriptToAnim(names, parentIndex, filename, name, treeIndex);
 
-		if ( GetValueType(nodeRef) == VAR_OBJECT )
+		if ( GetObjectType(nodeRef) == VAR_POINTER )
 		{
 			childIndex = Scr_CreateAnimationTree(FindObject(nodeRef), names, anims, childIndex, SL_ConvertToString(name), parentIndex, filename, treeIndex);
 		}
@@ -460,7 +460,7 @@ void Scr_CheckAnimsDefined( unsigned int names, unsigned int filename )
 			continue;
 		}
 
-		if ( Scr_IsInOpcodeMemory(value->codePosValue) )
+		if ( Scr_IsInScriptMemory(value->codePosValue) )
 		{
 			CompileError2(value->codePosValue, "%s", va("animation '%s' not defined in anim tree '%s'", SL_ConvertToString(name), SL_ConvertToString(filename)));
 		}
@@ -788,7 +788,7 @@ void Scr_PrecacheAnimationTree( unsigned int parentNode )
 			continue;
 		}
 
-		if ( GetValueType(node) == VAR_OBJECT )
+		if ( GetObjectType(node) == VAR_POINTER )
 		{
 			Scr_PrecacheAnimationTree(FindObject(node));
 			continue;

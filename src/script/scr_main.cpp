@@ -1,222 +1,184 @@
 #include "../qcommon/qcommon.h"
 #include "script_public.h"
 
-qboolean Scr_IsInOpcodeMemory(const char *pos)
+/*
+============
+Scr_PostCompileScripts
+============
+*/
+void Scr_PostCompileScripts()
 {
-	return pos - scrVarPub.programBuffer < scrCompilePub.programLen;
+	assert( scrCompilePub.programLen == static_cast< uint >( TempMalloc( 0 ) - scrVarPub.programBuffer ) );
+	assert( !scrAnimPub.animTreeNames );
+
+	Hunk_ConvertTempToPermLowInternal();
 }
 
-unsigned int Scr_GetCanonicalStringIndex(unsigned int index)
+/*
+============
+Scr_IsIdentifier
+============
+*/
+bool Scr_IsIdentifier( const char *token )
 {
-	SL_TransferRefToUser(index, 2);
-
-	if ( scrCompilePub.canonicalStrings[index] )
-		return scrCompilePub.canonicalStrings[index];
-
-	scrCompilePub.canonicalStrings[index] = ++scrVarPub.canonicalStrCount;
-	return scrVarPub.canonicalStrCount;
-}
-
-unsigned int SL_GetCanonicalString(const char *str)
-{
-	unsigned int stringValue;
-	unsigned int index;
-
-	stringValue = SL_FindString(str);
-
-	if ( scrCompilePub.canonicalStrings[stringValue] )
-		return scrCompilePub.canonicalStrings[stringValue];
-
-	index = SL_GetString_(str, 0);
-	return Scr_GetCanonicalStringIndex(index);
-}
-
-bool Scr_IsIdentifier(const char *token)
-{
-	while ( *token )
+	while ( token[0] )
 	{
-		if ( !isalnum(*token) && *token != '_' )
+		if ( !isalnum(token[0]) && token[0] != '_' )
+		{
 			return false;
+		}
 
-		++token;
+		token++;
 	}
 
 	return true;
 }
 
-int Scr_GetFunctionHandle(const char *filename, const char *name)
+/*
+============
+Scr_IsInScriptMemory
+============
+*/
+int Scr_IsInScriptMemory( const char *pos )
 {
-	VariableValue val;
-	unsigned int index;
-	unsigned int object;
-	const char *pos;
-	unsigned int fileName;
-	unsigned int str;
-	unsigned int posId;
-	unsigned int filePosId;
-	unsigned int id;
-
-	fileName = Scr_CreateCanonicalFilename(filename);
-	id = FindVariable(scrCompilePub.scriptsPos, fileName);
-	SL_RemoveRefToString(fileName);
-
-	if ( !id )
-		return 0;
-
-	posId = FindObject(id);
-	str = SL_FindLowercaseString(name);
-
-	if ( !str )
-		return 0;
-
-	filePosId = FindVariable(posId, str);
-
-	if ( !filePosId )
-		return 0;
-
-	if ( GetValueType(filePosId) != VAR_OBJECT )
-		return 0;
-
-	object = FindObject(filePosId);
-	index = FindVariable(object, 1u);
-	Scr_EvalVariable(&val, index);
-	pos = val.u.codePosValue;
-
-	if ( !Scr_IsInOpcodeMemory(val.u.codePosValue) )
-		return 0;
-
-	return pos - scrVarPub.programBuffer;
+	assert(scrVarPub.programBuffer);
+	assert(pos);
+	return pos - scrVarPub.programBuffer < scrCompilePub.programLen;
 }
 
-
-unsigned int Scr_LoadScript(const char *filename)
+/*
+============
+SL_TransferToCanonicalString
+============
+*/
+unsigned int SL_TransferToCanonicalString( unsigned int stringValue )
 {
-	const char *fileName;
-	const char *codePos;
-	const char *name;
-	unsigned int filePosPtr;
-	unsigned int scriptPosIdIndex;
-	unsigned int loadedScriptsIdIndex;
-	const char *sourceBuf;
-	const char *scriptfilename;
-	char scriptName[64];
-	unsigned int index;
-	sval_u parseData;
-	char *sourceBuffer;
+	assert(stringValue);
 
-	index = Scr_CreateCanonicalFilename(filename);
+	SL_TransferRefToUser(stringValue, 2);
 
-	if ( FindVariable(scrCompilePub.loadedscripts, index) )
+	if ( scrCompilePub.archivedCanonicalStringsBuf[stringValue] )
 	{
-		SL_RemoveRefToString(index);
-		filePosPtr = FindVariable(scrCompilePub.scriptsPos, index);
-
-		if ( filePosPtr )
-			return FindObject(filePosPtr);
-		else
-			return 0;
+		return scrCompilePub.archivedCanonicalStringsBuf[stringValue];
 	}
-	else
-	{
-		loadedScriptsIdIndex = GetNewVariable(scrCompilePub.loadedscripts, index);
-		SL_RemoveRefToString(index);
-		fileName = SL_ConvertToString(index);
-		Com_sprintf(scriptName, sizeof(scriptName), "%s.gsc", fileName);
-		sourceBuf = scrParserPub.sourceBuf;
-		codePos = (const char *)TempMalloc(0);
-		name = SL_ConvertToString(index);
-		sourceBuffer = Scr_AddSourceBuffer(name, scriptName, codePos, 1);
 
-		if ( sourceBuffer )
-		{
-			scrAnimPub.animTreeNames = 0;
-			scrCompilePub.far_function_count = 0;
-			scriptfilename = scrParserPub.scriptfilename;
-			scrParserPub.scriptfilename = scriptName;
-			scrCompilePub.in_ptr = "+";
-			scrCompilePub.parseBuf = sourceBuffer;
-			ScriptParse(&parseData, 0);
-			scriptPosIdIndex = GetObjectA(GetVariable(scrCompilePub.scriptsPos, index));
-			ScriptCompile(parseData, scriptPosIdIndex, loadedScriptsIdIndex);
-			scrParserPub.scriptfilename = scriptfilename;
-			scrParserPub.sourceBuf = sourceBuf;
+	scrVarPub.canonicalStrCount++;
+	scrCompilePub.archivedCanonicalStringsBuf[stringValue] = scrVarPub.canonicalStrCount;
 
-			return scriptPosIdIndex;
-		}
-		else
-		{
-			return 0;
-		}
-	}
+	return scrVarPub.canonicalStrCount;
 }
 
+/*
+============
+Scr_BeginLoadAnimTrees
+============
+*/
+void Scr_BeginLoadAnimTrees( int user )
+{
+	assert(!scrAnimPub.animtree_loading);
+	scrAnimPub.animtree_loading = true;
+
+	scrAnimPub.xanim_num[user] = 0;
+	scrAnimPub.xanim_lookup[user][0].anims = NULL;
+
+	assert(!scrAnimPub.animtrees);
+	scrAnimPub.animtrees = Scr_AllocArray();
+	scrAnimPub.animtree_node = 0;
+
+	scrCompilePub.developer_statement = SCR_DEV_NO;
+}
+
+/*
+============
+Scr_BeginLoadScriptsRemote
+============
+*/
+void Scr_BeginLoadScriptsRemote( void )
+{
+	scrCompilePub.script_loading = true;
+	Scr_InitOpcodeLookup();
+	scrCompilePub.loadedscripts = Scr_AllocArray();
+}
+
+/*
+============
+SL_GetCanonicalString
+============
+*/
+unsigned int SL_GetCanonicalString( const char *str )
+{
+	unsigned int stringValue = SL_FindString(str);
+
+	if ( scrCompilePub.archivedCanonicalStringsBuf[stringValue] )
+	{
+		return scrCompilePub.archivedCanonicalStringsBuf[stringValue];
+	}
+
+	return SL_TransferToCanonicalString( SL_GetString_( str, 0 ) );
+}
+
+/*
+============
+Scr_EndLoadScripts
+============
+*/
 void Scr_EndLoadScripts()
 {
-	Scr_ClearStrings();
-	SL_ShutdownSystem(2u);
-	scrCompilePub.script_loading = 0;
+	Scr_EndLoadEvaluate();
+	SL_ShutdownSystem(2);
+
+	scrCompilePub.script_loading = false;
+
+	assert(scrCompilePub.loadedscripts);
 	ClearObject(scrCompilePub.loadedscripts);
 	RemoveRefToObject(scrCompilePub.loadedscripts);
 	scrCompilePub.loadedscripts = 0;
+
+	assert(scrCompilePub.scriptsPos);
 	ClearObject(scrCompilePub.scriptsPos);
 	RemoveRefToObject(scrCompilePub.scriptsPos);
 	scrCompilePub.scriptsPos = 0;
+
+	assert(scrCompilePub.builtinFunc);
 	ClearObject(scrCompilePub.builtinFunc);
 	RemoveRefToObject(scrCompilePub.builtinFunc);
 	scrCompilePub.builtinFunc = 0;
+
+	assert(scrCompilePub.builtinMeth);
 	ClearObject(scrCompilePub.builtinMeth);
 	RemoveRefToObject(scrCompilePub.builtinMeth);
 	scrCompilePub.builtinMeth = 0;
 }
 
-void Scr_PostCompileScripts()
-{
-	Hunk_ConvertTempToPermLowInternal();
-}
-
-void Scr_BeginLoadScripts()
-{
-	scrCompilePub.script_loading = 1;
-	Scr_InitOpcodeLookup();
-	scrCompilePub.loadedscripts = Scr_AllocArray();
-	scrCompilePub.scriptsPos = Scr_AllocArray();
-	scrCompilePub.builtinFunc = Scr_AllocArray();
-	scrCompilePub.builtinMeth = Scr_AllocArray();
-	scrVarPub.programBuffer = (const char *)Hunk_AllocLowInternal(0);
-	scrCompilePub.programLen = 0;
-	scrVarPub.endScriptBuffer = 0;
-	Scr_AllocStrings();
-	scrVarPub.fieldBuffer = 0;
-	scrCompilePub.value_count = 0;
-	Scr_ClearErrorMessage();
-	scrCompilePub.func_table_size = 0;
-	Scr_AllocAnims(1);
-	TempMemoryReset();
-}
-
-void Scr_PrecacheAnimTrees(void *(*Alloc)(int), int user)
-{
-	int index;
-
-	for ( index = 1; index <= scrAnimPub.xanim_num[user]; ++index )
-		Scr_LoadAnimTreeAtIndex(index, Alloc, user);
-}
-
+/*
+============
+Scr_EndLoadAnimTrees
+============
+*/
 void Scr_EndLoadAnimTrees()
 {
+	assert(scrAnimPub.animtrees);
 	ClearObject(scrAnimPub.animtrees);
 	RemoveRefToObject(scrAnimPub.animtrees);
 	scrAnimPub.animtrees = 0;
 
 	if ( scrAnimPub.animtree_node )
+	{
 		RemoveRefToObject(scrAnimPub.animtree_node);
+	}
 
-	SL_ShutdownSystem(2u);
+	SL_ShutdownSystem(2);
 	scrVarPub.endScriptBuffer = (const char *)Hunk_AllocLowInternal(0);
-	scrAnimPub.animtree_loading = 0;
+
+	scrAnimPub.animtree_loading = false;
 }
 
-void Scr_FreeScripts()
+/*
+============
+Scr_FreeScripts
+============
+*/
+void Scr_FreeScripts( void )
 {
 	if ( scrCompilePub.script_loading )
 	{
@@ -230,10 +192,232 @@ void Scr_FreeScripts()
 		Scr_EndLoadAnimTrees();
 	}
 
-	SL_ShutdownSystem(1u);
+	SL_ShutdownSystem(1);
 	Scr_ShutdownOpcodeLookup();
-	scrVarPub.programBuffer = 0;
+
+	scrVarPub.programBuffer = NULL;
+	scrCompilePub.programLen = 0;
+
+	scrVarPub.endScriptBuffer = NULL;
+	scrVarPub.checksum = 0;
+}
+
+/*
+============
+Scr_BeginLoadScripts
+============
+*/
+void Scr_BeginLoadScripts()
+{
+	assert(!scrCompilePub.script_loading);
+	scrCompilePub.script_loading = true;
+
+	Scr_InitOpcodeLookup();
+
+	assert(!scrCompilePub.loadedscripts);
+	scrCompilePub.loadedscripts = Scr_AllocArray();
+
+	assert(!scrCompilePub.scriptsPos);
+	scrCompilePub.scriptsPos = Scr_AllocArray();
+
+	assert(!scrCompilePub.builtinFunc);
+	scrCompilePub.builtinFunc = Scr_AllocArray();
+
+	assert(!scrCompilePub.builtinMeth);
+	scrCompilePub.builtinMeth = Scr_AllocArray();
+
+	scrVarPub.programBuffer = (const char *)Hunk_AllocLowInternal(0);
+
 	scrCompilePub.programLen = 0;
 	scrVarPub.endScriptBuffer = 0;
-	scrVarPub.checksum = 0;
+
+	Scr_InitEvaluate();
+
+	scrVarPub.fieldBuffer = NULL;
+	scrCompilePub.value_count = 0;
+
+	Scr_ClearErrorMessage();
+
+	scrCompilePub.func_table_size = 0;
+
+	Scr_BeginLoadAnimTrees(1);
+
+	TempMemoryReset();
+	//assert((!((int)scrVarPub.programBuffer & 31)));
+}
+
+/*
+============
+Scr_GetFunctionHandle
+============
+*/
+int Scr_GetFunctionHandle( const char *filename, const char *name )
+{
+	VariableValue pos;
+	unsigned int name2, str, id, posId, filePosId;
+
+	assert(scrCompilePub.scriptsPos);
+	assert(strlen( filename ) < MAX_QPATH);
+
+	name2 = Scr_CreateCanonicalFilename(filename);
+	filePosId = FindVariable(scrCompilePub.scriptsPos, name2);
+	SL_RemoveRefToString(name2);
+
+	if ( !filePosId )
+	{
+		return 0;
+	}
+
+	id = FindObject(filePosId);
+	assert(id);
+	str = SL_FindLowercaseString(name);
+
+	if ( !str )
+	{
+		return 0;
+	}
+
+	posId = FindVariable(id, str);
+
+	if ( !posId )
+	{
+		return 0;
+	}
+
+	if ( GetObjectType(posId) != VAR_POINTER )
+	{
+		return 0;
+	}
+
+	pos = Scr_EvalVariable( FindVariable( FindObject( posId ), 1 ) );
+	assert(pos.type == VAR_CODEPOS || pos.type == VAR_DEVELOPER_CODEPOS);
+
+	if ( !Scr_IsInScriptMemory( pos.u.codePosValue ) )
+	{
+		return 0;
+	}
+
+	assert(pos.u.codePosValue - scrVarPub.programBuffer);
+	return pos.u.codePosValue - scrVarPub.programBuffer;
+}
+
+/*
+============
+Scr_PrecacheAnimTrees
+============
+*/
+void Scr_PrecacheAnimTrees( void *(*Alloc)(int), int user )
+{
+	for ( int i = 1; i <= scrAnimPub.xanim_num[user]; i++ )
+	{
+		Scr_LoadAnimTreeAtIndex(i, Alloc, user);
+	}
+}
+
+/*
+============
+Scr_LoadScript
+============
+*/
+unsigned int Scr_LoadScript( const char *filename )
+{
+	unsigned int filePosPtr, filePosId, scriptId, name;
+	const char *oldSourceBuf, *oldFilename, *sourceBuffer;
+	char extFilename[MAX_QPATH];
+	sval_u parseData;
+
+	assert(scrCompilePub.script_loading);
+	assert(strlen( filename ) < MAX_QPATH);
+
+	name = Scr_CreateCanonicalFilename(filename);
+
+	if ( FindVariable(scrCompilePub.loadedscripts, name) )
+	{
+		SL_RemoveRefToString(name);
+		filePosPtr = FindVariable(scrCompilePub.scriptsPos, name);
+
+		if ( filePosPtr )
+		{
+			return FindObject(filePosPtr);
+		}
+
+		return 0;
+	}
+
+	scriptId = GetNewVariable(scrCompilePub.loadedscripts, name);
+	SL_RemoveRefToString(name);
+
+	Com_sprintf(extFilename, sizeof(extFilename), "%s.gsc", SL_ConvertToString(name));
+	oldSourceBuf = scrParserPub.sourceBuf;
+
+	sourceBuffer = Scr_AddSourceBuffer(SL_ConvertToString(name), extFilename, TempMalloc(0), true);
+
+	if ( !sourceBuffer )
+	{
+		return 0;
+	}
+
+	scrAnimPub.animTreeNames = 0;
+	scrCompilePub.far_function_count = 0;
+
+	oldFilename = scrParserPub.scriptfilename;
+	scrParserPub.scriptfilename = extFilename;
+
+	scrCompilePub.in_ptr = "+";
+	scrCompilePub.parseBuf = sourceBuffer;
+
+	ScriptParse(&parseData, 0);
+
+	filePosId = GetObjectA(GetVariable(scrCompilePub.scriptsPos, name));
+
+	ScriptCompile(parseData, filePosId, scriptId);
+
+	scrParserPub.scriptfilename = oldFilename;
+	scrParserPub.sourceBuf = oldSourceBuf;
+
+	return filePosId;
+}
+
+/*
+============
+Scr_ScanFile
+============
+*/
+int Scr_ScanFile( char *buf, int max_size )
+{
+	int c, n;
+
+	c = '*';
+
+	for ( n = 0; n < max_size; n++ )
+	{
+		c = *scrCompilePub.in_ptr++;
+
+		if ( !c || c == 10 )
+		{
+			break;
+		}
+
+		buf[n] = c;
+	}
+
+	if ( c == 10 )
+	{
+		buf[n] = 10;
+		n++;
+	}
+	else if ( !c )
+	{
+		if ( scrCompilePub.parseBuf )
+		{
+			scrCompilePub.in_ptr = scrCompilePub.parseBuf;
+			scrCompilePub.parseBuf = NULL;
+		}
+		else
+		{
+			scrCompilePub.in_ptr--;
+		}
+	}
+
+	return n;
 }

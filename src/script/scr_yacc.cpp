@@ -770,9 +770,9 @@ FILE* yy_stdout()
 }
 
 // Restored function
-sval_u* Scr_AllocNode(int size)
+sval_u* Scr_AllocNode( int size )
 {
-	return (sval_u *)Hunk_AllocateTempMemoryHighInternal(sizeof(intptr_t) * size);
+	return (sval_u *)Hunk_AllocateTempMemoryHighInternal( sizeof( sval_u* ) * size );
 }
 
 // Decomp Status: Tested, Completed
@@ -782,80 +782,92 @@ sval_u node0()
 
 	result.node = Scr_AllocNode(1);
 	result.node[0].intValue = ENUM_NOP;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node1(int type, sval_u val1)
+sval_u node1( int type, sval_u val1 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(2);
+
 	result.node[0].intValue = type;
 	result.node[1].node = val1.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node2(int type, sval_u val1, sval_u val2)
+sval_u node2( int type, sval_u val1, sval_u val2 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(3);
+
 	result.node[0].intValue = type;
 	result.node[1].node = val1.node;
 	result.node[2].node = val2.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node3(int type, sval_u val1, sval_u val2, sval_u val3)
+sval_u node3( int type, sval_u val1, sval_u val2, sval_u val3 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(4);
+
 	result.node[0].intValue = type;
 	result.node[1].node = val1.node;
 	result.node[2].node = val2.node;
 	result.node[3].node = val3.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node4(int type, sval_u val1, sval_u val2, sval_u val3, sval_u val4)
+sval_u node4( int type, sval_u val1, sval_u val2, sval_u val3, sval_u val4 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(5);
+
 	result.node[0].intValue = type;
 	result.node[1].node = val1.node;
 	result.node[2].node = val2.node;
 	result.node[3].node = val3.node;
 	result.node[4].node = val4.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node5(int type, sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5)
+sval_u node5( int type, sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(6);
+
 	result.node[0].intValue = type;
 	result.node[1].node = val1.node;
 	result.node[2].node = val2.node;
 	result.node[3].node = val3.node;
 	result.node[4].node = val4.node;
 	result.node[5].node = val5.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node6(sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6)
+sval_u node6( sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(7);
+
 	result.node[0].intValue = ENUM_thread;
 	result.node[1].node = val1.node;
 	result.node[2].node = val2.node;
@@ -863,15 +875,17 @@ sval_u node6(sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sv
 	result.node[4].node = val4.node;
 	result.node[5].node = val5.node;
 	result.node[6].node = val6.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node7(sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6, sval_u val7)
+sval_u node7( sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6, sval_u val7 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(8);
+
 	result.node[0].intValue = ENUM_if_else;
 	result.node[1].node = val1.node;
 	result.node[2].node = val2.node;
@@ -880,15 +894,17 @@ sval_u node7(sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sv
 	result.node[5].node = val5.node;
 	result.node[6].node = val6.node;
 	result.node[7].node = val7.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u node8(sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6, sval_u val7, sval_u val8)
+sval_u node8( sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sval_u val6, sval_u val7, sval_u val8 )
 {
 	sval_u result;
 
 	result.node = Scr_AllocNode(9);
+
 	result.node[0].intValue = ENUM_for;
 	result.node[1].node = val1.node;
 	result.node[2].node = val2.node;
@@ -898,363 +914,489 @@ sval_u node8(sval_u val1, sval_u val2, sval_u val3, sval_u val4, sval_u val5, sv
 	result.node[6].node = val6.node;
 	result.node[7].node = val7.node;
 	result.node[8].node = val8.node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u linked_list_end(sval_u val1)
+sval_u linked_list_end( sval_u val1 )
 {
 	sval_u* node;
 	sval_u result;
 
 	node = Scr_AllocNode(2);
+
 	node[0].node = val1.node;
 	node[1].stringValue = 0;
 	result.node = Scr_AllocNode(2);
 	result.node[0].node = node;
 	result.node[1].node = node;
+
 	return result;
 }
 
 // Decomp Status: Tested, Completed
-sval_u prepend_node(sval_u val1, sval_u val2)
+sval_u prepend_node( sval_u val1, sval_u val2 )
 {
 	sval_u* node;
 
 	node = Scr_AllocNode(2);
+
 	node[0] = val1;
 	node[1] = *val2.node;
 	val2.node->node = node;
+
 	return val2;
 }
 
 // Decomp Status: Tested, Completed
-sval_u append_node(sval_u val1, sval_u val2)
+sval_u append_node( sval_u val1, sval_u val2 )
 {
 	sval_u* node;
 
 	node = Scr_AllocNode(2);
+
 	node[0] = val2;
 	node[1].stringValue = 0;
+
 	val1.node[1].node[1].node = node;
 	val1.node[1].node = node;
+
 	return val1;
 }
 
-int StringValue(char *str, int len)
+/*
+==============
+StringValue
+==============
+*/
+int StringValue( char *str, int len )
 {
-	char c;
 	char string[8192];
-	char *pC1;
-	char *pC2;
+	char *pC1, *pC2;
 	int n;
 
-	if ( len < 0x2000 )
-	{
-		pC1 = string;
-		while ( len )
-		{
-			if ( *str == 92 )
-			{
-				n = len - 1;
-				if ( !n )
-					break;
-				pC2 = str + 1;
-				c = *pC2;
-				if ( *pC2 == 110 )
-				{
-					*pC1++ = 10;
-				}
-				else if ( c == 114 )
-				{
-					*pC1++ = 13;
-				}
-				else
-				{
-					if ( c == 116 )
-						*pC1 = 9;
-					else
-						*pC1 = *pC2;
-					++pC1;
-				}
-				len = n - 1;
-				str = pC2 + 1;
-			}
-			else
-			{
-				--len;
-				*pC1++ = *str++;
-			}
-		}
-		*pC1 = 0;
-		yylval.val.stringValue = SL_GetString_(string, g_parse_user);
-		return 1;
-	}
-	else
+	if ( len >= sizeof(string) )
 	{
 		CompileError(g_sourcePos, "max string length exceeded: \"%s\"", str);
 		return 0;
 	}
+
+	pC1 = string;
+
+	while ( len )
+	{
+		if ( *str != '\\' )
+		{
+			len--;
+			*pC1++ = *str++;
+			continue;
+		}
+
+		n = len - 1;
+
+		if ( !n )
+		{
+			break;
+		}
+
+		pC2 = str + 1;
+
+		if ( *pC2 == 'n' )
+		{
+			*pC1++ = '\n';
+		}
+		else if ( *pC2 == 'r' )
+		{
+			*pC1++ = '\r';
+		}
+		else
+		{
+			if ( *pC2 == 't' )
+			{
+				*pC1 = '\t';
+			}
+			else
+			{
+				*pC1 = *pC2;
+			}
+
+			pC1++;
+		}
+
+		len = n - 1;
+		str = pC2 + 1;
+	}
+
+	*pC1 = 0;
+
+	yylval.val.stringValue = SL_GetString_(string, g_parse_user);
+	return 1;
 }
 
-unsigned int LowerCase(unsigned int strVal)
+/*
+==============
+LowerCase
+==============
+*/
+unsigned int LowerCase( unsigned int stringValue )
 {
-	return SL_ConvertToLowercase(strVal, g_parse_user);
+	return SL_ConvertToLowercase(stringValue, g_parse_user);
 }
 
-FILE* yy_load_buffer_state()
+/*
+==============
+yy_load_buffer_state
+==============
+*/
+void yy_load_buffer_state()
 {
-	FILE *result;
-
-	yy_n_chars = (yy_current_buffer)->yy_n_chars;
-	yy_c_buf_p = (yy_current_buffer)->yy_buf_pos;
+	yy_n_chars = yy_current_buffer->yy_n_chars;
+	yy_c_buf_p = yy_current_buffer->yy_buf_pos;
 	yytext = yy_c_buf_p;
-	result = (yy_current_buffer)->yy_input_file;
-	yyin = (yy_current_buffer)->yy_input_file;
-	yy_hold_char = *(yy_c_buf_p);
-
-	return result;
+	yyin = yy_current_buffer->yy_input_file;
+	yy_hold_char = *yy_c_buf_p;
 }
 
-void yy_flush_buffer(yy_buffer_state *b)
+/*
+==============
+yy_flush_buffer
+==============
+*/
+#define YY_END_OF_BUFFER_CHAR 0
+#define YY_BUFFER_NEW 0
+void yy_flush_buffer( yy_buffer_state *b )
 {
 	if ( b )
 	{
 		b->yy_n_chars = 0;
-		*b->yy_ch_buf = 0;
-		b->yy_ch_buf[1] = 0;
-		b->yy_buf_pos = b->yy_ch_buf;
+
+		/* We always need two end-of-buffer characters.  The first causes
+		 * a transition to the end-of-buffer state.  The second causes
+		 * a jam in that state.
+		 */
+		b->yy_ch_buf[0] = YY_END_OF_BUFFER_CHAR;
+		b->yy_ch_buf[1] = YY_END_OF_BUFFER_CHAR;
+
+		b->yy_buf_pos = &b->yy_ch_buf[0];
+
 		b->yy_at_bol = 1;
-		b->yy_buffer_status = 0;
+		b->yy_buffer_status = YY_BUFFER_NEW;
 
 		if ( b == yy_current_buffer )
-		{
 			yy_load_buffer_state();
-		}
 	}
 }
 
-void yy_init_buffer(yy_buffer_state *b, FILE *file)
+/*
+==============
+yy_init_buffer
+==============
+*/
+void yy_init_buffer( yy_buffer_state *b, FILE *file )
 {
-	yy_flush_buffer(b);
+	yy_flush_buffer( b );
+
 	b->yy_input_file = file;
 	b->yy_fill_buffer = 1;
+
 	b->yy_is_interactive = 0;
 }
 
-int yy_try_NUL_trans(int yy_current_state)
+/* yy_try_NUL_trans - try to make a transition on the NUL character
+ *
+ * synopsis
+ *	next_state = yy_try_NUL_trans( current_state );
+ */
+int yy_try_NUL_trans( int yy_current_state )
 {
-	unsigned char yy_c;
-	int yy_current_statea;
+	int yy_is_jam;
 
-	yy_c = 1;
+	unsigned char yy_c = 1;
 	if ( yy_accept[yy_current_state] )
 	{
 		yy_last_accepting_state = yy_current_state;
 		yy_last_accepting_cpos = yy_c_buf_p;
 	}
-	while ( yy_chk[yy_c + yy_base[yy_current_state]] != yy_current_state )
+	while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 	{
-		yy_current_state = yy_def[yy_current_state];
-		if ( yy_current_state >= 258 ) // 262 on t5
-		{
-			yy_c = yy_meta[yy_c];
-		}
+		yy_current_state = (int) yy_def[yy_current_state];
+		if ( yy_current_state >= 258 )  // 262 on t5
+			yy_c = yy_meta[(unsigned int) yy_c];
 	}
-	yy_current_statea = yy_nxt[yy_c + yy_base[yy_current_state]];
-	return yy_current_statea != 257 ? yy_current_statea : 0; // 261 on t5
+	yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
+	yy_is_jam = (yy_current_state == 257); // 261 on t5
+
+	return yy_is_jam ? 0 : yy_current_state;
 }
 
+/* Promotes a possibly negative, possibly signed char to an unsigned
+ * integer for use as an array index.  If the signed char is negative,
+ * we want to instead treat it as an 8-bit unsigned char, hence the
+ * double cast.
+ */
+#define YY_SC_TO_UI(c) ((unsigned int) (unsigned char) c)
+#define YY_MORE_ADJ 0
+/* yy_get_previous_state - get the state just before the EOB char was reached */
 int yy_get_previous_state()
 {
-	unsigned char yy_c;
 	int yy_current_state;
 	char *yy_cp;
 
 	yy_current_state = yy_start;
-	for ( yy_cp = yytext;
-	        yy_cp < yy_c_buf_p;
-	        ++yy_cp )
-	{
-		if ( *yy_cp )
-		{
-			yy_c = yy_ec[(unsigned char)*yy_cp];
-		}
-		else
-		{
-			yy_c = 1;
-		}
 
+	for ( yy_cp = yytext + YY_MORE_ADJ; yy_cp < yy_c_buf_p; ++yy_cp )
+	{
+		unsigned char yy_c = (*yy_cp ? yy_ec[YY_SC_TO_UI(*yy_cp)] : 1);
 		if ( yy_accept[yy_current_state] )
 		{
 			yy_last_accepting_state = yy_current_state;
 			yy_last_accepting_cpos = yy_cp;
 		}
-
-		while ( yy_chk[yy_c + yy_base[yy_current_state]] != yy_current_state )
+		while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 		{
-			yy_current_state = yy_def[yy_current_state];
+			yy_current_state = (int) yy_def[yy_current_state];
 			if ( yy_current_state >= 258 ) // 262 on t5
-			{
-				yy_c = yy_meta[yy_c];
-			}
+				yy_c = yy_meta[(unsigned int) yy_c];
 		}
-		yy_current_state = yy_nxt[yy_c + yy_base[yy_current_state]];
+		yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
 	}
+
 	return yy_current_state;
 }
 
-void yy_fatal_error(const char *msg)
+/*
+==============
+yy_fatal_error
+==============
+*/
+void yy_fatal_error( const char *msg )
 {
 	fprintf(stderr, "%s\n", msg);
 	exit(2);
 }
 
-void *yy_flex_realloc(void *ptr, unsigned int size)
+/*
+==============
+yy_flex_realloc
+==============
+*/
+void *yy_flex_realloc( void *ptr, unsigned int size )
 {
-	return realloc(ptr, size);
+	/* The cast to (char *) in the following accommodates both
+	 * implementations that use char* generic pointers, and those
+	 * that use void* generic pointers.  It works with the latter
+	 * because both ANSI C and C++ allow castless assignment from
+	 * any pointer type to void*, and deal with argument conversions
+	 * as though doing an assignment.
+	 */
+	return (void *) realloc( (char *) ptr, size );
 }
 
-yy_buffer_state *yy_create_buffer()
+/*
+==============
+yy_flex_alloc
+==============
+*/
+void *yy_flex_alloc( unsigned int size )
+{
+	return (void *) malloc( size );
+}
+
+/*
+==============
+yy_create_buffer
+==============
+*/
+yy_buffer_state *yy_create_buffer( FILE *file, int size )
 {
 	yy_buffer_state *b;
 
-	b = (yy_buffer_state *)Z_TryMallocInternal(sizeof(yy_buffer_state));
-	if ( !b )
-	{
-		yy_fatal_error("out of dynamic memory in yy_create_buffer()");
-	}
+	b = (yy_buffer_state*) yy_flex_alloc( sizeof( *b ) );
+	if ( ! b )
+		yy_fatal_error( "out of dynamic memory in yy_create_buffer()" );
 
-	b->yy_buf_size = YY_BUF_SIZE;
-	b->yy_ch_buf = (char *)Z_TryMallocInternal(b->yy_buf_size + 2);
-	if ( !b->yy_ch_buf )
-	{
-		yy_fatal_error("out of dynamic memory in yy_create_buffer()");
-	}
+	b->yy_buf_size = size;
+
+	/* yy_ch_buf has to be 2 characters longer than the size given because
+	 * we need to put in 2 end-of-buffer characters.
+	 */
+	b->yy_ch_buf = (char *) yy_flex_alloc( b->yy_buf_size + 2 );
+	if ( ! b->yy_ch_buf )
+		yy_fatal_error( "out of dynamic memory in yy_create_buffer()" );
 
 	b->yy_is_our_buffer = 1;
-	yy_init_buffer(b, yyin);
+
+	yy_init_buffer( b, file );
+
 	return b;
 }
 
-void yyrestart()
+/*
+==============
+yyrestart
+==============
+*/
+void yyrestart( FILE *input_file )
 {
-	if ( !yy_current_buffer )
-	{
-		yy_current_buffer = yy_create_buffer();
-	}
+	if ( ! yy_current_buffer )
+		yy_current_buffer = yy_create_buffer( yyin, YY_BUF_SIZE );
 
-	yy_init_buffer(yy_current_buffer, yyin);
+	yy_init_buffer( yy_current_buffer, input_file );
 	yy_load_buffer_state();
 }
 
+/* yy_get_next_buffer - try to read in a new buffer
+ *
+ * Returns a code representing an action:
+ *	EOB_ACT_LAST_MATCH -
+ *	EOB_ACT_CONTINUE_SCAN - continue scanning from current position
+ *	EOB_ACT_END_OF_FILE - end of file
+ */
+#define EOB_ACT_CONTINUE_SCAN 0
+#define EOB_ACT_END_OF_FILE 1
+#define EOB_ACT_LAST_MATCH 2
+#define YY_BUFFER_EOF_PENDING 2
+
+/* Amount of stuff to slurp up with each read. */
+#ifndef YY_READ_BUF_SIZE
+#define YY_READ_BUF_SIZE 8192
+#endif
 int yy_get_next_buffer()
 {
-	int result;
-	int yy_c_buf_p_offset;
-	yy_buffer_state *b;
-	signed int num_to_read;
-	char *source;
+	char *dest = yy_current_buffer->yy_ch_buf;
+	char *source = yytext;
+	int number_to_move, i;
 	int ret_val;
-	char *dest;
-	int number_to_move;
-	int i;
 
-	dest = (yy_current_buffer)->yy_ch_buf;
-	source = yytext;
-	if ( yy_c_buf_p > &dest[yy_n_chars + 1] )
-	{
-		yy_fatal_error("fatal flex scanner internal error--end of buffer missed");
-	}
+	if ( yy_c_buf_p > &yy_current_buffer->yy_ch_buf[yy_n_chars + 1] )
+		yy_fatal_error(
+		    "fatal flex scanner internal error--end of buffer missed" );
 
-	if ( (yy_current_buffer)->yy_fill_buffer)
+	if ( yy_current_buffer->yy_fill_buffer == 0 )
 	{
-		number_to_move = yy_c_buf_p - yytext - 1;
-		for ( i = 0;
-		        i < number_to_move;
-		        ++i )
+		/* Don't try to fill the buffer, so this is an EOF. */
+		if ( yy_c_buf_p - yytext - YY_MORE_ADJ == 1 )
 		{
-			*dest++ = *source++;
+			/* We matched a singled characater, the EOB, so
+			 * treat this as a final EOF.
+			 */
+			return EOB_ACT_END_OF_FILE;
 		}
-		if ( (yy_current_buffer)->yy_buffer_status == 2 )
-		{
-			yy_n_chars = 0;
-			(yy_current_buffer)->yy_n_chars = 0;
-		}
+
 		else
 		{
-			for ( num_to_read = (yy_current_buffer)->yy_buf_size - number_to_move - 1;
-			        num_to_read <= 0;
-			        num_to_read = (yy_current_buffer)->yy_buf_size - number_to_move - 1 )
-			{
-				b = yy_current_buffer;
-				yy_c_buf_p_offset = yy_c_buf_p - (yy_current_buffer)->yy_ch_buf;
-
-				if ( (yy_current_buffer)->yy_is_our_buffer )
-				{
-					if ( (signed int)(2 * (yy_current_buffer)->yy_buf_size) > 0 )
-					{
-						(yy_current_buffer)->yy_buf_size *= 2;
-					}
-					else
-					{
-						(yy_current_buffer)->yy_buf_size += (yy_current_buffer)->yy_buf_size >> 3;
-					}
-
-					b->yy_ch_buf = (char *)yy_flex_realloc(b->yy_ch_buf, b->yy_buf_size + 2);
-				}
-				else
-				{
-					(yy_current_buffer)->yy_ch_buf = 0;
-				}
-				if ( !b->yy_ch_buf )
-				{
-					yy_fatal_error("fatal error - scanner input buffer overflow");
-				}
-
-				yy_c_buf_p = &b->yy_ch_buf[yy_c_buf_p_offset];
-			}
-
-			if ( num_to_read > 0x2000 )
-			{
-				num_to_read = 0x2000;
-			}
-
-			yy_n_chars = Scr_ScanFile(&((yy_current_buffer)->yy_ch_buf[number_to_move]), num_to_read);
-			(yy_current_buffer)->yy_n_chars = yy_n_chars;
+			/* We matched some text prior to the EOB, first
+			 * process it.
+			 */
+			return EOB_ACT_LAST_MATCH;
 		}
-		if ( yy_n_chars )
-		{
-			ret_val = 0;
-		}
-		else if ( number_to_move )
-		{
-			ret_val = 2;
-			(yy_current_buffer)->yy_buffer_status = 2;
-		}
-		else
-		{
-			ret_val = 1;
-			yyrestart();
-		}
-		yy_n_chars += number_to_move;
-		(yy_current_buffer)->yy_ch_buf[yy_n_chars] = 0;
-		(yy_current_buffer)->yy_ch_buf[yy_n_chars + 1] = 0;
-		yytext = (yy_current_buffer)->yy_ch_buf;
-		result = ret_val;
 	}
-	else if ( yy_c_buf_p - yytext == 1 )
+
+	/* Try to read more data. */
+
+	/* First move last chars to start of buffer. */
+	number_to_move = (int) (yy_c_buf_p - yytext) - 1;
+
+	for ( i = 0; i < number_to_move; ++i )
+		*(dest++) = *(source++);
+
+	if ( yy_current_buffer->yy_buffer_status == YY_BUFFER_EOF_PENDING )
+		/* don't do the read, it's not guaranteed to return an EOF,
+		 * just force an EOF
+		 */
 	{
-		result = 1;
+		yy_n_chars = 0;
+		yy_current_buffer->yy_n_chars = 0;
 	}
+
 	else
 	{
-		result = 2;
+		int num_to_read =
+		    yy_current_buffer->yy_buf_size - number_to_move - 1;
+
+		while ( num_to_read <= 0 )
+		{
+			/* Not enough room in the buffer - grow it. */
+#ifdef YY_USES_REJECT
+			yy_fatal_error(
+			    "input buffer overflow, can't enlarge buffer because scanner uses REJECT" );
+#else
+
+			/* just a shorter name for the current buffer */
+			yy_buffer_state *b = yy_current_buffer;
+
+			int yy_c_buf_p_offset =
+			    (int) (yy_c_buf_p - b->yy_ch_buf);
+
+			if ( b->yy_is_our_buffer )
+			{
+				int new_size = b->yy_buf_size * 2;
+
+				if ( new_size <= 0 )
+					b->yy_buf_size += b->yy_buf_size / 8;
+				else
+					b->yy_buf_size *= 2;
+
+				b->yy_ch_buf = (char *)
+				               /* Include room in for 2 EOB chars. */
+				               yy_flex_realloc( (void *) b->yy_ch_buf,
+				                                b->yy_buf_size + 2 );
+			}
+			else
+				/* Can't grow it, we don't own it. */
+				b->yy_ch_buf = 0;
+
+			if ( ! b->yy_ch_buf )
+				yy_fatal_error(
+				    "fatal error - scanner input buffer overflow" );
+
+			yy_c_buf_p = &b->yy_ch_buf[yy_c_buf_p_offset];
+
+			num_to_read = yy_current_buffer->yy_buf_size -
+			              number_to_move - 1;
+#endif
+		}
+
+		if ( num_to_read > YY_READ_BUF_SIZE )
+			num_to_read = YY_READ_BUF_SIZE;
+
+		/* Read in more data. */
+		yy_n_chars = Scr_ScanFile(&yy_current_buffer->yy_ch_buf[number_to_move], num_to_read);
+		yy_current_buffer->yy_n_chars = yy_n_chars;
 	}
 
-	return result;
+	if ( yy_n_chars == 0 )
+	{
+		if ( number_to_move == YY_MORE_ADJ )
+		{
+			ret_val = EOB_ACT_END_OF_FILE;
+			yyrestart( yyin );
+		}
+
+		else
+		{
+			ret_val = EOB_ACT_LAST_MATCH;
+			yy_current_buffer->yy_buffer_status =
+			    YY_BUFFER_EOF_PENDING;
+		}
+	}
+
+	else
+		ret_val = EOB_ACT_CONTINUE_SCAN;
+
+	yy_n_chars += number_to_move;
+	yy_current_buffer->yy_ch_buf[yy_n_chars] = YY_END_OF_BUFFER_CHAR;
+	yy_current_buffer->yy_ch_buf[yy_n_chars + 1] = YY_END_OF_BUFFER_CHAR;
+
+	yytext = &yy_current_buffer->yy_ch_buf[0];
+
+	return ret_val;
 }
 
+/* Default declaration of generated scanner - a define so the user can
+ * easily add parameters.
+ */
 int yylex()
 {
 	/** The main scanner function which does all the work.
@@ -1288,7 +1430,7 @@ int yylex()
 
 		if ( !yy_current_buffer )
 		{
-			yy_current_buffer = yy_create_buffer(); // optimized args
+			yy_current_buffer = yy_create_buffer(yyin, YY_BUF_SIZE);
 		}
 
 		yy_load_buffer_state();
@@ -1931,6 +2073,11 @@ do_action: /* This label is used only to access EOF actions. */
 	}
 }
 
+/*
+==============
+yyparse
+==============
+*/
 int yyparse()
 {
 	/*-------------------------.
@@ -1941,7 +2088,8 @@ int yyparse()
 	/* Number of tokens to shift before error messages enabled.  */
 	int yyerrorstatus;
 
-#define YYINITDEPTH 200 + sizeof(stype_t)
+#define YYINITDEPTH 200
+#define YYMAXDEPTH  10000
 	/* The semantic value stack.  */
 	stype_t yyvsa[YYINITDEPTH];
 	stype_t *yyvsp;
@@ -2022,7 +2170,7 @@ yysetstate:
 			yyss1 = yyss;
 
 			/* Extend the stack our own way.  */
-			if ( yystacksize >= 10000 ) // YYMAXDEPTH
+			if ( yystacksize >= YYMAXDEPTH )
 			{
 				if ( !yychar ) // yyerror yyexhaustedlab
 				{
@@ -2038,9 +2186,9 @@ yysetstate:
 			}
 
 			yystacksize *= 2;
-			if ( yystacksize > 10000 ) // YYMAXDEPTH
+			if ( yystacksize > YYMAXDEPTH )
 			{
-				yystacksize = 10000; // YYMAXDEPTH
+				yystacksize = YYMAXDEPTH;
 			}
 
 			// YYSTACK_RELOCATE (yyss_alloc, yyss);
@@ -2051,7 +2199,7 @@ yysetstate:
 			// YYSTACK_RELOCATE (yyvs_alloc, yyvs);
 			s = sizeof(stype_t) * yystacksize;
 			yyvs = (stype_t *)alloca(s);
-			memcpy(yyss, yyvs1, s);
+			memcpy(yyvs, yyvs1, s);
 
 			yyvsp = &yyvs[yysize - 1];
 			yyssp = &yyss[yysize - 1];
@@ -2946,7 +3094,12 @@ yyerrpop:
 	goto yynewstate;
 }
 
-void ScriptParse(sval_u *parseData, unsigned char user)
+/*
+==============
+ScriptParse
+==============
+*/
+void ScriptParse( sval_u *parseData, unsigned char user )
 {
 	yy_buffer_state buffer_state;
 
@@ -2954,14 +3107,20 @@ void ScriptParse(sval_u *parseData, unsigned char user)
 	g_sourcePos = 0;
 	g_parse_user = user;
 	g_dummyVal.node = 0;
+
 	yy_init = 1;
+
 	buffer_state.yy_buf_size = YY_BUF_SIZE;
 	buffer_state.yy_ch_buf = ch_buf;
 	buffer_state.yy_is_our_buffer = 0;
+
 	yy_init_buffer(&buffer_state, 0);
+
 	yy_current_buffer = &buffer_state;
 	yy_start = 3;
+
 	yyparse();
+
 	*parseData = yaccResult;
 }
 

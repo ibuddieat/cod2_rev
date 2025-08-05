@@ -708,7 +708,7 @@ int G_ShaderIndex( const char *name )
 {
 	char s[MAX_QPATH];
 
-	strcpy(s, name);
+	I_strncpyz(s, name, sizeof(s));
 	I_strlwr(s);
 
 	return G_FindConfigstringIndex( s, CS_SHADERS, MAX_SHADERS, level.initializing, "shader" );

@@ -1,406 +1,353 @@
 #include "../qcommon/qcommon.h"
 #include "script_public.h"
 
-#define MAX_VM_STACK_DEPTH 32
-
 scrVmGlob_t scrVmGlob;
 scrVmPub_t scrVmPub;
 
 int g_script_error_level;
 jmp_buf g_script_error[MAX_VM_STACK_DEPTH + 1];
 
-void Scr_InitSystem()
+/*
+==============
+Scr_Allign2
+==============
+*/
+const char* Scr_Allign2( char const *pos )
 {
-	scrVarPub.timeArrayId = AllocObject();
-	scrVarPub.pauseArrayId = Scr_AllocArray();
-	scrVarPub.levelId = AllocObject();
-	scrVarPub.animId = AllocObject();
-	scrVarPub.time = 0;
-	g_script_error_level = -1;
+	UNIMPLEMENTED(__FUNCTION__);
+	return NULL;
 }
 
-qboolean Scr_IsSystemActive()
+/*
+==============
+Scr_Allign4
+==============
+*/
+const char* Scr_Allign4( char const *pos )
 {
-	return scrVarPub.timeArrayId != 0;
+	UNIMPLEMENTED(__FUNCTION__);
+	return NULL;
 }
 
-VariableValue* Scr_GetValue(unsigned int param)
+/*
+==============
+Scr_Allign4Strict
+==============
+*/
+const char* Scr_Allign4Strict( char const *pos )
 {
-	return &scrVmPub.top[int(-param)];
+	UNIMPLEMENTED(__FUNCTION__);
+	return NULL;
 }
 
-void Scr_ErrorInternal()
+/*
+==============
+Scr_GetLocalVarAtIndex
+==============
+*/
+unsigned int Scr_GetLocalVarAtIndex( int index )
 {
-	if ( !scrVarPub.evaluate && !scrCompilePub.script_loading )
-	{
-		if ( scrVarPub.developer && scrVmGlob.loading )
-			scrVmPub.terminal_error = 1;
-
-		if ( scrVmPub.function_count || scrVmPub.debugCode )
-			longjmp(g_script_error[g_script_error_level], -1);
-
-		Com_Error(ERR_DROP, "%s", scrVarPub.error_message);
-	}
-
-	if ( scrVmPub.terminal_error )
-		Com_Error(ERR_DROP, "%s", scrVarPub.error_message);
+	return scrVmPub.localVars[-index];
 }
 
-void Scr_Error(const char *error)
+/*
+==============
+Scr_GetLocalVar
+==============
+*/
+unsigned int Scr_GetLocalVar( const char *pos )
 {
-	if ( !scrVarPub.error_message )
-		scrVarPub.error_message = error;
-
-	Scr_ErrorInternal();
+	return Scr_GetLocalVarAtIndex( *(unsigned char *)pos );
 }
 
-void Scr_ObjectError(const char *error)
+/*
+==============
+Scr_ReadShort
+==============
+*/
+short Scr_ReadShort( const char **pos )
 {
-	scrVarPub.error_index = -1;
-	Scr_Error(error);
+	short value = *(reinterpret_cast<const short *>(*pos));
+	*pos += sizeof(short);
+
+	return value;
 }
 
-void Scr_ParamError(int paramNum, const char *error)
+/*
+==============
+Scr_ReadInt
+==============
+*/
+int Scr_ReadInt( const char **pos )
 {
-	scrVarPub.error_index = paramNum + 1;
-	Scr_Error(error);
+	int value = *(reinterpret_cast<const int *>(*pos));
+	*pos += sizeof(int);
+
+	return value;
 }
 
-int Scr_GetType(unsigned int param)
+/*
+==============
+Scr_ReadVector
+==============
+*/
+const float* Scr_ReadVector( const char **pos )
 {
-	if ( param < scrVmPub.outparamcount )
-		return Scr_GetValue(param)->type;
+	const float *value = reinterpret_cast<const float *>(*pos);
+	*pos += sizeof(vec3_t);
 
-	Scr_Error(va("parameter %d does not exist", param + 1));
-	return 0;
+	return value;
 }
 
+/*
+==============
+Scr_ReadIntArray
+==============
+*/
+const int* Scr_ReadIntArray( const char **pos, int count )
+{
+	const int *value = reinterpret_cast<const int *>(*pos);
+	*pos += sizeof(const int) * count;
+
+	return value;
+}
+
+/*
+==============
+Scr_ReadUnsignedShort
+==============
+*/
+unsigned short Scr_ReadUnsignedShort( const char **pos )
+{
+	unsigned short value = *(reinterpret_cast<const unsigned short *>(*pos));
+	*pos += sizeof(unsigned short);
+
+	return value;
+}
+
+/*
+==============
+Scr_ReadUnsigned
+==============
+*/
+unsigned int Scr_ReadUnsigned( const char **pos )
+{
+	unsigned int value = *(reinterpret_cast<const unsigned int *>(*pos));
+	*pos += sizeof(unsigned int);
+
+	return value;
+}
+
+/*
+==============
+Scr_ReadFloat
+==============
+*/
+float Scr_ReadFloat( const char **pos )
+{
+	float value = *(reinterpret_cast<const float *>(*pos));
+	*pos += sizeof(float);
+
+	return value;
+}
+
+/*
+==============
+Scr_ReadCodePos
+==============
+*/
+const char* Scr_ReadCodePos( const char **pos )
+{
+	const char *value = *(reinterpret_cast<const char**>(const_cast<char *>(*pos)));
+	*pos += sizeof(const char *);
+
+	return value;
+}
+
+/*
+==============
+Scr_ReadByte
+==============
+*/
+unsigned char Scr_ReadByte( const char **pos )
+{
+	unsigned char value = *(reinterpret_cast<const unsigned char *>(*pos));
+	*pos += sizeof(unsigned char);
+
+	return value;
+}
+
+/*
+==============
+Scr_StackClear
+==============
+*/
+void Scr_StackClear( void )
+{
+	scrVmPub.top = scrVmPub.stack;
+}
+
+/*
+==============
+Scr_DecTime
+==============
+*/
+void Scr_DecTime()
+{
+	assert(!(scrVarPub.time & ~VAR_NAME_LOW_MASK));
+	--scrVarPub.time;
+	scrVarPub.time &= VAR_NAME_LOW_MASK;
+}
+
+/*
+==============
+Scr_GetNumParam
+==============
+*/
 unsigned int Scr_GetNumParam()
 {
 	return scrVmPub.outparamcount;
 }
 
-void Scr_ClearOutParams()
+/*
+==============
+Scr_IsSystemActive
+==============
+*/
+int Scr_IsSystemActive()
 {
-	while ( scrVmPub.outparamcount )
+	return scrVarPub.timeArrayId != 0;
+}
+
+/*
+==============
+Scr_GetReturnPos
+==============
+*/
+char* Scr_GetReturnPos( unsigned int *localId )
+{
+	char *pos;
+
+	if ( scrVmPub.function_count < 2 )
 	{
-		RemoveRefToValue(scrVmPub.top);
-		--scrVmPub.top;
-		--scrVmPub.outparamcount;
-	}
-}
-
-void IncInParam()
-{
-	Scr_ClearOutParams();
-
-	if ( scrVmPub.top == scrVmPub.maxstack )
-		Com_Error(ERR_DROP, "Internal script stack overflow");
-
-	++scrVmPub.top;
-	++scrVmPub.inparamcount;
-}
-
-void Scr_AddUndefined()
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_UNDEFINED;
-}
-
-void Scr_AddBool(bool value)
-{
-	assert(value == false || value == true);
-	IncInParam();
-	scrVmPub.top->type = VAR_INTEGER;
-	scrVmPub.top->u.intValue = value;
-}
-
-void Scr_AddInt(int value)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_INTEGER;
-	scrVmPub.top->u.intValue = value;
-}
-
-void Scr_AddFloat(float value)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_FLOAT;
-	scrVmPub.top->u.floatValue = value;
-}
-
-void Scr_AddAnim(scr_anim_t value)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_ANIMATION;
-	scrVmPub.top->u.codePosValue = value.linkPointer;
-}
-
-void Scr_AddObject(unsigned int id)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_OBJECT;
-	scrVmPub.top->u.pointerValue = id;
-	AddRefToObject(id);
-}
-
-void Scr_AddEntityNum(int entnum, unsigned int classnum)
-{
-	unsigned int entId;
-
-	entId = Scr_GetEntityId(entnum, classnum);
-	Scr_AddObject(entId);
-}
-
-void Scr_AddString(const char *value)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_STRING;
-	scrVmPub.top->u.stringValue = SL_GetString(value, 0);
-}
-
-void Scr_AddIString(const char *value)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_ISTRING;
-	scrVmPub.top->u.stringValue = SL_GetString(value, 0);
-}
-
-void Scr_AddConstString(unsigned int value)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_STRING;
-	scrVmPub.top->u.stringValue = value;
-	SL_AddRefToString(value);
-}
-
-void Scr_AddVector(const float *value)
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_VECTOR;
-	scrVmPub.top->u.vectorValue = Scr_AllocVector(value);
-}
-
-void Scr_MakeArray()
-{
-	IncInParam();
-	scrVmPub.top->type = VAR_OBJECT;
-	scrVmPub.top->u.pointerValue = Scr_AllocArray();
-}
-
-void Scr_AddArray()
-{
-	unsigned int ArraySize;
-	unsigned int id;
-
-	--scrVmPub.top;
-	--scrVmPub.inparamcount;
-
-	ArraySize = GetArraySize(scrVmPub.top->u.pointerValue);
-	id = GetNewArrayVariable(scrVmPub.top->u.pointerValue, ArraySize);
-	SetNewVariableValue(id, scrVmPub.top + 1);
-}
-
-void Scr_AddStruct()
-{
-	unsigned int id;
-
-	id = AllocObject();
-	Scr_AddObject(id);
-	RemoveRefToObject(id);
-}
-
-void Scr_AddArrayStringIndexed(unsigned int stringValue)
-{
-	unsigned int id;
-
-	--scrVmPub.top;
-	--scrVmPub.inparamcount;
-
-	id = GetNewVariable(scrVmPub.top->u.pointerValue, stringValue);
-	SetNewVariableValue(id, scrVmPub.top + 1);
-}
-
-int Scr_GetPointerType(unsigned int index)
-{
-	if ( index >= scrVmPub.outparamcount )
-	{
-		Scr_Error(va("parameter %d does not exist", index + 1));
 		return 0;
 	}
 
-	if ( Scr_GetValue(index)->type != VAR_OBJECT )
+	pos = (char *)scrVmPub.function_frame[-1].fs.pos;
+
+	if ( pos == &g_EndPos )
 	{
-		Scr_Error(va("type %s is not a pointer", var_typename[Scr_GetValue(index)->type]));
-	}
-
-	return GetValueType(Scr_GetValue(index)->u.pointerValue);
-}
-
-void Scr_GetEntityRef(scr_entref_t *entRef, unsigned int index)
-{
-	VariableValue *entryValue;
-	int entId;
-
-	if ( index < scrVmPub.outparamcount )
-	{
-		entryValue = Scr_GetValue(index);
-
-		if ( entryValue->type == VAR_OBJECT )
-		{
-			entId = entryValue->u.pointerValue;
-
-			if ( GetValueType(entryValue->u.pointerValue) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(entRef, entId);
-				return;
-			}
-
-			scrVarPub.error_index = index + 1;
-			Scr_Error(va("type %s is not an entity", var_typename[GetValueType(entId)]));
-		}
-
-		scrVarPub.error_index = index + 1;
-		Scr_Error(va("type %s is not an entity", var_typename[entryValue->type]));
-	}
-
-	Scr_Error(va("parameter %d does not exist", index + 1));
-	entRef = 0;
-}
-
-int Scr_GetInt(unsigned int index)
-{
-	VariableValue *entryValue;
-
-	if ( index >= scrVmPub.outparamcount )
-	{
-		Scr_Error(va("parameter %d does not exist", index + 1));
 		return 0;
 	}
 
-	entryValue = Scr_GetValue(index);
-
-	if ( entryValue->type != VAR_INTEGER )
-	{
-		scrVarPub.error_index = index + 1;
-		Scr_Error(va("type %s is not an int", var_typename[entryValue->type]));
-	}
-
-	return entryValue->u.intValue;
+	*localId = scrVmPub.function_frame[-1].fs.localId;
+	return pos;
 }
 
-float Scr_GetFloat(unsigned int index)
+/*
+==============
+Scr_GetNumScriptThreads
+==============
+*/
+unsigned int Scr_GetNumScriptThreads()
 {
-	VariableValue *entryValue;
-
-	if ( index >= scrVmPub.outparamcount )
-	{
-		Scr_Error(va("parameter %d does not exist", index + 1));
-		return 0;
-	}
-
-	entryValue = Scr_GetValue(index);
-
-	if ( entryValue->type != VAR_FLOAT )
-	{
-		if ( entryValue->type == VAR_INTEGER )
-			return (float)entryValue->u.intValue;
-
-		scrVarPub.error_index = index + 1;
-		Scr_Error(va("type %s is not a float", var_typename[entryValue->type]));
-	}
-
-	return entryValue->u.floatValue;
+	UNIMPLEMENTED(__FUNCTION__);
+	return 0;
 }
 
-unsigned int Scr_GetConstString(unsigned int index)
+/*
+==============
+Scr_SetLoading
+==============
+*/
+void Scr_SetLoading( int bLoading )
 {
-	VariableValue *entryValue;
+	scrVmGlob.loading = bLoading;
+}
 
-	if ( index >= scrVmPub.outparamcount )
+/*
+==============
+Scr_Abort
+==============
+*/
+void Scr_Abort()
+{
+	scrVarPub.timeArrayId = 0;
+	scrVarPub.bInited = false;
+}
+
+/*
+==============
+Scr_Settings
+==============
+*/
+void Scr_Settings( int developer, int developer_script, int abort_on_error )
+{
+	assert(!abort_on_error || developer);
+
+	scrVarPub.developer = developer != 0;
+	scrVarPub.developer_script = developer_script != 0;
+
+	scrVmPub.abort_on_error = abort_on_error != 0;
+}
+
+/*
+==============
+Scr_ClearErrorMessage
+==============
+*/
+void Scr_ClearErrorMessage()
+{
+	scrVarPub.error_message = NULL;
+	scrVmGlob.dialog_error_message = NULL;
+
+	scrVarPub.error_index = 0;
+}
+
+/*
+==============
+Scr_ResetTimeout
+==============
+*/
+void Scr_ResetTimeout()
+{
+	scrVmGlob.starttime = Sys_MilliSeconds();
+}
+
+/*
+==============
+Scr_ErrorWithDialogMessage
+==============
+*/
+void Scr_ErrorWithDialogMessage( const char *error, const char *dialog_error )
+{
+	scrVarPub.error_message = error;
+	scrVmGlob.dialog_error_message = dialog_error;
+
+	Scr_ErrorInternal();
+}
+
+/*
+==============
+Scr_Error
+==============
+*/
+void Scr_Error( const char *error )
+{
+	if ( scrVarPub.error_message == NULL )
 	{
-		Scr_Error(va("parameter %d does not exist", index + 1));
-		return 0;
+		scrVarPub.error_message = error;
 	}
 
-	entryValue = Scr_GetValue(index);
-
-	if ( !Scr_CastString(entryValue) )
-	{
-		scrVarPub.error_index = index + 1;
-		Scr_ErrorInternal();
-	}
-
-	return entryValue->u.stringValue;
+	Scr_ErrorInternal();
 }
 
-unsigned int Scr_GetConstStringIncludeNull(unsigned int index)
-{
-	if ( index >= scrVmPub.outparamcount || Scr_GetValue(index)->type )
-		return Scr_GetConstString(index);
-	else
-		return 0;
-}
-
-const char* Scr_GetString(unsigned int index)
-{
-	unsigned int stringValue;
-
-	stringValue = Scr_GetConstString(index);
-	return SL_ConvertToString(stringValue);
-}
-
-unsigned int Scr_GetConstIString(unsigned int index)
-{
-	VariableValue *entryValue;
-
-	if ( index >= scrVmPub.outparamcount )
-	{
-		Scr_Error(va("parameter %d does not exist", index + 1));
-		return 0;
-	}
-
-	entryValue = Scr_GetValue(index);
-
-	if ( entryValue->type != VAR_ISTRING )
-	{
-		scrVarPub.error_index = index + 1;
-		Scr_Error(va("type %s is not a localized string", var_typename[entryValue->type]));
-	}
-
-	return entryValue->u.stringValue;
-}
-
-const char* Scr_GetIString(unsigned int index)
-{
-	unsigned int stringValue;
-
-	stringValue = Scr_GetConstIString(index);
-	return SL_ConvertToString(stringValue);
-}
-
-void Scr_GetVector(unsigned int index, float *vector)
-{
-	VariableValue *entryValue;
-
-	if ( index < scrVmPub.outparamcount )
-	{
-		entryValue = Scr_GetValue(index);
-
-		if ( entryValue->type == VAR_VECTOR )
-		{
-			VectorCopy(entryValue->u.vectorValue, vector);
-			return;
-		}
-
-		scrVarPub.error_index = index + 1;
-		Scr_Error(va("type %s is not a vector", var_typename[entryValue->type]));
-	}
-
-	Scr_Error(va("parameter %d does not exist", index + 1));
-}
-
-const char* Scr_GetDebugString(unsigned int index)
+/*
+==============
+Scr_GetPointerType
+==============
+*/
+int Scr_GetPointerType( unsigned int index )
 {
 	VariableValue *value;
 
@@ -409,75 +356,588 @@ const char* Scr_GetDebugString(unsigned int index)
 		Scr_Error(va("parameter %d does not exist", index + 1));
 		return 0;
 	}
-	else
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_POINTER )
 	{
-		value = Scr_GetValue(index);
-		Scr_CastDebugString(value);
-		return SL_ConvertToString(value->u.stringValue);
+		Scr_Error(va("type %s is not a pointer", var_typename[value->type]));
+		return 0;
 	}
+
+	return GetObjectType(value->u.pointerValue);
 }
 
-void Scr_GetAnim(scr_anim_s *pAnim, unsigned int index, XAnimTree_s *tree)
+/*
+==============
+Scr_GetTypeName
+==============
+*/
+const char* Scr_GetTypeName( unsigned int index )
 {
-	XAnim_s *xanim;
-	const char *animTreeName;
-	const char *entityTreeName;
-	const char *animName;
-	VariableValue *pValue;
+	VariableValue *value;
 
 	if ( index >= scrVmPub.outparamcount )
-		goto paramerror;
-
-	pValue = Scr_GetValue(index);
-
-	if ( pValue->type != VAR_ANIMATION )
 	{
-		scrVarPub.error_message = va("type %s is not an anim", var_typename[pValue->type]);
-		goto error;
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return NULL;
 	}
 
-	pAnim->linkPointer = pValue->u.codePosValue;
+	value = &scrVmPub.top[-index];
+	return var_typename[value->type];
+}
 
-	if ( tree )
+/*
+==============
+Scr_GetType
+==============
+*/
+int Scr_GetType( unsigned int index )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
 	{
-		xanim = Scr_GetAnims(pAnim->tree);
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return 0;
+	}
 
-		if ( xanim != XAnimGetAnims(tree) )
+	value = &scrVmPub.top[-index];
+	return value->type;
+}
+
+/*
+==============
+Scr_GetObject
+==============
+*/
+unsigned int Scr_GetObject( unsigned int index )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return 0;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_POINTER )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not an object", var_typename[value->type]));
+		return 0;
+	}
+
+	return value->u.pointerValue;
+}
+
+/*
+==============
+Scr_GetEntityRef
+==============
+*/
+scr_entref_t Scr_GetEntityRef( unsigned int index )
+{
+	VariableValue *value;
+	unsigned int id;
+	scr_entref_t entref;
+
+	// init empty variable
+	entref.entnum = 0;
+	entref.classnum = 0;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return entref;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_POINTER )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not an entity", var_typename[value->type]));
+		return entref;
+	}
+
+	id = value->u.pointerValue;
+
+	if ( GetObjectType(value->u.pointerValue) != VAR_ENTITY )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not an entity", var_typename[GetObjectType(id)]));
+		return entref;
+	}
+
+	return Scr_GetEntityIdRef(id);
+}
+
+/*
+==============
+Scr_GetFunc
+==============
+*/
+unsigned int Scr_GetFunc( unsigned int index )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return 0;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_FUNCTION )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not a function", var_typename[value->type]));
+		return 0;
+	}
+
+	return value->u.codePosValue - scrVarPub.programBuffer;
+}
+
+/*
+==============
+Scr_GetVector
+==============
+*/
+void Scr_GetVector( unsigned int index, vec3_t vectorValue )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_VECTOR )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not a vector", var_typename[value->type]));
+		return;
+	}
+
+	VectorCopy(value->u.vectorValue, vectorValue);
+}
+
+/*
+==============
+Scr_GetConstIString
+==============
+*/
+unsigned int Scr_GetConstIString( unsigned int index )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return 0;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_ISTRING )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not a localized string", var_typename[value->type]));
+		return 0;
+	}
+
+	return value->u.stringValue;
+}
+
+/*
+==============
+Scr_GetFloat
+==============
+*/
+float Scr_GetFloat( unsigned int index )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return 0;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	// cast to float
+	if ( value->type == VAR_INTEGER )
+	{
+		return (float)value->u.intValue;
+	}
+
+	if ( value->type != VAR_FLOAT )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not a float", var_typename[value->type]));
+		return 0;
+	}
+
+	return value->u.floatValue;
+}
+
+/*
+==============
+Scr_GetInt
+==============
+*/
+int Scr_GetInt( unsigned int index )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return 0;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_INTEGER )
+	{
+		scrVarPub.error_index = index + 1;
+		Scr_Error(va("type %s is not an int", var_typename[value->type]));
+	}
+
+	return value->u.intValue;
+}
+
+/*
+==============
+Scr_ObjectError
+==============
+*/
+void Scr_ObjectError( const char *error )
+{
+	scrVarPub.error_index = -1;
+	Scr_Error(error);
+}
+
+/*
+==============
+Scr_ParamError
+==============
+*/
+void Scr_ParamError( unsigned int index, const char *error )
+{
+	scrVarPub.error_index = index + 1;
+	Scr_Error(error);
+}
+
+/*
+==============
+Scr_GetIString
+==============
+*/
+const char* Scr_GetIString( unsigned int index )
+{
+	return SL_ConvertToString( Scr_GetConstIString( index ) );
+}
+
+/*
+==============
+Scr_FindAllThreads
+==============
+*/
+int Scr_FindAllThreads( unsigned int selfId, unsigned int *threads, unsigned int localId )
+{
+	unsigned int timeId, notifyListId, stackId, threadId;
+	int count = 0;
+
+	if ( localId && selfId == Scr_GetSelf(localId) )
+	{
+		if ( threads )
 		{
-			xanim = XAnimGetAnims(tree);
-			animTreeName = XAnimGetAnimTreeDebugName(xanim);
-			xanim = Scr_GetAnims(pAnim->tree);
-			entityTreeName = XAnimGetAnimTreeDebugName(xanim);
-			xanim = Scr_GetAnims(pAnim->tree);
-			animName = XAnimGetAnimDebugName(xanim, pAnim->index);
-			scrVarPub.error_message = va(
-			                              "anim '%s' in animtree '%s' does not belong to the entity's animtree '%s'",
-			                              animName,
-			                              entityTreeName,
-			                              animTreeName);
-error:
-			RemoveRefToValue(pValue);
-			pValue->type = VAR_UNDEFINED;
-			scrVarPub.error_index = index + 1;
-			Scr_ErrorInternal();
-paramerror:
-			Scr_Error(va("parameter %d does not exist", index + 1));
-			pAnim->index = 0;
-			pAnim->tree = 0;
+			*threads = localId;
+		}
+
+		count = 1;
+	}
+
+	for ( threadId = FindNextSibling(scrVarPub.timeArrayId); threadId; threadId = FindNextSibling(threadId) )
+	{
+		count = Scr_FindAllThreadsInternal(selfId, threadId, count, true, threads);
+	}
+
+	notifyListId = FindVariable(selfId, OBJECT_NOTIFY_LIST);
+
+	if ( notifyListId )
+	{
+		timeId = FindObject(notifyListId);
+		assert(timeId);
+
+		for ( stackId = FindNextSibling(timeId); stackId; stackId = FindNextSibling(stackId) )
+		{
+			count = Scr_FindAllThreadsInternal(selfId, stackId, count, false, threads);
 		}
 	}
+
+	return count;
 }
 
-const char* Scr_GetTypeName(unsigned int index)
+/*
+==============
+Scr_TraverseScript
+==============
+*/
+void Scr_TraverseScript( char const *pos )
 {
-	if ( index < scrVmPub.outparamcount )
-		return var_typename[Scr_GetValue(index)->type];
-
-	Scr_Error(va("parameter %d does not exist", index + 1));
-	return 0;
+	UNIMPLEMENTED(__FUNCTION__);
 }
 
-unsigned int Scr_GetConstLowercaseString(unsigned int index)
+/*
+==============
+Scr_IsEndonThread
+==============
+*/
+bool Scr_IsEndonThread( unsigned int localId )
+{
+	unsigned int stackId;
+	int type;
+
+	if ( GetObjectType(localId) != VAR_NOTIFY_THREAD )
+	{
+		return false;
+	}
+
+	if ( GetStartLocalId(localId) != localId )
+	{
+		return false;
+	}
+
+	stackId = Scr_GetWaittillThreadStackId(localId, localId);
+	type = GetObjectType(stackId);
+
+	assert((type == VAR_UNDEFINED) || (type == VAR_STACK));
+	return type == VAR_UNDEFINED;
+}
+
+/*
+==============
+Scr_TerminalError
+==============
+*/
+void Scr_TerminalError( const char *error )
+{
+	Scr_DumpScriptThreads();
+	Scr_DumpScriptVariablesDefault();
+
+	scrVmPub.terminal_error = true;
+	Scr_Error(error);
+}
+
+/*
+==============
+Scr_InitSystem
+==============
+*/
+void Scr_InitSystem()
+{
+	assert(!scrVarPub.timeArrayId);
+	scrVarPub.timeArrayId = AllocObject();
+
+	assert(!scrVarPub.pauseArrayId);
+	scrVarPub.pauseArrayId = Scr_AllocArray();
+
+	assert(!scrVarPub.levelId);
+	scrVarPub.levelId = AllocObject();
+
+	assert(!scrVarPub.animId);
+	scrVarPub.animId = AllocObject();
+
+	scrVarPub.time = 0;
+	g_script_error_level = -1;
+}
+
+/*
+==============
+Scr_AddArrayStringIndexed
+==============
+*/
+void Scr_AddArrayStringIndexed( unsigned int stringValue )
+{
+	unsigned int id;
+
+	assert(scrVmPub.inparamcount);
+
+	--scrVmPub.top;
+	--scrVmPub.inparamcount;
+
+	assert(scrVmPub.top->type == VAR_POINTER);
+
+	id = GetNewVariable(scrVmPub.top->u.pointerValue, stringValue);
+	SetNewVariableValue(id, scrVmPub.top + 1);
+}
+
+/*
+==============
+Scr_AddArray
+==============
+*/
+void Scr_AddArray()
+{
+	unsigned int id;
+
+	assert(scrVmPub.inparamcount);
+
+	--scrVmPub.top;
+	--scrVmPub.inparamcount;
+
+	assert(scrVmPub.top->type == VAR_POINTER);
+
+	id = GetNewArrayVariable(scrVmPub.top->u.pointerValue, GetArraySize(scrVmPub.top->u.pointerValue));
+	SetNewVariableValue(id, scrVmPub.top + 1);
+}
+
+/*
+==============
+Scr_GetAnimTree
+==============
+*/
+scr_animtree_t Scr_GetAnimTree( unsigned int index ) // untested
+{
+	VariableValue *value;
+	scr_animtree_t tree;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+
+		tree.anims = NULL;
+		return tree;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_INTEGER )
+	{
+		scrVarPub.error_message = va("type %s is not an animtree", var_typename[value->type]);
+
+		RemoveRefToValue(value);
+		value->type = VAR_UNDEFINED;
+
+		scrVarPub.error_index = index + 1;
+		Scr_ErrorInternal();
+
+		tree.anims = NULL;
+		return tree;
+	}
+
+	if ( value->u.intValue > scrAnimPub.xanim_num[SCR_XANIM_SERVER] || !Scr_GetAnims(value->u.intValue) )
+	{
+		scrVarPub.error_message = "bad anim tree";
+
+		RemoveRefToValue(value);
+		value->type = VAR_UNDEFINED;
+
+		scrVarPub.error_index = index + 1;
+		Scr_ErrorInternal();
+
+		tree.anims = NULL;
+		return tree;
+	}
+
+	tree.anims = Scr_GetAnims(value->u.intValue);
+	return tree;
+}
+
+/*
+==============
+Scr_GetAnim
+==============
+*/
+scr_anim_s Scr_GetAnim( unsigned int index, XAnimTree_s *tree )
+{
+	VariableValue *value;
+	scr_anim_s anim;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+
+		anim.index = 0;
+		anim.tree = 0;
+
+		return anim;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	if ( value->type != VAR_ANIMATION )
+	{
+		scrVarPub.error_message = va("type %s is not an anim", var_typename[value->type]);
+
+		RemoveRefToValue(value);
+		value->type = VAR_UNDEFINED;
+
+		scrVarPub.error_index = index + 1;
+		Scr_ErrorInternal();
+
+		anim.index = 0;
+		anim.tree = 0;
+
+		return anim;
+	}
+
+	anim.linkPointer = value->u.codePosValue;
+
+	if ( !tree )
+	{
+		return anim;
+	}
+
+	if ( Scr_GetAnims(anim.tree) != XAnimGetAnims(tree) )
+	{
+		scrVarPub.error_message = va("anim '%s' in animtree '%s' does not belong to the entity's animtree '%s'",
+		                             XAnimGetAnimDebugName(Scr_GetAnims(anim.tree), anim.index),
+		                             XAnimGetAnimTreeDebugName(Scr_GetAnims(anim.tree)),
+		                             XAnimGetAnimTreeDebugName(XAnimGetAnims(tree)));
+
+		RemoveRefToValue(value);
+		value->type = VAR_UNDEFINED;
+
+		scrVarPub.error_index = index + 1;
+		Scr_ErrorInternal();
+	}
+
+	return anim;
+}
+
+/*
+==============
+Scr_ClearOutParams
+==============
+*/
+void Scr_ClearOutParams()
+{
+	while ( scrVmPub.outparamcount )
+	{
+		RemoveRefToValue(scrVmPub.top);
+
+		--scrVmPub.top;
+		--scrVmPub.outparamcount;
+	}
+}
+
+/*
+==============
+Scr_GetConstLowercaseString
+==============
+*/
+unsigned int Scr_GetConstLowercaseString( unsigned int index )
 {
 	unsigned int stringValue;
 	VariableValue *value;
@@ -491,681 +951,1177 @@ unsigned int Scr_GetConstLowercaseString(unsigned int index)
 		return 0;
 	}
 
-	value = Scr_GetValue(index);
+	value = &scrVmPub.top[-index];
 
 	if ( !Scr_CastString(value) )
 	{
 		scrVarPub.error_index = index + 1;
 		Scr_ErrorInternal();
-		Scr_Error(va("parameter %d does not exist", index + 1));
 		return 0;
 	}
 
+	assert(value->type == VAR_STRING);
 	stringValue = value->u.stringValue;
-	string = SL_ConvertToString(value->u.stringValue);
+	string = SL_ConvertToString(stringValue);
 
-	for ( i = 0; ; ++i )
+	for ( i = 0; ; i++ )
 	{
 		tempString[i] = tolower(string[i]);
 
 		if ( !string[i] )
+		{
 			break;
+		}
 	}
 
+	assert(value->type == VAR_STRING);
 	value->u.stringValue = SL_GetString(tempString, 0);
 	SL_RemoveRefToString(stringValue);
 
 	return value->u.stringValue;
 }
 
-unsigned int Scr_GetObject(unsigned int paramnum)
+/*
+==============
+Scr_GetConstString
+==============
+*/
+unsigned int Scr_GetConstString( unsigned int index )
 {
-	VariableValue *var;
+	VariableValue *value;
 
-	if (paramnum >= scrVmPub.outparamcount)
+	if ( index >= scrVmPub.outparamcount )
 	{
-		Scr_Error(va("parameter %d does not exist", paramnum + 1));
+		Scr_Error(va("parameter %d does not exist", index + 1));
 		return 0;
 	}
 
-	var = Scr_GetValue(paramnum);
+	value = &scrVmPub.top[-index];
 
-	if (var->type == VAR_OBJECT)
+	if ( !Scr_CastString(value) )
 	{
-		return var->u.pointerValue;
+		scrVarPub.error_index = index + 1;
+		Scr_ErrorInternal();
+		return 0;
 	}
 
-	scrVarPub.error_index = paramnum + 1;
-	Scr_Error(va("type %s is not an object", var_typename[var->type]));
-	return 0;
+	assert(value->type == VAR_STRING);
+	return value->u.stringValue;
 }
 
-void Scr_SetStructField(unsigned int structId, unsigned int index)
+/*
+==============
+Scr_GetNextCodepos
+==============
+*/
+const char* Scr_GetNextCodepos( VariableValue *top, const char *pos, int opcode, int mode, unsigned int *localId )
 {
-	unsigned int id;
+	UNIMPLEMENTED(__FUNCTION__);
+	return NULL;
+}
 
-	id = Scr_GetVariableField(structId, index);
+/*
+==============
+Scr_Shutdown
+==============
+*/
+void Scr_Shutdown()
+{
+	if ( !scrVarPub.bInited )
+	{
+		return;
+	}
+
+	scrVarPub.bInited = false;
+
+	Scr_ShutdownVariables();
+	VM_Shutdown();
+	SL_Shutdown();
+}
+
+/*
+==============
+Scr_GetDebugString
+==============
+*/
+const char* Scr_GetDebugString( unsigned int index )
+{
+	VariableValue *value;
+
+	if ( index >= scrVmPub.outparamcount )
+	{
+		Scr_Error(va("parameter %d does not exist", index + 1));
+		return 0;
+	}
+
+	value = &scrVmPub.top[-index];
+
+	Scr_CastDebugString(value);
+
+	assert(value->type == VAR_STRING);
+	return SL_ConvertToString(value->u.stringValue);
+}
+
+/*
+==============
+Scr_GetStringIncludeNull
+==============
+*/
+const char* Scr_GetStringIncludeNull( unsigned int index )
+{
+	return SL_ConvertToString( Scr_GetConstString( index ) );
+}
+
+/*
+==============
+Scr_GetConstStringIncludeNull
+==============
+*/
+unsigned int Scr_GetConstStringIncludeNull( unsigned int index )
+{
+	if ( index < scrVmPub.outparamcount && scrVmPub.top[-index].type == VAR_UNDEFINED )
+	{
+		return 0;
+	}
+
+	return Scr_GetConstString(index);
+}
+
+/*
+==============
+Scr_GetString
+==============
+*/
+const char* Scr_GetString( unsigned int index )
+{
+	return SL_ConvertToString( Scr_GetConstString( index ) );
+}
+
+/*
+==============
+Scr_FreeThread
+==============
+*/
+void Scr_FreeThread( unsigned short handle )
+{
+	assert(scrVarPub.timeArrayId);
+	assert(handle);
+
+	RemoveRefToObject(handle);
+}
+
+/*
+==============
+VM_CancelNotify
+==============
+*/
+void VM_CancelNotify( unsigned int notifyListOwnerId, unsigned int startLocalId )
+{
+	unsigned int notifyNameListId, notifyListId, stringValue;
+
+	notifyListId = FindObject( FindVariable( notifyListOwnerId, OBJECT_NOTIFY_LIST ) );
+	stringValue = Scr_GetThreadNotifyName(startLocalId);
+	assert(stringValue);
+	notifyNameListId = FindObject( FindVariable( notifyListId, stringValue ) );
+
+	VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
+}
+
+/*
+==============
+SetEntityFieldValue
+==============
+*/
+bool SetEntityFieldValue( unsigned int classnum, int entnum, int offset, VariableValue *value )
+{
+	assert(!scrVmPub.inparamcount);
+	assert(!scrVmPub.outparamcount);
+
+	scrVmPub.outparamcount = 1;
+	scrVmPub.top = value;
+
+	if ( !Scr_SetObjectField(classnum, entnum, offset) )
+	{
+		assert(!scrVmPub.inparamcount);
+		assert(scrVmPub.outparamcount == 1);
+
+		scrVmPub.outparamcount = 0;
+		return false;
+	}
+
+	assert(!scrVmPub.inparamcount);
+
+	if ( scrVmPub.outparamcount )
+	{
+		assert(scrVmPub.outparamcount == 1);
+
+		RemoveRefToValue(scrVmPub.top);
+		--scrVmPub.top;
+
+		scrVmPub.outparamcount = 0;
+	}
+
+	return true;
+}
+
+/*
+==============
+Scr_CancelNotifyList
+==============
+*/
+void Scr_CancelNotifyList( unsigned int notifyListOwnerId )
+{
+	unsigned int selfStartLocalId, selfLocalId, startLocalId, notifyListId, notifyNameListId, stackId;
+	VariableStackBuffer *stackValue;
+
+	while ( 1 )
+	{
+		notifyListId = FindVariable(notifyListOwnerId, OBJECT_NOTIFY_LIST);
+
+		if ( !notifyListId )
+		{
+			break;
+		}
+
+		notifyNameListId = FindNextSibling(FindObject(notifyListId));
+
+		if ( !notifyNameListId )
+		{
+			break;
+		}
+
+		stackId = FindNextSibling(FindObject(notifyNameListId));
+
+		if ( !stackId )
+		{
+			break;
+		}
+
+		startLocalId = GetVariableKeyObject(stackId);
+		assert(startLocalId);
+
+		if ( GetObjectType(stackId) == VAR_STACK )
+		{
+			stackValue = GetVariableValueAddress(stackId)->stackValue;
+			Scr_CancelWaittill(startLocalId);
+
+			VM_TrimStack(startLocalId, stackValue, false);
+			continue;
+		}
+
+		AddRefToObject(startLocalId);
+		Scr_CancelWaittill(startLocalId);
+
+		selfLocalId = Scr_GetSelf(startLocalId);
+		selfStartLocalId = GetStartLocalId(selfLocalId);
+
+		stackId = FindVariable(selfStartLocalId, OBJECT_STACK);
+
+		if ( stackId )
+		{
+			stackValue = GetVariableValueAddress(stackId)->stackValue;
+
+			assert(!Scr_GetThreadNotifyName( selfStartLocalId ));
+			assert(GetObjectType( stackId ) == VAR_STACK);
+			assert(!stackValue->pos);
+
+			VM_TrimStack(selfStartLocalId, stackValue, true);
+		}
+
+		Scr_KillEndonThread(startLocalId);
+		RemoveRefToEmptyObject(startLocalId);
+	}
+}
+
+/*
+==============
+Scr_SetStructField
+==============
+*/
+void Scr_SetStructField( unsigned int structId, unsigned int index )
+{
+	unsigned int fieldValueId;
+
+	assert(!scrVmPub.outparamcount);
+	assert(scrVmPub.inparamcount == 1);
+
+	fieldValueId = Scr_GetVariableField(structId, index);
+
+	assert(scrVmPub.inparamcount == 1);
 	scrVmPub.inparamcount = 0;
-	SetVariableFieldValue(id, scrVmPub.top);
-	--scrVmPub.top;
+
+	SetVariableFieldValue(fieldValueId, scrVmPub.top);
+
+	assert(!scrVmPub.inparamcount);
+	assert(!scrVmPub.outparamcount);
+
+	scrVmPub.top--;
 }
 
-void Scr_SetLoading(int bLoading)
+/*
+==============
+Scr_ShutdownSystem
+==============
+*/
+void Scr_ShutdownSystem( int bComplete )
 {
-	scrVmGlob.loading = bLoading;
+	unsigned int id, parentId;
+
+	Scr_CompileShutdown();
+	Scr_FreeEntityList();
+
+	if ( !scrVarPub.timeArrayId )
+	{
+		return;
+	}
+
+	Scr_FreeGameVariable(bComplete);
+
+	for ( id = FindNextSibling(scrVarPub.timeArrayId); id; id = FindNextSibling(id) )
+	{
+		VM_TerminateTime(FindObject(id));
+	}
+
+	while ( 1 )
+	{
+		id = FindNextSibling(scrVarPub.pauseArrayId);
+
+		if ( !id )
+		{
+			break;
+		}
+
+		id = FindNextSibling(FindObject(id));
+		assert(id);
+
+		parentId = GetVariableValueAddress(id)->pointerValue;
+
+		AddRefToObject(parentId);
+		Scr_CancelNotifyList(parentId);
+		RemoveRefToObject(parentId);
+	}
+
+	assert(scrVarPub.levelId);
+	ClearObject(scrVarPub.levelId);
+	RemoveRefToEmptyObject(scrVarPub.levelId);
+	scrVarPub.levelId = 0;
+
+	assert(scrVarPub.animId);
+	ClearObject(scrVarPub.animId);
+	RemoveRefToEmptyObject(scrVarPub.animId);
+	scrVarPub.animId = 0;
+
+	assert(scrVarPub.timeArrayId);
+	ClearObject(scrVarPub.timeArrayId);
+	RemoveRefToEmptyObject(scrVarPub.timeArrayId);
+	scrVarPub.timeArrayId = 0;
+
+	assert(scrVarPub.pauseArrayId);
+	RemoveRefToEmptyObject(scrVarPub.pauseArrayId);
+	scrVarPub.pauseArrayId = 0;
+
+	assert(!scrVarPub.freeEntList);
+	Scr_FreeObjects();
 }
 
-void Scr_SetDynamicEntityField(int entnum, unsigned int classnum, unsigned int index)
+/*
+==============
+Scr_SetDynamicEntityField
+==============
+*/
+void Scr_SetDynamicEntityField( int entnum, int classnum, unsigned int index )
 {
 	unsigned int entId;
 
 	entId = Scr_GetEntityId(entnum, classnum);
+	assert(GetObjectType( entId ) == VAR_ENTITY);
+
 	Scr_SetStructField(entId, index);
 }
 
-unsigned short Scr_ExecEntThreadNum(int entnum, unsigned int classnum, int handle, unsigned int paramcount)
+/*
+==============
+Scr_MakeArray
+==============
+*/
+void Scr_MakeArray()
 {
-	unsigned int threadId;
+	IncInParam();
+
+	scrVmPub.top->type = VAR_POINTER;
+	scrVmPub.top->u.pointerValue = Scr_AllocArray();
+}
+
+/*
+==============
+Scr_AddVector
+==============
+*/
+void Scr_AddVector( const vec3_t value )
+{
+	IncInParam();
+
+	scrVmPub.top->type = VAR_VECTOR;
+	scrVmPub.top->u.vectorValue = Scr_AllocVector(value);
+}
+
+/*
+==============
+Scr_AddConstString
+==============
+*/
+void Scr_AddConstString( unsigned int value )
+{
+	assert(value);
+	IncInParam();
+
+	scrVmPub.top->type = VAR_STRING;
+	scrVmPub.top->u.stringValue = value;
+
+	SL_AddRefToString(value);
+}
+
+/*
+==============
+Scr_AddIString
+==============
+*/
+void Scr_AddIString( const char *value )
+{
+	assert(value);
+	IncInParam();
+
+	scrVmPub.top->type = VAR_ISTRING;
+	scrVmPub.top->u.stringValue = SL_GetString(value, 0);
+}
+
+/*
+==============
+Scr_AddString
+==============
+*/
+void Scr_AddString( const char *value )
+{
+	assert(value);
+	IncInParam();
+
+	scrVmPub.top->type = VAR_STRING;
+	scrVmPub.top->u.stringValue = SL_GetString(value, 0);
+}
+
+/*
+==============
+Scr_AddObject
+==============
+*/
+void Scr_AddObject( unsigned int id )
+{
+	assert(id);
+	assert(GetObjectType( id ) != VAR_THREAD);
+	assert(GetObjectType( id ) != VAR_NOTIFY_THREAD);
+	assert(GetObjectType( id ) != VAR_TIME_THREAD);
+	assert(GetObjectType( id ) != VAR_CHILD_THREAD);
+	assert(GetObjectType( id ) != VAR_DEAD_THREAD);
+
+	IncInParam();
+
+	scrVmPub.top->type = VAR_POINTER;
+	scrVmPub.top->u.pointerValue = id;
+
+	AddRefToObject(id);
+}
+
+/*
+==============
+Scr_AddUndefined
+==============
+*/
+void Scr_AddUndefined()
+{
+	IncInParam();
+	scrVmPub.top->type = VAR_UNDEFINED;
+}
+
+/*
+==============
+Scr_AddAnim
+==============
+*/
+void Scr_AddAnim( scr_anim_s value )
+{
+	IncInParam();
+
+	scrVmPub.top->type = VAR_ANIMATION;
+	scrVmPub.top->u.codePosValue = value.linkPointer;
+}
+
+/*
+==============
+Scr_AddFloat
+==============
+*/
+void Scr_AddFloat( float value )
+{
+	IncInParam();
+
+	scrVmPub.top->type = VAR_FLOAT;
+	scrVmPub.top->u.floatValue = value;
+}
+
+/*
+==============
+Scr_AddInt
+==============
+*/
+void Scr_AddInt( int value )
+{
+	IncInParam();
+
+	scrVmPub.top->type = VAR_INTEGER;
+	scrVmPub.top->u.intValue = value;
+}
+
+/*
+==============
+Scr_AddBool
+==============
+*/
+void Scr_AddBool( bool value )
+{
+	assert(value == false || value == true);
+	IncInParam();
+
+	scrVmPub.top->type = VAR_INTEGER;
+	scrVmPub.top->u.intValue = value;
+}
+
+/*
+==============
+Scr_AddStruct
+==============
+*/
+void Scr_AddStruct()
+{
+	unsigned int id = AllocObject();
+
+	Scr_AddObject(id);
+	RemoveRefToObject(id);
+}
+
+/*
+==============
+Scr_AddEntityNum
+==============
+*/
+void Scr_AddEntityNum( int entnum, int classnum )
+{
+	Scr_AddObject( Scr_GetEntityId( entnum, classnum ) );
+}
+
+/*
+==============
+GetEntityFieldValue
+==============
+*/
+VariableValue GetEntityFieldValue( unsigned int classnum, int entnum, int offset )
+{
+	VariableValue value;
+
+	assert(!scrVmPub.inparamcount);
+	assert(!scrVmPub.outparamcount);
+
+	scrVmPub.top = scrVmGlob.eval_stack - 1;
+	scrVmGlob.eval_stack->type = VAR_UNDEFINED;
+
+	Scr_GetObjectField(classnum, entnum, offset);
+
+	assert(!scrVmPub.inparamcount || scrVmPub.inparamcount == 1);
+	assert(!scrVmPub.outparamcount);
+	assert(scrVmPub.top - scrVmPub.inparamcount == scrVmGlob.eval_stack - 1);
+
+	scrVmPub.inparamcount = 0;
+
+	value.u = scrVmGlob.eval_stack->u;
+	value.type = scrVmGlob.eval_stack->type;
+
+	return value;
+}
+
+/*
+==============
+Scr_NotifyNum
+==============
+*/
+void Scr_NotifyNum( int entnum, int classnum, unsigned int stringValue, unsigned int paramcount )
+{
+	int type;
+	VariableValue *startTop;
+	unsigned int id;
+
+	assert(scrVarPub.timeArrayId);
+	assert(paramcount <= scrVmPub.inparamcount);
+
+	Scr_ClearOutParams();
+
+	startTop = &scrVmPub.top[-paramcount];
+	paramcount = scrVmPub.inparamcount - paramcount;
+
+	id = FindEntityId(entnum, classnum);
+
+	if ( id )
+	{
+		type = startTop->type;
+
+		startTop->type = VAR_PRECODEPOS;
+		scrVmPub.inparamcount = 0;
+
+		VM_Notify(id, stringValue, scrVmPub.top);
+
+		startTop->type = type;
+	}
+
+	while ( scrVmPub.top != startTop )
+	{
+		RemoveRefToValue(scrVmPub.top);
+		scrVmPub.top--;
+	}
+
+	assert(!scrVmPub.outparamcount);
+	scrVmPub.inparamcount = paramcount;
+}
+
+/*
+==============
+Scr_Init
+==============
+*/
+void Scr_Init()
+{
+	if ( scrVarPub.bInited )
+	{
+		return;
+	}
+
+	SL_Restart();
+
+	Var_Init();
+	Scr_VM_Init();
+
+	scrCompilePub.script_loading = false;
+	scrAnimPub.animtree_loading = false;
+
+	scrCompilePub.scriptsPos = 0;
+	scrCompilePub.loadedscripts = 0;
+
+	scrAnimPub.animtrees = 0;
+
+	scrCompilePub.builtinMeth = 0;
+	scrCompilePub.builtinFunc = 0;
+
+	scrVarPub.bInited = true;
+}
+
+/*
+==============
+Scr_ExecCode
+==============
+*/
+void Scr_ExecCode( const char *pos, unsigned int localId )
+{
+	Scr_ResetTimeout();
+
+	assert(scrVarPub.timeArrayId);
+	assert(!scrVmPub.inparamcount);
+	assert(!scrVmPub.outparamcount);
+	assert(!scrVarPub.evaluate);
+	assert(!scrVmPub.debugCode);
+
+	scrVmPub.debugCode = true;
+
+	if ( localId )
+	{
+		VM_Execute(localId, pos, 0);
+	}
+	else
+	{
+		AddRefToObject(scrVarPub.levelId);
+		localId = AllocThread(scrVarPub.levelId);
+
+		VM_Execute(localId, pos, 0);
+
+		Scr_KillThread(localId);
+		RemoveRefToObject(localId);
+	}
+
+	assert(scrVmPub.debugCode);
+
+	scrVmPub.debugCode = false;
+
+	assert(scrVmPub.inparamcount == 1);
+	assert(!scrVmPub.outparamcount);
+
+	if ( scrVmPub.function_count )
+	{
+		scrVmPub.function_count--;
+		scrVmPub.function_frame--;
+	}
+
+	scrVmPub.top--;
+	scrVmPub.inparamcount = 0;
+}
+
+/*
+==============
+Scr_AddExecEntThreadNum
+==============
+*/
+void Scr_AddExecEntThreadNum( int entnum, int classnum, int handle, unsigned int paramcount )
+{
 	const char *pos;
-	unsigned int selfId;
-	unsigned short id;
+	unsigned int localId, id, selfId;
 
 	pos = &scrVarPub.programBuffer[handle];
 
 	if ( !scrVmPub.function_count )
+	{
+		assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
 		Scr_ResetTimeout();
+	}
+
+	assert(scrVarPub.timeArrayId);
+	assert(handle);
+	assert(Scr_IsInScriptMemory( pos ));
 
 	selfId = Scr_GetEntityId(entnum, classnum);
 	AddRefToObject(selfId);
-	threadId = AllocThread(selfId);
-	id = VM_Execute(threadId, pos, paramcount);
+
+	localId = AllocThread(selfId);
+	id = VM_Execute(localId, pos, paramcount);
+
+	RemoveRefToObject(id);
+
+	scrVmPub.outparamcount++;
+	scrVmPub.inparamcount--;
+
+	assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
+}
+
+/*
+==============
+Scr_AddExecThread
+==============
+*/
+void Scr_AddExecThread( int handle, unsigned int paramcount )
+{
+	const char *pos;
+	unsigned int id, localId;
+
+	pos = &scrVarPub.programBuffer[handle];
+
+	if ( !scrVmPub.function_count )
+	{
+		assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
+		Scr_ResetTimeout();
+	}
+
+	assert(scrVarPub.timeArrayId);
+	assert(handle);
+	assert(Scr_IsInScriptMemory( pos ));
+
+	AddRefToObject(scrVarPub.levelId);
+
+	localId = AllocThread(scrVarPub.levelId);
+	id = VM_Execute(localId, pos, paramcount);
+
+	RemoveRefToObject(id);
+
+	scrVmPub.outparamcount++;
+	scrVmPub.inparamcount--;
+
+	assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
+}
+
+/*
+==============
+Scr_ExecEntThreadNum
+==============
+*/
+unsigned short Scr_ExecEntThreadNum( int entnum, int classnum, int handle, unsigned int paramcount )
+{
+	const char *pos;
+	unsigned int localId, id, selfId;
+
+	pos = &scrVarPub.programBuffer[handle];
+
+	if ( !scrVmPub.function_count )
+	{
+		assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
+		Scr_ResetTimeout();
+	}
+
+	assert(scrVarPub.timeArrayId);
+	assert(handle);
+	assert(Scr_IsInScriptMemory( pos ));
+
+	selfId = Scr_GetEntityId(entnum, classnum);
+	AddRefToObject(selfId);
+
+	localId = AllocThread(selfId);
+	id = VM_Execute(localId, pos, paramcount);
+
 	RemoveRefToValue(scrVmPub.top);
 	scrVmPub.top->type = VAR_UNDEFINED;
-	--scrVmPub.top;
-	--scrVmPub.inparamcount;
+
+	scrVmPub.top--;
+	scrVmPub.inparamcount--;
+
+	//assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
 
 	return id;
 }
 
-void Scr_FreeThread(unsigned short handle)
+/*
+==============
+Scr_ExecThread
+==============
+*/
+unsigned short Scr_ExecThread( int handle, unsigned int paramcount )
 {
-	RemoveRefToObject(handle);
+	const char *pos;
+	unsigned int localId, id;
+
+	pos = &scrVarPub.programBuffer[handle];
+
+	if ( !scrVmPub.function_count )
+	{
+		assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
+		Scr_ResetTimeout();
+	}
+
+	assert(scrVarPub.timeArrayId);
+	assert(handle);
+	assert(Scr_IsInScriptMemory( pos ));
+
+	AddRefToObject(scrVarPub.levelId);
+
+	localId = AllocThread(scrVarPub.levelId);
+	id = VM_Execute(localId, pos, paramcount);
+
+	RemoveRefToValue(scrVmPub.top);
+	scrVmPub.top->type = VAR_UNDEFINED;
+
+	scrVmPub.top--;
+	scrVmPub.inparamcount--;
+
+	assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
+
+	return id;
 }
 
+/*
+==============
+Scr_RunCurrentThreads
+==============
+*/
+void Scr_RunCurrentThreads()
+{
+	assert(!scrVmPub.function_count);
+	assert(!scrVarPub.error_message);
+	assert(!scrVarPub.error_index);
+	assert(!scrVmPub.outparamcount);
+	assert(!scrVmPub.inparamcount);
+	assert(scrVmPub.top == scrVmPub.stack);
+
+	VM_SetTime();
+}
+
+/*
+==============
+Scr_IncTime
+==============
+*/
 void Scr_IncTime()
 {
 	Scr_RunCurrentThreads();
 	Scr_FreeEntityList();
-	++scrVarPub.time;
+
+	assert(!(scrVarPub.time & ~VAR_NAME_LOW_MASK));
+
+	scrVarPub.time++;
 	scrVarPub.time &= VAR_NAME_LOW_MASK;
 }
 
-void Scr_DecTime()
+/*
+==============
+Scr_ErrorInternal
+==============
+*/
+void Scr_ErrorInternal()
 {
-	--scrVarPub.time;
-	scrVarPub.time &= VAR_NAME_LOW_MASK;
-}
+	assert(scrVarPub.error_message);
 
-bool SetEntityFieldValue(unsigned int classnum, int entnum, int offset, VariableValue *value)
-{
-	scrVmPub.outparamcount = 1;
-	scrVmPub.top = value;
-
-	if ( Scr_SetObjectField(classnum, entnum, offset) )
+	if ( !scrVarPub.evaluate && !scrCompilePub.script_loading )
 	{
-		if ( scrVmPub.outparamcount )
+		if ( scrVarPub.developer && scrVmGlob.loading )
 		{
-			RemoveRefToValue(scrVmPub.top);
-			--scrVmPub.top;
-			scrVmPub.outparamcount = 0;
+			scrVmPub.terminal_error = true;
 		}
 
-		return true;
-	}
-	else
-	{
-		scrVmPub.outparamcount = 0;
-		return false;
-	}
-}
-
-void GetEntityFieldValue(VariableValue *pValue, unsigned int classnum, int entnum, int offset)
-{
-	scrVmPub.top = scrVmGlob.eval_stack - 1;
-	scrVmGlob.eval_stack->type = VAR_UNDEFINED;
-	Scr_GetObjectField(classnum, entnum, offset);
-	scrVmPub.inparamcount = 0;
-	pValue->u = scrVmGlob.eval_stack->u;
-	pValue->type = scrVmGlob.eval_stack->type;
-}
-
-void VM_CancelNotifyInternal(unsigned int notifyListOwnerId, unsigned int startLocalId, unsigned int notifyListId, unsigned int notifyNameListId, unsigned int stringValue)
-{
-	Scr_RemoveThreadNotifyName(startLocalId);
-	RemoveObjectVariable(notifyNameListId, startLocalId);
-
-	if ( !GetArraySize(notifyNameListId) )
-	{
-		RemoveVariable(notifyListId, stringValue);
-
-		if ( !GetArraySize(notifyListId) )
-			RemoveVariable(notifyListOwnerId, 0x1FFFEu);
-	}
-}
-
-void VM_CancelNotify(unsigned int notifyListOwnerId, unsigned int startLocalId)
-{
-	unsigned int varIndex;
-	unsigned int index;
-	unsigned int notifyNameListId;
-	unsigned int notifyListId;
-	unsigned int name;
-
-	varIndex = FindVariable(notifyListOwnerId, 0x1FFFEu);
-	notifyListId = FindObject(varIndex);
-	name = Scr_GetThreadNotifyName(startLocalId);
-	index = FindVariable(notifyListId, name);
-	notifyNameListId = FindObject(index);
-	VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, name);
-}
-
-VariableStackBuffer* VM_ArchiveStack(int size, const char *codePos, VariableValue *top, unsigned int localVarCount, unsigned int *localId)
-{
-	unsigned int id;
-	char *buf;
-	char *pos;
-	VariableStackBuffer *stackBuf;
-
-	stackBuf = (VariableStackBuffer *)MT_Alloc(5 * size + sizeof(VariableStackBuffer));
-	id = *localId;
-	stackBuf->localId = *localId;
-	stackBuf->size = size;
-	stackBuf->bufLen = 5 * size + sizeof(VariableStackBuffer);
-	stackBuf->pos = codePos;
-	stackBuf->time = scrVarPub.time;
-	scrVmPub.localVars -= localVarCount;
-	buf = &stackBuf->buf[5 * size];
-
-	while ( size )
-	{
-		pos = buf - 4;
-
-		if ( top->type == VAR_CODEPOS )
+		if ( scrVmPub.function_count || scrVmPub.debugCode )
 		{
-			--scrVmPub.function_count;
-			--scrVmPub.function_frame;
-			*(intptr_t *)pos = (intptr_t)scrVmPub.function_frame->fs.pos;
-			scrVmPub.localVars -= scrVmPub.function_frame->fs.localVarCount;
-			id = GetParentLocalId(id);
-		}
-		else
-		{
-			*(intptr_t *)pos = (intptr_t)top->u.codePosValue;
+			assert(g_script_error_level >= 0 && g_script_error_level < MAX_VM_STACK_DEPTH + 1);
+			longjmp(g_script_error[g_script_error_level], -1);
 		}
 
-		buf = pos - 1;
-		*buf = top->type;
-		--top;
-		--size;
+		Com_Error(ERR_DROP, "%s", scrVarPub.error_message);
 	}
 
-	--scrVmPub.function_count;
-	--scrVmPub.function_frame;
-	AddRefToObject(id);
-	*localId = id;
-
-	return stackBuf;
+	if ( scrVmPub.terminal_error )
+	{
+		Com_Error(ERR_DROP, "%s", scrVarPub.error_message);
+	}
 }
 
-void VM_TerminateStack(unsigned int endLocalId, unsigned int startLocalId, VariableStackBuffer *stackValue)
+/*
+==============
+Scr_FindAllThreadsInternal
+==============
+*/
+int Scr_FindAllThreadsInternal( unsigned int selfId, unsigned int threadId, int count, bool a4, unsigned int *threads )
 {
-	VariableValue tempValue;
-	unsigned char type;
-	int size;
-	char *buf;
-	VariableUnion u;
-	unsigned int parentLocalId;
-	unsigned int localId;
+	unsigned int id, stackId;
 
-	size = stackValue->size;
-	localId = stackValue->localId;
-	buf = &stackValue->buf[5 * size];
+	id = FindObject(threadId);
 
-	while ( size )
+	for ( stackId = FindNextSibling(id); stackId; stackId = FindNextSibling(stackId) )
 	{
-		buf -= 4;
-		u.codePosValue = *(const char **)buf--;
-		type = *buf;
-		--size;
-
-		if ( type == VAR_CODEPOS )
+		if ( GetObjectType(stackId) != VAR_STACK )
 		{
-			parentLocalId = GetParentLocalId(localId);
-			Scr_KillThread(localId);
-			RemoveRefToObject(localId);
+			continue;
+		}
 
-			if ( localId == endLocalId )
+		for ( threadId = GetVariableValueAddress(stackId)->stackValue->localId; threadId; threadId = GetSafeParentLocalId(threadId) )
+		{
+			if ( a4 && selfId != Scr_GetSelf(threadId) )
 			{
-				++size;
-				*buf = 0;
-				Scr_SetThreadWaitTime(startLocalId, scrVarPub.time);
-				stackValue->pos = u.codePosValue;
-				stackValue->localId = parentLocalId;
-				stackValue->size = size;
-				tempValue.type = VAR_STACK;
-				tempValue.u.stackValue = stackValue;
-				SetNewVariableValue(GetNewObjectVariable(GetArray(GetVariable(scrVarPub.timeArrayId, scrVarPub.time)), startLocalId), &tempValue);
-				return;
+				continue;
 			}
 
-			localId = parentLocalId;
-		}
-		else
-		{
-			RemoveRefToValueInternal(type, u);
-		}
-	}
-
-	Scr_KillThread(localId);
-	RemoveRefToObject(localId);
-	MT_Free(stackValue, stackValue->bufLen);
-}
-
-void VM_TrimStack(unsigned int startLocalId, VariableStackBuffer *stackValue, bool fromEndon)
-{
-	VariableValue tempValue;
-	unsigned char type;
-	int size;
-	char *buf;
-	VariableUnion u;
-	unsigned int parentLocalId;
-	unsigned int localId;
-
-	size = stackValue->size;
-	localId = stackValue->localId;
-	buf = &stackValue->buf[5 * size];
-
-	while ( size )
-	{
-		buf -= 4;
-		u.codePosValue = *(const char **)buf--;
-		type = *buf;
-		--size;
-
-		if ( type == VAR_CODEPOS )
-		{
-			if ( FindObjectVariable(scrVarPub.pauseArrayId, localId) )
+			if ( threads )
 			{
-				++size;
-				stackValue->localId = localId;
-				stackValue->size = size;
-				Scr_StopThread(localId);
-
-				if ( !fromEndon )
-				{
-					Scr_SetThreadNotifyName(startLocalId, 0);
-					stackValue->pos = 0;
-					tempValue.type = VAR_STACK;
-					tempValue.u.stackValue = stackValue;
-					SetNewVariableValue(GetNewVariable(startLocalId, 0x1FFFFu), &tempValue);
-				}
-
-				return;
+				threads[count] = threadId;
 			}
 
-			parentLocalId = GetParentLocalId(localId);
-			Scr_KillThread(localId);
-			RemoveRefToObject(localId);
-			localId = parentLocalId;
+			count++;
+			break;
 		}
-		else
-		{
-			RemoveRefToValueInternal(type, u);
-		}
-	}
-
-	if ( fromEndon )
-		RemoveVariable(startLocalId, 0x1FFFFu);
-
-	Scr_KillThread(startLocalId);
-	RemoveRefToObject(startLocalId);
-	MT_Free(stackValue, stackValue->bufLen);
-}
-
-void Scr_CancelWaittill(unsigned int startLocalId)
-{
-	unsigned int localId;
-	unsigned int parentId;
-	VariableValueInternal_u *adr;
-	unsigned int selfNameId;
-	unsigned int selfId;
-
-	selfId = Scr_GetSelf(startLocalId);
-	localId = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
-	selfNameId = FindObject(localId);
-	parentId = FindObjectVariable(selfNameId, startLocalId);
-	adr = GetVariableValueAddress_Bad(parentId);
-	VM_CancelNotify(adr->u.stringValue, startLocalId);
-	RemoveObjectVariable(selfNameId, startLocalId);
-
-	if ( !GetArraySize(selfNameId) )
-		RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
-}
-
-void Scr_CancelNotifyList(unsigned int notifyListOwnerId)
-{
-	VariableStackBuffer *stackBuf;
-	unsigned int localId;
-	unsigned int selfId;
-	VariableStackBuffer *stackValue;
-	unsigned int startLocalId;
-	unsigned int id;
-	unsigned int parentId;
-	unsigned int notifyNameListId;
-	unsigned int arrayId;
-	int stackId;
-	int parentLocalId;
-
-	while ( 1 )
-	{
-		id = FindVariable(notifyListOwnerId, 0x1FFFEu);
-
-		if ( !id )
-			break;
-
-		parentId = FindObject(id);
-		notifyNameListId = FindNextSibling(parentId);
-
-		if ( !notifyNameListId )
-			break;
-
-		arrayId = FindObject(notifyNameListId);
-		stackId = FindNextSibling(arrayId);
-
-		if ( !stackId )
-			break;
-
-		startLocalId = GetVariableKeyObject(stackId);
-
-		if ( GetValueType(stackId) == VAR_STACK )
-		{
-			stackValue = GetVariableValueAddress_Bad(stackId)->u.stackValue;
-			Scr_CancelWaittill(startLocalId);
-			VM_TrimStack(startLocalId, stackValue, 0);
-		}
-		else
-		{
-			AddRefToObject(startLocalId);
-			Scr_CancelWaittill(startLocalId);
-			selfId = Scr_GetSelf(startLocalId);
-			localId = GetStartLocalId(selfId);
-			parentLocalId = FindVariable(localId, 0x1FFFFu);
-
-			if ( parentLocalId )
-			{
-				stackBuf = GetVariableValueAddress_Bad(parentLocalId)->u.stackValue;
-				VM_TrimStack(localId, stackBuf, 1);
-			}
-
-			Scr_KillEndonThread(startLocalId);
-			RemoveRefToEmptyObject(startLocalId);
-		}
-	}
-}
-
-void VM_TerminateTime(unsigned int timeId)
-{
-	VariableStackBuffer *stackValue;
-	unsigned int startLocalId;
-	unsigned int stackId;
-
-	AddRefToObject(timeId);
-
-	while ( 1 )
-	{
-		stackId = FindNextSibling(timeId);
-
-		if ( !stackId )
-			break;
-
-		startLocalId = GetVariableKeyObject(stackId);
-		stackValue = GetVariableValueAddress_Bad(stackId)->u.stackValue;
-		RemoveObjectVariable(timeId, startLocalId);
-		Scr_ClearWaitTime(startLocalId);
-		VM_TerminateStack(startLocalId, startLocalId, stackValue);
-	}
-
-	RemoveRefToObject(timeId);
-}
-
-void Scr_TerminateWaittillThread(unsigned int localId, unsigned int startLocalId)
-{
-	unsigned short ThreadNotifyName;
-	unsigned int object;
-	unsigned int ObjectVariable;
-	unsigned int variable;
-	unsigned int var;
-	VariableStackBuffer *stackValue;
-	unsigned int stackId;
-	unsigned int var2;
-	unsigned int notifyListId;
-	unsigned int notifyNameListId;
-	unsigned int notifyListOwnerId;
-	unsigned int stringValue;
-	unsigned int selfNameId;
-	unsigned int selfId;
-
-	ThreadNotifyName = Scr_GetThreadNotifyName(startLocalId);
-	stringValue = ThreadNotifyName;
-
-	if ( ThreadNotifyName )
-	{
-		selfId = Scr_GetSelf(startLocalId);
-		object = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
-		selfNameId = FindObject(object);
-		ObjectVariable = FindObjectVariable(selfNameId, startLocalId);
-		notifyListOwnerId = GetVariableValueAddress_Bad(ObjectVariable)->u.pointerValue;
-		variable = FindVariable(notifyListOwnerId, 0x1FFFEu);
-		notifyListId = FindObject(variable);
-		var = FindVariable(notifyListId, stringValue);
-		notifyNameListId = FindObject(var);
-		stackId = FindObjectVariable(notifyNameListId, startLocalId);
-		stackValue = GetVariableValueAddress_Bad(stackId)->u.stackValue;
-		VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
-		RemoveObjectVariable(selfNameId, startLocalId);
-
-		if ( !GetArraySize(selfNameId) )
-			RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
-	}
-	else
-	{
-		var2 = FindVariable(startLocalId, 0x1FFFFu);
-		stackValue = GetVariableValueAddress_Bad(var2)->u.stackValue;
-		RemoveVariable(startLocalId, 0x1FFFFu);
-	}
-
-	VM_TerminateStack(localId, startLocalId, stackValue);
-}
-
-void Scr_TerminateWaitThread(unsigned int localId, unsigned int startLocalId)
-{
-	unsigned int variable;
-	VariableStackBuffer *stackValue;
-	unsigned int object;
-	unsigned int time;
-	unsigned int parentId;
-
-	time = Scr_GetThreadWaitTime(startLocalId);
-	Scr_ClearWaitTime(startLocalId);
-	variable = FindVariable(scrVarPub.timeArrayId, time);
-	parentId = FindObject(variable);
-	object = FindObjectVariable(parentId, startLocalId);
-	stackValue = GetVariableValueAddress_Bad(object)->u.stackValue;
-	RemoveObjectVariable(parentId, startLocalId);
-
-	if ( !GetArraySize(parentId) && time != scrVarPub.time )
-		RemoveVariable(scrVarPub.timeArrayId, time);
-
-	VM_TerminateStack(localId, startLocalId, stackValue);
-}
-
-void Scr_TerminateRunningThread(unsigned int localId)
-{
-	unsigned int id;
-	int count;
-	int current;
-
-	current = scrVmPub.function_count;
-	count = scrVmPub.function_count;
-
-	while ( 1 )
-	{
-		id = scrVmPub.function_frame_start[current].fs.localId;
-
-		if ( id == localId )
-			break;
-
-		--current;
-
-		if ( !GetSafeParentLocalId(id) )
-			count = current;
-	}
-
-	while ( count >= current )
-		scrVmPub.function_frame_start[count--].fs.pos = &g_EndPos;
-}
-
-void Scr_TerminateThread(unsigned int localId)
-{
-	int type;
-	int startLocalId;
-
-	startLocalId = GetStartLocalId(localId);
-	type = GetValueType(startLocalId);
-
-	if ( type == VAR_NOTIFY_THREAD )
-	{
-		Scr_TerminateWaittillThread(localId, startLocalId);
-	}
-	else if ( type > VAR_NOTIFY_THREAD )
-	{
-		if ( type == VAR_TIME_THREAD )
-			Scr_TerminateWaitThread(localId, startLocalId);
-	}
-	else if ( type == VAR_THREAD )
-	{
-		Scr_TerminateRunningThread(localId);
-	}
-}
-
-unsigned short Scr_ExecThread(int callbackHook, unsigned int numArgs)
-{
-	unsigned int selfId;
-	const char *codePos;
-	unsigned short callback;
-
-	codePos = &scrVarPub.programBuffer[callbackHook];
-
-	if ( !scrVmPub.function_count )
-		Scr_ResetTimeout();
-
-	Scr_IsInOpcodeMemory(codePos);
-	AddRefToObject(scrVarPub.levelId);
-	selfId = AllocThread(scrVarPub.levelId);
-	callback = VM_Execute(selfId, codePos, numArgs);
-	RemoveRefToValue(scrVmPub.top);
-	scrVmPub.top->type = VAR_UNDEFINED;
-	--scrVmPub.top;
-	--scrVmPub.inparamcount;
-
-	return callback;
-}
-
-void Scr_AddExecThread(int handle, unsigned int paramcount)
-{
-	unsigned int selfId;
-	unsigned int callback;
-	const char *codePos;
-
-	codePos = &scrVarPub.programBuffer[handle];
-
-	if ( !scrVmPub.function_count )
-		Scr_ResetTimeout();
-
-	AddRefToObject(scrVarPub.levelId);
-	selfId = AllocThread(scrVarPub.levelId);
-	callback = VM_Execute(selfId, codePos, paramcount);
-	RemoveRefToObject(callback);
-	++scrVmPub.outparamcount;
-	--scrVmPub.inparamcount;
-}
-
-int Scr_AddLocalVars(unsigned int localId)
-{
-	int count;
-	unsigned int fieldIndex;
-
-	count = 0;
-
-	for ( fieldIndex = FindLastSibling(localId); fieldIndex; fieldIndex = FindLastSibling(fieldIndex) )
-	{
-		*++scrVmPub.localVars = fieldIndex;
-		++count;
 	}
 
 	return count;
 }
 
-void VM_UnarchiveStack(unsigned int startLocalId, function_stack_t *stack, VariableStackBuffer *stackValue)
+/*
+==============
+Scr_TerminateRunningThread
+==============
+*/
+void Scr_TerminateRunningThread( unsigned int localId )
 {
-	int function_count;
+	int threadId, topThread, function_count;
+
+	assert(scrVmPub.function_count);
+	function_count = scrVmPub.function_count;
+	topThread = scrVmPub.function_count;
+
+	while ( 1 )
+	{
+		assert(function_count);
+		threadId = scrVmPub.function_frame_start[function_count].fs.localId;
+
+		if ( threadId == localId )
+		{
+			break;
+		}
+
+		function_count--;
+
+		if ( !GetSafeParentLocalId(threadId) )
+		{
+			topThread = function_count;
+		}
+	}
+
+	while ( topThread >= function_count )
+	{
+		scrVmPub.function_frame_start[topThread].fs.pos = &g_EndPos;
+		topThread--;
+	}
+}
+
+/*
+==============
+Scr_AddLocalVars
+==============
+*/
+int Scr_AddLocalVars( unsigned int localId )
+{
+	unsigned int fieldIndex;
+	int localVarCount = 0;
+
+	for ( fieldIndex = FindPrevSibling(localId); fieldIndex; fieldIndex = FindPrevSibling(fieldIndex) )
+	{
+		*scrVmPub.localVars++;
+		*scrVmPub.localVars = fieldIndex;
+
+		localVarCount++;
+	}
+
+	return localVarCount;
+}
+
+/*
+==============
+Scr_GetWaittillThreadStackId
+==============
+*/
+unsigned int Scr_GetWaittillThreadStackId( unsigned int localId, unsigned int startLocalId )
+{
+	unsigned short stringValue;
+	unsigned int id, index, parentId, selfId;
+
+	assert(scrVarPub.developer);
+	stringValue = Scr_GetThreadNotifyName(startLocalId);
+
+	if ( !stringValue )
+	{
+		return FindVariable(startLocalId, OBJECT_STACK);
+	}
+
+	selfId = Scr_GetSelf(startLocalId);
+
+	id = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
+	parentId = FindObject(id);
+
+	id = FindObjectVariable(parentId, startLocalId);
+
+	index = FindVariable(GetVariableValueAddress(id)->pointerValue, OBJECT_NOTIFY_LIST);
+	parentId = FindObject(index);
+
+	index = FindVariable(parentId, stringValue);
+	parentId = FindObject(index);
+
+	return FindObjectVariable(parentId, startLocalId);
+}
+
+/*
+==============
+Scr_VM_Init
+==============
+*/
+void Scr_VM_Init()
+{
+	scrVmPub.maxstack = &scrVmPub.stack[MAX_VM_OPERAND_STACK - 1];
+	scrVmPub.top = scrVmPub.stack;
+
+	scrVmPub.function_count = 0;
+	scrVmPub.function_frame = scrVmPub.function_frame_start;
+
+	scrVmPub.localVars = scrVmGlob.localVarsStack - 1;
+
+	scrVarPub.evaluate = false;
+	scrVmPub.debugCode = false;
+
+	Scr_ClearErrorMessage();
+
+	scrVmPub.terminal_error = false;
+
+	scrVmPub.outparamcount = 0;
+	scrVmPub.inparamcount = 0;
+
+	scrVarPub.tempVariable = AllocValue();
+
+	scrVarPub.timeArrayId = 0;
+	scrVarPub.pauseArrayId = 0;
+
+	scrVarPub.levelId = 0;
+	scrVarPub.gameId = 0;
+	scrVarPub.animId = 0;
+
+	scrVarPub.freeEntList = 0;
+
+	scrVmPub.stack->type = VAR_CODEPOS;
+	scrVmGlob.loading = false;
+}
+
+/*
+==============
+VM_UnarchiveStack
+==============
+*/
+void VM_UnarchiveStack( unsigned int startLocalId, function_stack_t *fs, VariableStackBuffer *stackValue )
+{
+	int function_count, size;
 	unsigned int localId;
-	VariableValue *startTop;
-	int size;
-	const char *buf;
-	const char *pos;
+	VariableValue *top;
+	char *buf;
+
+	assert(!scrVmPub.function_count);
+	assert(stackValue->pos);
+	assert(fs->startTop == &scrVmPub.stack[0]);
 
 	scrVmPub.function_frame->fs.pos = stackValue->pos;
-	++scrVmPub.function_count;
-	++scrVmPub.function_frame;
+
+	scrVmPub.function_count++;
+	scrVmPub.function_frame++;
+
 	size = stackValue->size;
 	buf = stackValue->buf;
-	startTop = stack->startTop;
+
+	top = fs->startTop;
 
 	while ( size )
 	{
-		++startTop;
-		--size;
-		startTop->type = *(unsigned char *)buf;
-		pos = buf + 1;
+		top++;
+		size--;
 
-		if ( startTop->type == VAR_CODEPOS )
+		top->type = *(unsigned char *)buf;
+		buf += sizeof(unsigned char);
+
+		if ( top->type == VAR_CODEPOS )
 		{
-			scrVmPub.function_frame->fs.pos = *(const char **)pos;
-			++scrVmPub.function_count;
-			++scrVmPub.function_frame;
+			assert(scrVmPub.function_count < MAX_VM_STACK_DEPTH);
+			scrVmPub.function_frame->fs.pos = *(const char **)buf;
+
+			scrVmPub.function_count++;
+			scrVmPub.function_frame++;
 		}
 		else
 		{
-			startTop->u.intValue = *(int *)pos;
+			top->u.codePosValue = *(const char **)buf;
 		}
 
-		buf = pos + 4;
+		buf += sizeof(VariableUnion);
 	}
 
-	stack->pos = stackValue->pos;
-	stack->top = startTop;
+	fs->pos = stackValue->pos;
+	fs->top = top;
+
 	localId = stackValue->localId;
-	stack->localId = localId;
+	fs->localId = localId;
 	Scr_ClearWaitTime(startLocalId);
+
+	assert(scrVmPub.function_count < MAX_VM_STACK_DEPTH);
 	function_count = scrVmPub.function_count;
 
 	while ( 1 )
 	{
-		scrVmPub.function_frame_start[function_count--].fs.localId = localId;
+		scrVmPub.function_frame_start[function_count].fs.localId = localId;
+		function_count--;
 
 		if ( !function_count )
+		{
 			break;
+		}
 
 		localId = GetParentLocalId(localId);
 	}
@@ -1175,397 +2131,914 @@ void VM_UnarchiveStack(unsigned int startLocalId, function_stack_t *stack, Varia
 		scrVmPub.function_frame_start[function_count].fs.localVarCount = Scr_AddLocalVars(scrVmPub.function_frame_start[function_count].fs.localId);
 	}
 
-	stack->localVarCount = Scr_AddLocalVars(stack->localId);
+	fs->localVarCount = Scr_AddLocalVars(fs->localId);
 
-	if ( stackValue->time != LOBYTE(scrVarPub.time) )
+	if ( stackValue->time != (unsigned char)scrVarPub.time )
+	{
 		Scr_ResetTimeout();
+	}
+
+	MT_Free(stackValue, stackValue->bufLen);
+	assert(scrVmPub.stack[0].type == VAR_CODEPOS);
+}
+
+/*
+==============
+VM_ArchiveStack
+==============
+*/
+VariableStackBuffer* VM_ArchiveStack( int size, const char *pos, VariableValue *top, unsigned int localVarCount, unsigned int *localId )
+{
+	unsigned int id;
+	int bufLen;
+	char *buf;
+	VariableStackBuffer *stackValue;
+
+	assert(size == (unsigned short)size);
+	bufLen = STACKBUF_BUFFER_SIZE * size + sizeof(*stackValue) - 1;
+	assert(bufLen == (unsigned short)bufLen);
+
+	stackValue = (VariableStackBuffer *)MT_Alloc(bufLen);
+	id = *localId;
+
+	stackValue->localId = *localId;
+	stackValue->size = size;
+	stackValue->bufLen = bufLen;
+	stackValue->pos = pos;
+	stackValue->time = scrVarPub.time;
+
+	scrVmPub.localVars -= localVarCount;
+	buf = &stackValue->buf[STACKBUF_BUFFER_SIZE * size];
+
+	while ( size )
+	{
+		buf -= sizeof(VariableUnion);
+
+		if ( top->type == VAR_CODEPOS )
+		{
+			--scrVmPub.function_count;
+			--scrVmPub.function_frame;
+
+			*(const char **)buf = scrVmPub.function_frame->fs.pos;
+			scrVmPub.localVars -= scrVmPub.function_frame->fs.localVarCount;
+
+			id = GetParentLocalId(id);
+		}
+		else
+		{
+			*(const char **)buf = top->u.codePosValue;
+		}
+
+		buf -= sizeof(unsigned char);
+		assert(top->type >= 0 && top->type < (1 << 8));
+		*(unsigned char *)buf = top->type;
+
+		top--;
+		size--;
+	}
+
+	scrVmPub.function_count--;
+	scrVmPub.function_frame--;
+
+	AddRefToObject(id);
+	*localId = id;
+
+	return stackValue;
+}
+
+/*
+==============
+VM_Shutdown
+==============
+*/
+void VM_Shutdown()
+{
+	if ( !scrVarPub.gameId )
+	{
+		return;
+	}
+
+	FreeValue(scrVarPub.gameId);
+	scrVarPub.gameId = 0;
+}
+
+/*
+==============
+GetDummyFieldValue
+==============
+*/
+unsigned int GetDummyFieldValue( void )
+{
+	ClearVariableValue(scrVarPub.tempVariable);
+	return scrVarPub.tempVariable;
+}
+
+/*
+==============
+GetDummyObject
+==============
+*/
+unsigned int GetDummyObject( void )
+{
+	ClearVariableValue(scrVarPub.tempVariable);
+	return GetObjectA(scrVarPub.tempVariable);
+}
+
+/*
+==============
+VM_CancelNotifyInternal
+==============
+*/
+void VM_CancelNotifyInternal( unsigned int notifyListOwnerId, unsigned int startLocalId, unsigned int notifyListId, unsigned int notifyNameListId, unsigned int stringValue )
+{
+	assert(stringValue == Scr_GetThreadNotifyName( startLocalId ));
+	assert(notifyListId == FindObject( FindVariable( notifyListOwnerId, OBJECT_NOTIFY_LIST ) ));
+	assert(notifyNameListId == FindObject( FindVariable( notifyListId, stringValue ) ));
+
+	Scr_RemoveThreadNotifyName(startLocalId);
+	RemoveObjectVariable(notifyNameListId, startLocalId);
+
+	if ( GetArraySize(notifyNameListId) )
+	{
+		return;
+	}
+
+	RemoveVariable(notifyListId, stringValue);
+
+	if ( GetArraySize(notifyListId) )
+	{
+		return;
+	}
+
+	RemoveVariable(notifyListOwnerId, OBJECT_NOTIFY_LIST);
+}
+
+/*
+==============
+Scr_CancelWaittill
+==============
+*/
+void Scr_CancelWaittill( unsigned int startLocalId )
+{
+	unsigned int id, selfNameId, selfId;
+
+	selfId = Scr_GetSelf(startLocalId);
+	id = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
+
+	selfNameId = FindObject(id);
+	id = FindObjectVariable(selfNameId, startLocalId);
+
+	VM_CancelNotify(GetVariableValueAddress(id)->pointerValue, startLocalId);
+	RemoveObjectVariable(selfNameId, startLocalId);
+
+	if ( GetArraySize(selfNameId) )
+	{
+		return;
+	}
+
+	RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
+}
+
+/*
+==============
+VM_TrimStack
+==============
+*/
+void VM_TrimStack( unsigned int startLocalId, VariableStackBuffer *stackValue, bool fromEndon )
+{
+	VariableValue tempValue, value;
+	int size;
+	char *buf;
+	unsigned int parentLocalId, localId;
+
+	assert(startLocalId);
+
+	size = stackValue->size;
+	localId = stackValue->localId;
+	buf = &stackValue->buf[STACKBUF_BUFFER_SIZE * size];
+
+	while ( size )
+	{
+		buf -= sizeof(VariableUnion);
+		value.u.codePosValue = *(const char **)buf;
+
+		buf -= sizeof(unsigned char);
+		value.type = *(unsigned char *)buf;
+
+		size--;
+
+		if ( value.type != VAR_CODEPOS )
+		{
+			RemoveRefToValue(&value);
+			continue;
+		}
+
+		if ( !FindObjectVariable(scrVarPub.pauseArrayId, localId) )
+		{
+			parentLocalId = GetParentLocalId(localId);
+			Scr_KillThread(localId);
+
+			RemoveRefToObject(localId);
+			localId = parentLocalId;
+
+			continue;
+		}
+
+		assert(startLocalId != localId);
+		stackValue->localId = localId;
+		stackValue->size = size + 1;
+
+		Scr_StopThread(localId);
+
+		if ( !fromEndon )
+		{
+			Scr_SetThreadNotifyName(startLocalId, 0);
+			stackValue->pos = 0;
+
+			tempValue.type = VAR_STACK;
+			tempValue.u.stackValue = stackValue;
+
+			SetNewVariableValue(GetNewVariable(startLocalId, OBJECT_STACK), &tempValue);
+		}
+
+		return;
+	}
+
+	assert(startLocalId == localId);
+
+	if ( fromEndon )
+	{
+		RemoveVariable(startLocalId, OBJECT_STACK);
+	}
+
+	Scr_KillThread(startLocalId);
+	RemoveRefToObject(startLocalId);
 
 	MT_Free(stackValue, stackValue->bufLen);
 }
 
-void VM_Notify(unsigned int notifyListOwnerId, unsigned int stringValue, VariableValue *top)
+/*
+==============
+VM_TerminateStack
+==============
+*/
+void VM_TerminateStack( unsigned int endLocalId, unsigned int startLocalId, VariableStackBuffer *stackValue )
 {
-	unsigned int localId;
-	int type;
-	unsigned int variable;
-	unsigned int array;
-	unsigned int newObject;
-	VariableValue stackValue;
-	VariableValue value;
-	VariableValue value2;
-	bool bNoStack;
-	int notifyListEntry;
-	unsigned int selfNameId;
-	unsigned int selfId;
-	int bufLen;
-	size_t len;
-	int newSize;
+	VariableValue tempValue, value;
 	int size;
 	char *buf;
-	VariableStackBuffer *stackBuf;
-	VariableStackBuffer *newStackBuf;
-	VariableValueInternal_u *stackId;
-	VariableValue *vars;
-	unsigned int startLocalId;
-	unsigned int notifyListId;
-	unsigned int notifyNameListId;
+	unsigned int stackId, parentLocalId, localId;
 
-	notifyListId = FindVariable(notifyListOwnerId, 0x1FFFEu);
+	assert(startLocalId);
 
-	if ( notifyListId )
+	size = stackValue->size;
+	localId = stackValue->localId;
+	buf = &stackValue->buf[STACKBUF_BUFFER_SIZE * size];
+
+	while ( size )
 	{
-		notifyListId = FindObject(notifyListId);
-		notifyNameListId = FindVariable(notifyListId, stringValue);
+		buf -= sizeof(VariableUnion);
+		value.u.codePosValue = *(const char **)buf;
 
-		if ( notifyNameListId )
+		buf -= sizeof(unsigned char);
+		value.type = *(unsigned char *)buf;
+
+		size--;
+
+		if ( value.type != VAR_CODEPOS )
 		{
-			notifyNameListId = FindObject(notifyNameListId);
-			AddRefToObject(notifyNameListId);
-			scrVarPub.evaluate = 1;
-			notifyListEntry = notifyNameListId;
+			RemoveRefToValue(&value);
+			continue;
+		}
+
+		parentLocalId = GetParentLocalId(localId);
+
+		Scr_KillThread(localId);
+		RemoveRefToObject(localId);
+
+		if ( localId != endLocalId )
+		{
+			localId = parentLocalId;
+			continue;
+		}
+
+		assert(startLocalId != localId);
+		*buf = 0;
+		assert(stackValue->size >= size);
+
+		Scr_SetThreadWaitTime(startLocalId, scrVarPub.time);
+
+		assert(value.u.codePosValue);
+		stackValue->pos = value.u.codePosValue;
+		stackValue->localId = parentLocalId;
+		stackValue->size = size + 1;
+
+		tempValue.type = VAR_STACK;
+		tempValue.u.stackValue = stackValue;
+
+		stackId = GetNewObjectVariable(GetArray(GetVariable(scrVarPub.timeArrayId, scrVarPub.time)), startLocalId);
+
+		SetNewVariableValue(stackId, &tempValue);
+		return;
+	}
+
+	assert(localId == endLocalId);
+	assert(startLocalId == localId);
+
+	Scr_KillThread(localId);
+	RemoveRefToObject(localId);
+
+	MT_Free(stackValue, stackValue->bufLen);
+}
+
+/*
+==============
+VM_TerminateTime
+==============
+*/
+void VM_TerminateTime( unsigned int timeId )
+{
+	VariableStackBuffer *stackValue;
+	unsigned int stackId, startLocalId;
+
+	assert(timeId);
+	assert(!scrVmPub.function_count);
+
+	AddRefToObject(timeId);
+
+	while ( 1 )
+	{
+		stackId = FindNextSibling(timeId);
+
+		if ( !stackId )
+		{
+			break;
+		}
+
+		startLocalId = GetVariableKeyObject(stackId);
+
+		assert(startLocalId);
+		assert(GetObjectType( stackId ) == VAR_STACK);
+
+		stackValue = GetVariableValueAddress(stackId)->stackValue;
+
+		RemoveObjectVariable(timeId, startLocalId);
+		Scr_ClearWaitTime(startLocalId);
+
+		VM_TerminateStack(startLocalId, startLocalId, stackValue);
+	}
+
+	RemoveRefToObject(timeId);
+}
+
+/*
+==============
+Scr_TerminateWaittillThread
+==============
+*/
+void Scr_TerminateWaittillThread( unsigned int localId, unsigned int startLocalId )
+{
+	VariableStackBuffer *stackValue;
+	unsigned int stackId, notifyListId, notifyNameListId, notifyListOwnerId, stringValue, selfNameId, selfId;
+
+	stringValue = Scr_GetThreadNotifyName(startLocalId);
+
+	if ( stringValue )
+	{
+		selfId = Scr_GetSelf(startLocalId);
+		selfNameId = FindObject(FindObjectVariable(scrVarPub.pauseArrayId, selfId));
+
+		notifyListOwnerId = GetVariableValueAddress(FindObjectVariable(selfNameId, startLocalId))->pointerValue;
+		notifyListId = FindObject(FindVariable(notifyListOwnerId, OBJECT_NOTIFY_LIST));
+		notifyNameListId = FindObject(FindVariable(notifyListId, stringValue));
+
+		stackId = FindObjectVariable(notifyNameListId, startLocalId);
+
+		assert(stackId);
+		assert(GetObjectType( stackId ) == VAR_STACK);
+
+		stackValue = GetVariableValueAddress(stackId)->stackValue;
+
+		VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
+		RemoveObjectVariable(selfNameId, startLocalId);
+
+		if ( !GetArraySize(selfNameId) )
+		{
+			RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
+		}
+	}
+	else
+	{
+		stackId = FindVariable(startLocalId, OBJECT_STACK);
+
+		assert(stackId);
+		assert(GetObjectType( stackId ) == VAR_STACK);
+
+		stackValue = GetVariableValueAddress(stackId)->stackValue;
+
+		RemoveVariable(startLocalId, OBJECT_STACK);
+	}
+
+	VM_TerminateStack(localId, startLocalId, stackValue);
+}
+
+/*
+==============
+Scr_TerminateWaitThread
+==============
+*/
+void Scr_TerminateWaitThread( unsigned int localId, unsigned int startLocalId )
+{
+	VariableStackBuffer *stackValue;
+	unsigned int stackId, iTime, id;
+
+	iTime = Scr_GetThreadWaitTime(startLocalId);
+	Scr_ClearWaitTime(startLocalId);
+
+	id = FindObject(FindVariable(scrVarPub.timeArrayId, iTime));
+	stackId = FindObjectVariable(id, startLocalId);
+
+	assert(stackId);
+	assert(GetObjectType( stackId ) == VAR_STACK);
+
+	stackValue = GetVariableValueAddress(stackId)->stackValue;
+
+	RemoveObjectVariable(id, startLocalId);
+
+	if ( !GetArraySize(id) && iTime != scrVarPub.time )
+	{
+		RemoveVariable(scrVarPub.timeArrayId, iTime);
+	}
+
+	VM_TerminateStack(localId, startLocalId, stackValue);
+}
+
+/*
+==============
+Scr_TerminateThread
+==============
+*/
+void Scr_TerminateThread( unsigned int localId )
+{
+	unsigned int startLocalId = GetStartLocalId(localId);
+
+	switch ( GetObjectType(startLocalId) )
+	{
+	case VAR_THREAD:
+		Scr_TerminateRunningThread(localId);
+		break;
+
+	case VAR_NOTIFY_THREAD:
+		Scr_TerminateWaittillThread(localId, startLocalId);
+		break;
+
+	case VAR_TIME_THREAD:
+		Scr_TerminateWaitThread(localId, startLocalId);
+		break;
+
+	default:
+		assert(0); // unreachable
+		break;
+	}
+}
+
+/*
+==============
+IncInParam
+==============
+*/
+void IncInParam()
+{
+	assert(((scrVmPub.top >= scrVmGlob.eval_stack - 1) && (scrVmPub.top <= scrVmGlob.eval_stack)) || ((scrVmPub.top >= scrVmPub.stack) && (scrVmPub.top <= scrVmPub.maxstack)));
+
+	Scr_ClearOutParams();
+
+	if ( scrVmPub.top == scrVmPub.maxstack )
+	{
+		Com_Error(ERR_DROP, "Internal script stack overflow");
+	}
+
+	scrVmPub.top++;
+	scrVmPub.inparamcount++;
+
+	assert(((scrVmPub.top >= scrVmGlob.eval_stack) && (scrVmPub.top <= scrVmGlob.eval_stack + 1)) || ((scrVmPub.top >= scrVmPub.stack) && (scrVmPub.top <= scrVmPub.maxstack)));
+}
+
+/*
+==============
+VM_Notify
+==============
+*/
+void VM_Notify( unsigned int notifyListOwnerId, unsigned int stringValue, VariableValue *top )
+{
+	unsigned int notifyListId, notifyNameListId, notifyListEntry, startLocalId, selfId, selfNameId, stackId;
+	VariableUnion *tempValue;
+	VariableStackBuffer *stackValue, *newStackValue;
+	VariableValue *currentValue;
+	VariableValue tempValue2, tempValue3, tempValue5;
+	char *buf;
+	int size, newSize, len, bufLen, type;
+	bool bNoStack;
+
+	notifyListId = FindVariable(notifyListOwnerId, OBJECT_NOTIFY_LIST);
+
+	if ( !notifyListId )
+	{
+		return;
+	}
+
+	notifyListId = FindObject(notifyListId);
+	assert(notifyListId);
+
+	notifyNameListId = FindVariable(notifyListId, stringValue);
+
+	if ( !notifyNameListId )
+	{
+		return;
+	}
+
+	notifyNameListId = FindObject(notifyNameListId);
+	assert(notifyNameListId);
+
+	AddRefToObject(notifyNameListId);
+
+	assert(!scrVarPub.evaluate);
+	scrVarPub.evaluate = true;
+
+	notifyListEntry = notifyNameListId;
+
 next:
-			while ( 1 )
+	while ( 1 )
+	{
+		notifyListEntry = FindPrevSibling(notifyListEntry);
+
+		if ( !notifyListEntry )
+		{
+			break;
+		}
+
+		startLocalId = GetVariableKeyObject(notifyListEntry);
+		selfId = Scr_GetSelf(startLocalId);
+		selfNameId = FindObject(FindObjectVariable(scrVarPub.pauseArrayId, selfId));
+
+		if ( !GetObjectType(notifyListEntry) )
+		{
+			VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
+			Scr_KillEndonThread(startLocalId);
+
+			RemoveObjectVariable(selfNameId, startLocalId);
+
+			if ( !GetArraySize(selfNameId) )
 			{
-				notifyListEntry = FindLastSibling(notifyListEntry);
+				RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
+			}
 
-				if ( !notifyListEntry )
-					break;
+			Scr_TerminateThread(selfId);
 
-				startLocalId = GetVariableKeyObject(notifyListEntry);
-				selfId = Scr_GetSelf(startLocalId);
-				localId = FindObjectVariable(scrVarPub.pauseArrayId, selfId);
-				selfNameId = FindObject(localId);
+			notifyListEntry = notifyNameListId;
+			continue;
+		}
 
-				if ( GetValueType(notifyListEntry) )
+		assert(GetObjectType( notifyListEntry ) == VAR_STACK);
+
+		tempValue = GetVariableValueAddress(notifyListEntry);
+		stackValue = tempValue->stackValue;
+
+		if ( *((unsigned char *)stackValue->pos - 1) == OP_waittillmatch )
+		{
+			size = *stackValue->pos;
+			assert(size >= 0);
+			assert(size <= stackValue->size);
+
+			buf = &stackValue->buf[STACKBUF_BUFFER_SIZE * (stackValue->size - size)];
+
+			for ( currentValue = top; size; currentValue-- )
+			{
+				assert(currentValue->type != VAR_CODEPOS);
+
+				if ( currentValue->type == VAR_PRECODEPOS )
 				{
-					stackId = GetVariableValueAddress_Bad(notifyListEntry);
-					newStackBuf = stackId->u.stackValue;
-
-					if ( *((byte *)newStackBuf->pos - 1) == OP_waittillmatch )
-					{
-						size = *newStackBuf->pos;
-						buf = &newStackBuf->buf[5 * (newStackBuf->size - size)];
-
-						for ( vars = top; size; --vars )
-						{
-							if ( vars->type == VAR_PRECODEPOS )
-								goto next;
-
-							--size;
-							value.type = (unsigned char)*buf;
-
-							if ( value.type == VAR_PRECODEPOS )
-								break;
-
-							value.u.intValue = *(int *)++buf;
-							buf += 4;
-							AddRefToValue(&value);
-							type = vars->type;
-							value2.u = vars->u;
-							value2.type = type;
-							AddRefToValue(&value2);
-							Scr_EvalEquality(&value, &value2);
-
-							if ( scrVarPub.error_message )
-							{
-								scriptError(
-								    newStackBuf->pos,
-								    *newStackBuf->pos - size + 3,
-								    scrVarPub.error_message,
-								    scrVmGlob.dialog_error_message);
-								Scr_ClearErrorMessage();
-								goto next;
-							}
-
-							if ( !value.u.intValue )
-								goto next;
-						}
-
-						++newStackBuf->pos;
-						bNoStack = 1;
-					}
-					else
-					{
-						bNoStack = top->type == VAR_PRECODEPOS;
-					}
-
-					stackValue.type = VAR_STACK;
-					stackValue.u.stackValue = newStackBuf;
-					variable = GetVariable(scrVarPub.timeArrayId, scrVarPub.time);
-					array = GetArray(variable);
-					newObject = GetNewObjectVariable(array, startLocalId);
-					SetNewVariableValue(newObject, &stackValue);
-					stackId = GetVariableValueAddress_Bad(newObject);
-					VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
-					RemoveObjectVariable(selfNameId, startLocalId);
-
-					if ( !GetArraySize(selfNameId) )
-						RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
-
-					Scr_SetThreadWaitTime(startLocalId, scrVarPub.time);
-
-					if ( bNoStack )
-					{
-						notifyListEntry = notifyNameListId;
-					}
-					else
-					{
-						size = newStackBuf->size;
-						newSize = size;
-						vars = top;
-
-						do
-						{
-							++newSize;
-							--vars;
-						}
-						while ( vars->type != VAR_PRECODEPOS );
-
-						len = 5 * size;
-						bufLen = 5 * newSize + sizeof(VariableStackBuffer);
-
-						if ( !MT_Realloc(newStackBuf->bufLen, bufLen) )
-						{
-							stackBuf = (VariableStackBuffer *)MT_Alloc(bufLen);
-							stackBuf->bufLen = bufLen;
-							stackBuf->pos = newStackBuf->pos;
-							stackBuf->localId = newStackBuf->localId;
-							memcpy(stackBuf->buf, newStackBuf->buf, len);
-							MT_Free(newStackBuf, newStackBuf->bufLen);
-							newStackBuf = stackBuf;
-							stackId->u.stackValue = stackBuf;
-						}
-
-						newStackBuf->size = newSize;
-						buf = &newStackBuf->buf[len];
-						newSize -= size;
-
-						do
-						{
-							AddRefToValue(++vars);
-							*buf++ = vars->type;
-							*(int *)buf = vars->u.intValue;
-							buf += 4;
-							--newSize;
-						}
-
-						while ( newSize );
-						notifyListEntry = notifyNameListId;
-					}
+					goto next;
 				}
-				else
+
+				size--;
+
+				tempValue3.type = *(unsigned char *)buf;
+				assert(tempValue3.type != VAR_CODEPOS);
+
+				if ( tempValue3.type == VAR_PRECODEPOS )
 				{
-					VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
-					Scr_KillEndonThread(startLocalId);
-					RemoveObjectVariable(selfNameId, startLocalId);
+					break;
+				}
 
-					if ( !GetArraySize(selfNameId) )
-						RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
+				buf += sizeof(unsigned char);
 
-					Scr_TerminateThread(selfId);
-					notifyListEntry = notifyNameListId;
+				tempValue3.u.codePosValue = *(const char **)buf;
+				buf += sizeof(VariableUnion);
+
+				AddRefToValue(&tempValue3);
+
+				type = currentValue->type;
+				tempValue2.u = currentValue->u;
+				tempValue2.type = type;
+
+				AddRefToValue(&tempValue2);
+
+				Scr_EvalEquality(&tempValue3, &tempValue2);
+
+				if ( scrVarPub.error_message )
+				{
+					RuntimeError( stackValue->pos, *stackValue->pos - size + int( sizeof(VariableUnion) - sizeof(unsigned char) ), scrVarPub.error_message, scrVmGlob.dialog_error_message );
+					Scr_ClearErrorMessage();
+
+					goto next;
+				}
+
+				assert(tempValue3.type == VAR_INTEGER);
+
+				if ( !tempValue3.u.intValue )
+				{
+					goto next;
 				}
 			}
 
-			RemoveRefToObject(notifyNameListId);
-			scrVarPub.evaluate = 0;
-		}
-	}
-}
-
-void Scr_NotifyNum(int entnum, unsigned int classnum, unsigned int stringValue, unsigned int paramcount)
-{
-	int type;
-	VariableValue *entryValue;
-	unsigned int id;
-	unsigned int params;
-
-	Scr_ClearOutParams();
-	entryValue = Scr_GetValue(paramcount);
-	params = scrVmPub.inparamcount - paramcount;
-	id = FindEntityId(entnum, classnum);
-
-	if ( id )
-	{
-		type = entryValue->type;
-		entryValue->type = VAR_PRECODEPOS;
-		scrVmPub.inparamcount = 0;
-		VM_Notify(id, stringValue, scrVmPub.top);
-		entryValue->type = type;
-	}
-
-	while ( scrVmPub.top != entryValue )
-	{
-		RemoveRefToValue(scrVmPub.top);
-		--scrVmPub.top;
-	}
-
-	scrVmPub.inparamcount = params;
-}
-
-void Scr_ResetTimeout()
-{
-	scrVmGlob.starttime = Sys_MilliSeconds();
-}
-
-void runtimeError(conChannel_t channel, const char *codePos, unsigned int index, const char *errorMessage)
-{
-	int i;
-
-	Com_PrintMessage(channel, va("\n******* script runtime error *******\n%s: ", errorMessage));
-	Scr_PrintPrevCodePos(channel, codePos, index);
-
-	if ( scrVmPub.function_count )
-	{
-		for ( i = scrVmPub.function_count - 1; i > 0; --i )
-		{
-			Com_PrintMessage(channel, "called from:\n");
-			Scr_PrintPrevCodePos(
-			    channel,
-			    scrVmPub.function_frame_start[i].fs.pos,
-			    scrVmPub.function_frame_start[i].fs.localId == 0);
-		}
-
-		Com_PrintMessage(channel, "started from:\n");
-		Scr_PrintPrevCodePos(channel, scrVmPub.function_frame_start[0].fs.pos, 1u);
-	}
-
-	Com_PrintMessage(channel, "************************************\n");
-}
-
-void scriptError(const char *codePos, unsigned int index, const char *errorMsg, const char *format)
-{
-	const char *line;
-	const char *fmt;
-	bool drop;
-
-	if ( scrVarPub.developer || scrVmPub.terminal_error )
-	{
-		if ( scrVmPub.debugCode )
-		{
-			Com_Printf("%s\n", errorMsg);
-
-			if ( scrVmPub.terminal_error )
-				goto drop;
+			stackValue->pos++;
+			bNoStack = true;
 		}
 		else
 		{
-			drop = 0;
+			bNoStack = top->type == VAR_PRECODEPOS;
+		}
 
-			if ( scrVmPub.abort_on_error || scrVmPub.terminal_error )
-				drop = 1;
+		tempValue5.type = VAR_STACK;
+		tempValue5.u.stackValue = stackValue;
 
-			if ( drop )
-				runtimeError(CON_CHANNEL_DONT_FILTER, codePos, index, errorMsg);
-			else
-				runtimeError(CON_CHANNEL_LOGFILEONLY, codePos, index, errorMsg);
-#ifdef LIBCOD
-			if (com_developer->current.integer == 2)
-				drop = 0;
-#endif
-			if ( drop )
+		stackId = GetNewObjectVariable(GetArray(GetVariable(scrVarPub.timeArrayId, scrVarPub.time)), startLocalId);
+		SetNewVariableValue(stackId, &tempValue5);
+
+		tempValue = GetVariableValueAddress(stackId);
+
+		VM_CancelNotifyInternal(notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
+		RemoveObjectVariable(selfNameId, startLocalId);
+
+		if ( !GetArraySize(selfNameId) )
+		{
+			RemoveObjectVariable(scrVarPub.pauseArrayId, selfId);
+		}
+
+		Scr_SetThreadWaitTime(startLocalId, scrVarPub.time);
+
+		if ( bNoStack )
+		{
+			notifyListEntry = notifyNameListId;
+		}
+		else
+		{
+			assert(top->type != VAR_PRECODEPOS);
+			assert(top->type != VAR_CODEPOS);
+
+			size = stackValue->size;
+			newSize = size;
+			currentValue = top;
+
+			do
 			{
-drop:
-				fmt = format;
-
-				if ( !format )
-					fmt = "";
-
-				if ( format )
-					line = "\n";
-				else
-					line = "";
-
-				if ( scrVmPub.terminal_error )
-					Com_Error(ERR_SCRIPT_DROP, "script runtime error\n(see console for details)\n", errorMsg, line, fmt);
-
-				Com_Error(ERR_SCRIPT, "script runtime error\n(see console for details)\n", errorMsg, line, fmt);
+				newSize++;
+				currentValue--;
+				assert(currentValue->type != VAR_CODEPOS);
 			}
+			while ( currentValue->type != VAR_PRECODEPOS );
+			assert(newSize >= 0 && newSize < (1 << 16));
+
+			len = STACKBUF_BUFFER_SIZE * size;
+			bufLen = STACKBUF_BUFFER_SIZE * newSize + sizeof(*stackValue) - 1;
+
+			if ( !MT_Realloc(stackValue->bufLen, bufLen) )
+			{
+				newStackValue = (VariableStackBuffer *)MT_Alloc(bufLen);
+
+				newStackValue->bufLen = bufLen;
+				newStackValue->pos = stackValue->pos;
+				newStackValue->localId = stackValue->localId;
+
+				memcpy(newStackValue->buf, stackValue->buf, len);
+				MT_Free(stackValue, stackValue->bufLen);
+
+				stackValue = newStackValue;
+				tempValue->stackValue = newStackValue;
+			}
+
+			stackValue->size = newSize;
+			buf = &stackValue->buf[len];
+
+			newSize -= size;
+			assert(newSize);
+
+			do
+			{
+				currentValue++;
+				AddRefToValue(currentValue);
+
+				*buf = currentValue->type;
+				buf += sizeof(unsigned char);
+
+				*(const char **)buf = currentValue->u.codePosValue;
+				buf += sizeof(VariableUnion);
+
+				newSize--;
+			}
+			while ( newSize );
+
+			assert(buf - (const char *)stackValue == bufLen);
+			notifyListEntry = notifyNameListId;
 		}
 	}
+
+	RemoveRefToObject(notifyNameListId);
+
+	assert(scrVarPub.evaluate);
+	scrVarPub.evaluate = false;
 }
 
-const char* Scr_ReadCodePos(const char **pos)
+/*
+==============
+VM_SetTime
+==============
+*/
+void VM_SetTime()
 {
-	const char* value = *(reinterpret_cast<const char**>(const_cast<char *>(*pos)));
-	*pos += sizeof(const char *);
-	return value;
-}
-
-uintptr_t Scr_ReadUnsigned(const char **pos)
-{
-	uintptr_t value = *(reinterpret_cast<const uintptr_t*>(*pos));
-	*pos += sizeof(uintptr_t);
-	return value;
-}
-
-unsigned short Scr_ReadUnsignedShort(const char **pos)
-{
-	unsigned short value = *(reinterpret_cast<const unsigned short*>(*pos));
-	*pos += sizeof(unsigned short);
-	return value;
-}
-
-const unsigned int* Scr_ReadIntArray(const char **pos, int count)
-{
-	const unsigned int *value;
-
-	value = reinterpret_cast<const unsigned int *>(*pos);
-	*pos += sizeof(unsigned int) * count;
-	return value;
-}
-
-float Scr_ReadFloat(const char **pos)
-{
-	float value = *(reinterpret_cast<const float*>(*pos));
-	*pos += sizeof(float);
-	return value;
-}
-
-const float* Scr_ReadVector(const char **pos)
-{
-	const float *value = reinterpret_cast<const float*>(*pos);
-	*pos += sizeof(vec3_t);
-	return value;
-}
-
-unsigned int Scr_GetLocalVar(const char *pos)
-{
-	return scrVmPub.localVars[-*(pos)];
-}
-
-unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned int localVarCount, VariableValue *top, VariableValue *startTop)
-{
-	int gOpcode;
-	int gParamCount;
-	unsigned int parentLocalId;
-	unsigned int builtinIndex;
-	VariableValue stackValue;
-	int jumpOffset;
-	unsigned int waitTime;
-	unsigned int stringValue;
 	unsigned int id;
-	unsigned int threadId;
-	const char *tempCodePos;
-	VariableValue tempValue;
-	unsigned int outparamcount;
-	unsigned int selfId;
-	unsigned int objectId;
-	unsigned int fieldValueId;
-	int gCaseCount;
-	unsigned int caseValue;
-	unsigned int currentCaseValue;
-	unsigned int classnum;
-	int entnum;
-	const char *currentCodePos;
-	unsigned char removeCount;
-	scr_entref_t entref;
-	unsigned int stackId;
 
-	gParamCount = 0;
+	assert(!(scrVarPub.time & ~VAR_NAME_LOW_MASK));
 
-	if ( setjmp(g_script_error[++g_script_error_level]) )
+	if ( !scrVarPub.timeArrayId )
 	{
+		return;
+	}
+
+	id = FindVariable(scrVarPub.timeArrayId, scrVarPub.time);
+
+	if ( !id )
+	{
+		return;
+	}
+
+	VM_Resume(FindObject(id));
+	SafeRemoveVariable(scrVarPub.timeArrayId, scrVarPub.time);
+}
+
+/*
+==============
+VM_Resume
+==============
+*/
+void VM_Resume( unsigned int timeId )
+{
+	VariableStackBuffer *stackValue;
+	unsigned int startLocalId, stackId;
+	function_stack_t fs;
+
+	assert(scrVmPub.top == scrVmPub.stack);
+	Scr_ResetTimeout();
+
+	assert(timeId);
+	AddRefToObject(timeId);
+
+	for ( fs.startTop = scrVmPub.stack; ; RemoveRefToValue(fs.startTop + 1) )
+	{
+		assert(!scrVarPub.error_index);
+		assert(!scrVmPub.outparamcount);
+		assert(!scrVmPub.inparamcount);
+		assert(!scrVmPub.function_count);
+		assert(scrVmPub.localVars == scrVmGlob.localVarsStack - 1);
+		assert(fs.startTop == &scrVmPub.stack[0]);
+
+		stackId = FindNextSibling(timeId);
+
+		if ( !stackId )
+		{
+			break;
+		}
+
+		startLocalId = GetVariableKeyObject(stackId);
+
+		assert(startLocalId);
+		assert(GetObjectType( stackId ) == VAR_STACK);
+
+		stackValue = GetVariableValueAddress(stackId)->stackValue;
+		RemoveObjectVariable(timeId, startLocalId);
+
+		VM_UnarchiveStack( startLocalId, &fs, stackValue );
+		RemoveRefToObject( VM_Execute( fs.pos, fs.localId, fs.localVarCount, fs.top, fs.startTop ) );
+	}
+
+	RemoveRefToObject(timeId);
+	ClearVariableValue(scrVarPub.tempVariable);
+
+	scrVmPub.top = scrVmPub.stack;
+}
+
+/*
+==============
+VM_Execute
+==============
+*/
+unsigned int VM_Execute( unsigned int localId, const char *pos, unsigned int paramcount )
+{
+	int type;
+	VariableValue *startTop;
+
+	assert(paramcount <= scrVmPub.inparamcount);
+	Scr_ClearOutParams();
+
+	startTop = &scrVmPub.top[-paramcount];
+	paramcount = scrVmPub.inparamcount - paramcount;
+
+	// overflow
+	if ( scrVmPub.function_count >= MAX_EMBEDDED_FUNCTION_CALLS )
+	{
+		Scr_KillThread(localId);
+		scrVmPub.inparamcount = paramcount + 1;
+
+		while ( paramcount )
+		{
+			RemoveRefToValue(scrVmPub.top);
+
+			scrVmPub.top--;
+			paramcount--;
+		}
+
+		scrVmPub.top++;
+		scrVmPub.top->type = VAR_UNDEFINED;
+
+		RuntimeError(pos, 0, "script stack overflow (too many embedded function calls)", NULL);
+
+		return localId;
+	}
+
+	if ( scrVmPub.function_count )
+	{
+		scrVmPub.function_count++;
+		scrVmPub.function_frame++;
+
+		scrVmPub.function_frame->fs.localId = 0;
+	}
+
+	scrVmPub.function_frame->fs.pos = pos;
+
+	scrVmPub.function_count++;
+	scrVmPub.function_frame++;
+
+	scrVmPub.function_frame->fs.localId = localId;
+
+	type = startTop->type;
+	startTop->type = VAR_PRECODEPOS;
+
+	scrVmPub.inparamcount = 0;
+
+	localId = VM_Execute( pos, localId, 0, scrVmPub.top, startTop );
+
+	startTop->type = type;
+	scrVmPub.top = startTop + 1;
+
+	scrVmPub.inparamcount = paramcount + 1;
+
+	assert(!scrVmPub.outparamcount);
+	ClearVariableValue(scrVarPub.tempVariable);
+
+	if ( scrVmPub.function_count )
+	{
+		scrVmPub.function_count--;
+		scrVmPub.function_frame--;
+	}
+
+	return localId;
+}
+
+/*
+==============
+VM_Execute
+==============
+*/
+unsigned int VM_Execute( const char *pos, unsigned int localId, unsigned int localVarCount, VariableValue *top, VariableValue *startTop )
+{
+	int jumpOffset, entnum, gCaseCount, waitTime;
+	unsigned int parentLocalId, builtinIndex, stringValue, id, threadId, classnum, removeCount;
+	unsigned int outparamcount, selfId, objectId, fieldValueId, caseValue, currentCaseValue, stackId;
+	VariableValue stackValue, tempValue;
+	VariableValue *value;
+	scr_entref_t entref;
+	const char *currentCodePos, *tempCodePos;
+
+	int gOpcode = 0;
+	int gParamCount = 0;
+
+	g_script_error_level++;
+	assert(g_script_error_level >= 0 && g_script_error_level < MAX_VM_STACK_DEPTH + 1);
+
+	if ( setjmp( g_script_error[ g_script_error_level ] ) )
+	{
+error:
 		switch ( gOpcode )
 		{
 		case OP_EvalLocalArrayRefCached0:
@@ -1573,6 +3046,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_EvalArrayRef:
 		case OP_ClearArray:
 		case OP_EvalLocalVariableRef:
+			assert(scrVarPub.error_index >= -1);
 			if ( scrVarPub.error_index < 0 )
 				scrVarPub.error_index = 1;
 			break;
@@ -1594,6 +3068,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_CallBuiltin4:
 		case OP_CallBuiltin5:
 		case OP_CallBuiltin:
+			assert(scrVarPub.error_index >= 0);
 			if ( scrVarPub.error_index > 0 )
 				scrVarPub.error_index = scrVmPub.outparamcount - scrVarPub.error_index + 1;
 			break;
@@ -1605,29 +3080,26 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_CallBuiltinMethod4:
 		case OP_CallBuiltinMethod5:
 		case OP_CallBuiltinMethod:
-			if ( scrVarPub.error_index <= 0 )
-			{
-				if ( scrVarPub.error_index < 0 )
-					scrVarPub.error_index = 1;
-			}
-			else
-			{
+			assert(scrVarPub.error_index >= -1);
+			if ( scrVarPub.error_index > 0 )
 				scrVarPub.error_index = scrVmPub.outparamcount - scrVarPub.error_index + 2;
-			}
+			else if ( scrVarPub.error_index < 0 )
+				scrVarPub.error_index = 1;
 			break;
 
 		default:
 			break;
 		}
 
-		scriptError(pos, scrVarPub.error_index, scrVarPub.error_message, scrVmGlob.dialog_error_message);
+		RuntimeError(pos, scrVarPub.error_index, scrVarPub.error_message, scrVmGlob.dialog_error_message);
 		Scr_ClearErrorMessage();
 
 		switch ( gOpcode )
 		{
 		case OP_EvalLocalArrayCached:
 		case OP_EvalArray:
-			RemoveRefToValue(top--);
+			RemoveRefToValue(top);
+			top--;
 			RemoveRefToValue(top);
 			top->type = VAR_UNDEFINED;
 			break;
@@ -1636,19 +3108,19 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_EvalLocalArrayRefCached:
 		case OP_EvalArrayRef:
 		case OP_EvalLocalVariableRef:
-			fieldValueId = FreeTempVariable();
+			fieldValueId = GetDummyFieldValue();
 			RemoveRefToValue(top);
-			--top;
+			top--;
 			break;
 
 		case OP_ClearArray:
 		case OP_wait:
 			RemoveRefToValue(top);
-			--top;
+			top--;
 			break;
 
 		case OP_GetSelfObject:
-			objectId = FreeTempVariableObject();
+			objectId = GetDummyObject();
 			break;
 
 		case OP_EvalSelfFieldVariable:
@@ -1658,35 +3130,46 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_EvalSelfFieldVariableRef:
 		case OP_EvalFieldVariableRef:
-			fieldValueId = FreeTempVariable();
+			fieldValueId = GetDummyFieldValue();
 			break;
 
 		case OP_ClearFieldVariable:
 			if ( scrVmPub.outparamcount )
+			{
+				assert(scrVmPub.outparamcount == 1);
+				assert(scrVmPub.top->type == VAR_UNDEFINED);
 				scrVmPub.outparamcount = 0;
+			}
 			break;
 
 		case OP_checkclearparams:
+			assert(top->type != VAR_CODEPOS);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_CODEPOS);
+			}
 			top->type = VAR_CODEPOS;
 			break;
 
 		case OP_SetVariableField:
 			if ( scrVmPub.outparamcount )
 			{
+				assert(scrVmPub.outparamcount == 1);
+				assert(scrVmPub.top == top);
 				RemoveRefToValue(top);
 				scrVmPub.outparamcount = 0;
-				--top;
+				top--;
 				break;
 			}
-			--top;
+			top--;
 			break;
 
 		case OP_SetSelfFieldVariableField:
 			RemoveRefToValue(top);
 			scrVmPub.outparamcount = 0;
-			--top;
+			top--;
 			break;
 
 		case OP_CallBuiltin0:
@@ -1705,7 +3188,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_CallBuiltinMethod:
 			Scr_ClearOutParams();
 			top = scrVmPub.top + 1;
-			scrVmPub.top[1].type = VAR_UNDEFINED;
+			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptFunctionCall2:
@@ -1713,42 +3196,56 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_ScriptMethodCall:
 			Scr_ReadCodePos(&pos);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+			}
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptFunctionCallPointer:
 		case OP_ScriptMethodCallPointer:
+			assert(top->type != VAR_CODEPOS);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_CODEPOS);
+			}
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptThreadCall:
 		case OP_ScriptMethodThreadCall:
 			Scr_ReadCodePos(&pos);
-			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; --outparamcount )
-				RemoveRefToValue(top--);
-			++top;
+			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; outparamcount-- )
+			{
+				RemoveRefToValue(top);
+				top--;
+			}
+			top++;
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_ScriptThreadCallPointer:
 		case OP_ScriptMethodThreadCallPointer:
-			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; --outparamcount )
-				RemoveRefToValue(top--);
-			++top;
+			for ( outparamcount = Scr_ReadUnsigned(&pos); outparamcount; outparamcount-- )
+			{
+				RemoveRefToValue(top);
+				top--;
+			}
+			top++;
 			top->type = VAR_UNDEFINED;
 			break;
 
 		case OP_CastFieldObject:
-			objectId = FreeTempVariableObject();
-			--top;
+			objectId = GetDummyObject();
+			top--;
 			break;
 
 		case OP_EvalLocalVariableObjectCached:
-			++pos;
-			objectId = FreeTempVariableObject();
+			pos++;
+			objectId = GetDummyObject();
 			break;
 
 		case OP_JumpOnFalse:
@@ -1756,7 +3253,7 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_JumpOnFalseExpr:
 		case OP_JumpOnTrueExpr:
 			Scr_ReadUnsignedShort(&pos);
-			--top;
+			top--;
 			break;
 
 		case OP_jumpback:
@@ -1780,28 +3277,35 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 		case OP_multiply:
 		case OP_divide:
 		case OP_mod:
-			--top;
+			top--;
 			break;
 
 		case OP_waittillmatch:
-			++pos;
-			RemoveRefToValue(top--);
+			pos++;
 			RemoveRefToValue(top);
-			--top;
+			top--;
+			RemoveRefToValue(top);
+			top--;
 			break;
 
 		case OP_waittill:
 		case OP_endon:
-			RemoveRefToValue(top--);
 			RemoveRefToValue(top);
-			--top;
+			top--;
+			RemoveRefToValue(top);
+			top--;
 			break;
 
 		case OP_notify:
+			assert(top->type != VAR_CODEPOS);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_CODEPOS);
+			}
 			RemoveRefToValue(top);
-			--top;
+			top--;
 			break;
 
 		case OP_switch:
@@ -1809,160 +3313,218 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			{
 				currentCaseValue = Scr_ReadUnsigned(&pos);
 				currentCodePos = Scr_ReadCodePos(&pos);
-				--gCaseCount;
+				gCaseCount--;
 			}
 			if ( !currentCaseValue )
+			{
 				pos = currentCodePos;
+				assert(pos);
+			}
 			RemoveRefToValue(top);
-			--top;
-			break;
-
-		default:
+			top--;
 			break;
 		}
 	}
 
+	assert(!scrVmPub.inparamcount);
+	assert(!scrVmPub.outparamcount);
+
 	while ( 1 )
 	{
-		gOpcode = *(unsigned char *)pos++;
+		assert(!scrVarPub.error_message);
+		assert(!scrVarPub.error_index);
+		assert(!scrVmPub.outparamcount);
+		assert(!scrVmPub.inparamcount);
+
+		gOpcode = Scr_ReadByte(&pos);
 
 		switch ( gOpcode )
 		{
 		case OP_End:
 			parentLocalId = GetSafeParentLocalId(localId);
 			Scr_KillThread(localId);
+
 			scrVmPub.localVars -= localVarCount;
+			assert(top->type != VAR_PRECODEPOS);
+
 			while ( top->type != VAR_CODEPOS )
-				RemoveRefToValue(top--);
-			--scrVmPub.function_count;
-			--scrVmPub.function_frame;
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_PRECODEPOS);
+			}
+
+			scrVmPub.function_count--;
+			scrVmPub.function_frame--;
+
 			if ( !parentLocalId )
 			{
-				startTop[1].type = VAR_UNDEFINED;
-				if ( gParamCount )
-				{
-					--gParamCount;
-					RemoveRefToObject(localId);
-					pos = scrVmPub.function_frame->fs.pos;
-					localId = scrVmPub.function_frame->fs.localId;
-					localVarCount = scrVmPub.function_frame->fs.localVarCount;
-					top = scrVmPub.function_frame->fs.top;
-					startTop = scrVmPub.function_frame->fs.startTop;
-					top->type = scrVmPub.function_frame->topType;
-					++top;
-					continue;
-				}
-				--g_script_error_level;
-				return localId;
+				assert(top == startTop);
+thread_end:
+				value = startTop + 1;
+				value->type = VAR_UNDEFINED;
+				goto thread_return;
 			}
+
+			assert(top->type == VAR_CODEPOS);
 			top->type = VAR_UNDEFINED;
-			RemoveRefToObject(localId);
-			pos = scrVmPub.function_frame->fs.pos;
-			localVarCount = scrVmPub.function_frame->fs.localVarCount;
-			localId = parentLocalId;
-			continue;
+			goto end;
 
 		case OP_Return:
 			parentLocalId = GetSafeParentLocalId(localId);
 			Scr_KillThread(localId);
+
 			scrVmPub.localVars -= localVarCount;
+			assert(top->type != VAR_PRECODEPOS);
+
 			tempValue.u = top->u;
 			tempValue.type = top->type;
-			for ( --top; top->type != VAR_CODEPOS; --top )
+
+			top--;
+			assert(top->type != VAR_PRECODEPOS);
+
+			while ( top->type != VAR_CODEPOS )
+			{
 				RemoveRefToValue(top);
-			--scrVmPub.function_count;
-			--scrVmPub.function_frame;
+				top--;
+				assert(top->type != VAR_PRECODEPOS);
+			}
+
+			scrVmPub.function_count--;
+			scrVmPub.function_frame--;
+
 			if ( !parentLocalId )
 			{
-				top[1].u = tempValue.u;
-				top[1].type = tempValue.type;
-				if ( gParamCount )
+				assert(top == startTop);
+				value = top + 1;
+
+				value->u = tempValue.u;
+				value->type = tempValue.type;
+thread_return:
+				if ( !gParamCount )
 				{
-					--gParamCount;
-					RemoveRefToObject(localId);
-					pos = scrVmPub.function_frame->fs.pos;
-					localId = scrVmPub.function_frame->fs.localId;
-					localVarCount = scrVmPub.function_frame->fs.localVarCount;
-					top = scrVmPub.function_frame->fs.top;
-					startTop = scrVmPub.function_frame->fs.startTop;
-					top->type = scrVmPub.function_frame->topType;
-					++top;
-					continue;
+					assert(g_script_error_level >= 0);
+					g_script_error_level--;
+					return localId;
 				}
-				--g_script_error_level;
-				return localId;
+
+				gParamCount--;
+				RemoveRefToObject(localId);
+
+				pos = scrVmPub.function_frame->fs.pos;
+				assert(pos);
+
+				localId = scrVmPub.function_frame->fs.localId;
+				localVarCount = scrVmPub.function_frame->fs.localVarCount;
+
+				top = scrVmPub.function_frame->fs.top;
+				startTop = scrVmPub.function_frame->fs.startTop;
+				top->type = scrVmPub.function_frame->topType;
+
+				top++;
+				continue;
 			}
+
+			assert(top->type == VAR_CODEPOS);
+
 			top->u = tempValue.u;
 			top->type = tempValue.type;
+end:
+			assert(top != startTop);
 			RemoveRefToObject(localId);
+
 			pos = scrVmPub.function_frame->fs.pos;
+			assert(pos);
+
 			localVarCount = scrVmPub.function_frame->fs.localVarCount;
 			localId = parentLocalId;
 			continue;
 
 		case OP_GetUndefined:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_UNDEFINED;
 			continue;
 
 		case OP_GetZero:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_INTEGER;
 			top->u.intValue = 0;
 			continue;
 
 		case OP_GetByte:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_INTEGER;
-			top->u.intValue = *(unsigned char *)pos++;
+			top->u.intValue = Scr_ReadByte(&pos);
 			continue;
 
 		case OP_GetNegByte:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_INTEGER;
-			top->u.intValue = -*(unsigned char *)pos++;
+			top->u.intValue = -Scr_ReadByte(&pos);
 			continue;
 
 		case OP_GetUnsignedShort:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_INTEGER;
 			top->u.intValue = Scr_ReadUnsignedShort(&pos);
 			continue;
 
 		case OP_GetNegUnsignedShort:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_INTEGER;
 			top->u.intValue = -Scr_ReadUnsignedShort(&pos);
 			continue;
 
 		case OP_GetInteger:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_INTEGER;
-			top->u.intValue = Scr_ReadUnsigned(&pos);
+			top->u.intValue = Scr_ReadInt(&pos);
 			continue;
 
 		case OP_GetFloat:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_FLOAT;
 			top->u.floatValue = Scr_ReadFloat(&pos);
 			continue;
 
 		case OP_GetString:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_STRING;
 			top->u.stringValue = Scr_ReadUnsignedShort(&pos);
 			SL_AddRefToString(top->u.stringValue);
 			continue;
 
 		case OP_GetIString:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_ISTRING;
 			top->u.stringValue = Scr_ReadUnsignedShort(&pos);
 			SL_AddRefToString(top->u.stringValue);
 			continue;
 
 		case OP_GetVector:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_VECTOR;
 			top->u.vectorValue = Scr_ReadVector(&pos);
 			continue;
@@ -1976,35 +3538,43 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			continue;
 
 		case OP_GetSelf:
-			++top;
-			top->type = VAR_OBJECT;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = Scr_GetSelf(localId);
 			AddRefToObject(top->u.pointerValue);
 			continue;
 
 		case OP_GetLevel:
-			++top;
-			top->type = VAR_OBJECT;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = scrVarPub.levelId;
 			AddRefToObject(scrVarPub.levelId);
 			continue;
 
 		case OP_GetGame:
-			++top;
-			Scr_EvalVariable(&tempValue, scrVarPub.gameId);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(scrVarPub.gameId);
 			continue;
 
 		case OP_GetAnim:
-			++top;
-			top->type = VAR_OBJECT;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = scrVarPub.animId;
 			AddRefToObject(scrVarPub.animId);
 			continue;
 
 		case OP_GetAnimation:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_ANIMATION;
 			top->u.pointerValue = Scr_ReadUnsigned(&pos);
 			continue;
@@ -2014,15 +3584,17 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			continue;
 
 		case OP_GetFunction:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_FUNCTION;
 			top->u.codePosValue = Scr_ReadCodePos(&pos);
 			continue;
 
 		case OP_CreateLocalVariable:
-			++scrVmPub.localVars;
-			++localVarCount;
-			scrVmPub.localVars[0] = GetNewVariable(localId, Scr_ReadUnsignedShort(&pos));
+			scrVmPub.localVars++;
+			localVarCount++;
+			*scrVmPub.localVars = GetNewVariable(localId, Scr_ReadUnsignedShort(&pos));
 			continue;
 
 		case OP_RemoveLocalVariables:
@@ -2032,1130 +3604,704 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			while ( removeCount )
 			{
 				RemoveNextVariable(localId);
-				--removeCount;
+				removeCount--;
 			}
 			continue;
 
 		case OP_EvalLocalVariableCached0:
-			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[0]);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVarAtIndex(0));
 			continue;
 
 		case OP_EvalLocalVariableCached1:
-			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-1]);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVarAtIndex(1));
 			continue;
 
 		case OP_EvalLocalVariableCached2:
-			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-2]);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVarAtIndex(2));
 			continue;
 
 		case OP_EvalLocalVariableCached3:
-			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-3]);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVarAtIndex(3));
 			continue;
 
 		case OP_EvalLocalVariableCached4:
-			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-4]);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVarAtIndex(4));
 			continue;
 
 		case OP_EvalLocalVariableCached5:
-			++top;
-			Scr_EvalVariable(&tempValue, scrVmPub.localVars[-5]);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVarAtIndex(5));
 			continue;
 
 		case OP_EvalLocalVariableCached:
-			++top;
-			Scr_EvalVariable(&tempValue, Scr_GetLocalVar(pos));
-			top->u = tempValue.u;
-			top->type = tempValue.type;
-			++pos;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVar(pos));
+			pos++;
 			continue;
 
 		case OP_EvalLocalArrayCached:
-			++top;
-			Scr_EvalVariable(&tempValue, Scr_GetLocalVar(pos));
-			top->u = tempValue.u;
-			top->type = tempValue.type;
-			++pos;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(Scr_GetLocalVar(pos));
+			pos++;
 			Scr_EvalArray(top, top - 1);
-			--top;
+			top--;
 			continue;
 
 		case OP_EvalArray:
 			Scr_EvalArray(top, top - 1);
-			--top;
+			top--;
 			continue;
 
 		case OP_EvalLocalArrayRefCached0:
-			fieldValueId = scrVmPub.localVars[0];
-			fieldValueId = Scr_EvalArrayIndex(Scr_EvalArrayRef(fieldValueId), top);
-			--top;
+			fieldValueId = Scr_EvalArrayIndex(Scr_EvalArrayRef(Scr_GetLocalVarAtIndex(0)), top);
+			assert(fieldValueId);
+			top--;
 			continue;
 
 		case OP_EvalLocalArrayRefCached:
-			fieldValueId = Scr_GetLocalVar(pos++);
-			fieldValueId = Scr_EvalArrayIndex(Scr_EvalArrayRef(fieldValueId), top);
-			--top;
+			fieldValueId = Scr_EvalArrayIndex(Scr_EvalArrayRef(Scr_GetLocalVar(pos++)), top);
+			assert(fieldValueId);
+			top--;
 			continue;
 
 		case OP_EvalArrayRef:
 			fieldValueId = Scr_EvalArrayIndex(Scr_EvalArrayRef(fieldValueId), top);
-			--top;
+			assert(fieldValueId);
+			top--;
 			continue;
 
 		case OP_ClearArray:
+			assert(fieldValueId);
 			ClearArray(fieldValueId, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_EmptyArray:
-			++top;
-			top->type = VAR_OBJECT;
+			top++;
+			top->type = VAR_POINTER;
 			top->u.pointerValue = Scr_AllocArray();
 			continue;
 
 		case OP_GetSelfObject:
 			objectId = Scr_GetSelf(localId);
-			if ( IsFieldObject(objectId) )
-				continue;
-			Scr_Error(va("%s is not an object", var_typename[GetValueType(objectId)]));
+			if ( !IsFieldObject(objectId) )
+			{
+				Scr_Error(va("%s is not an object", var_typename[GetObjectType(objectId)]));
+				goto error;
+			}
+			continue;
 
 		case OP_EvalLevelFieldVariable:
-			objectId = scrVarPub.levelId;
-			++top;
-			Scr_EvalVariable(&tempValue, FindVariable(objectId, Scr_ReadUnsignedShort(&pos)));
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(FindVariable(scrVarPub.levelId, Scr_ReadUnsignedShort(&pos)));
 			continue;
 
 		case OP_EvalAnimFieldVariable:
-			objectId = scrVarPub.animId;
-			++top;
-			Scr_EvalVariable(&tempValue, FindVariable(objectId, Scr_ReadUnsignedShort(&pos)));
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(FindVariable(scrVarPub.animId, Scr_ReadUnsignedShort(&pos)));
 			continue;
 
 		case OP_EvalSelfFieldVariable:
 			objectId = Scr_GetSelf(localId);
-			if ( IsFieldObject(objectId) )
+			if ( !IsFieldObject(objectId) )
 			{
-				++top;
-				Scr_FindVariableFieldInternal(&tempValue, objectId, Scr_ReadUnsignedShort(&pos));
-				top->u = tempValue.u;
-				top->type = tempValue.type;
-				continue;
+				top++;
+				Scr_ReadUnsignedShort(&pos);
+				Scr_Error(va("%s is not an object", var_typename[GetObjectType(objectId)]));
+				goto error;
 			}
-			++top;
-			Scr_ReadUnsignedShort(&pos);
-			Scr_Error(va("%s is not an object", var_typename[GetValueType(objectId)]));
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_FindVariableField(objectId, Scr_ReadUnsignedShort(&pos));
+			continue;
 
 		case OP_EvalFieldVariable:
-			++top;
-			Scr_FindVariableFieldInternal(&tempValue, objectId, Scr_ReadUnsignedShort(&pos));
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			assert(objectId);
+			*top = Scr_FindVariableField(objectId, Scr_ReadUnsignedShort(&pos));
 			continue;
 
 		case OP_EvalLevelFieldVariableRef:
-			objectId = scrVarPub.levelId;
-			fieldValueId = Scr_GetVariableField(objectId, Scr_ReadUnsignedShort(&pos));
+			fieldValueId = Scr_GetVariableField(scrVarPub.levelId, Scr_ReadUnsignedShort(&pos));
 			continue;
 
 		case OP_EvalAnimFieldVariableRef:
-			objectId = scrVarPub.animId;
-			fieldValueId = Scr_GetVariableField(objectId, Scr_ReadUnsignedShort(&pos));
+			fieldValueId = Scr_GetVariableField(scrVarPub.animId, Scr_ReadUnsignedShort(&pos));
 			continue;
 
 		case OP_EvalSelfFieldVariableRef:
-			objectId = Scr_GetSelf(localId);
-			fieldValueId = Scr_GetVariableField(objectId, Scr_ReadUnsignedShort(&pos));
+			fieldValueId = Scr_GetVariableField(Scr_GetSelf(localId), Scr_ReadUnsignedShort(&pos));
 			continue;
 
 		case OP_EvalFieldVariableRef:
+			assert(objectId);
 			fieldValueId = Scr_GetVariableField(objectId, Scr_ReadUnsignedShort(&pos));
 			continue;
 
 		case OP_ClearFieldVariable:
+			assert(objectId);
 			ClearVariableField(objectId, Scr_ReadUnsignedShort(&pos), top);
 			continue;
 
 		case OP_SafeCreateVariableFieldCached:
-			++scrVmPub.localVars;
-			++localVarCount;
-			scrVmPub.localVars[0] = GetNewVariable(localId, Scr_ReadUnsignedShort(&pos));
+			scrVmPub.localVars++;
+			localVarCount++;
+			*scrVmPub.localVars = GetNewVariable(localId, Scr_ReadUnsignedShort(&pos));
+			assert(top->type != VAR_CODEPOS);
 			if ( top->type != VAR_PRECODEPOS )
 			{
-				SetVariableValue(scrVmPub.localVars[0], top);
-				--top;
-				continue;
+				SetVariableValue(Scr_GetLocalVarAtIndex(0), top);
+				top--;
 			}
 			continue;
 
 		case OP_SafeSetVariableFieldCached0:
+			assert(top->type != VAR_CODEPOS);
 			if ( top->type != VAR_PRECODEPOS )
 			{
-				SetVariableValue(scrVmPub.localVars[0], top);
-				--top;
-				continue;
+				SetVariableValue(Scr_GetLocalVarAtIndex(0), top);
+				top--;
 			}
 			continue;
 
 		case OP_SafeSetVariableFieldCached:
+			assert(top->type != VAR_CODEPOS);
 			if ( top->type != VAR_PRECODEPOS )
 			{
 				SetVariableValue(Scr_GetLocalVar(pos), top);
-				++pos;
-				--top;
+				pos++;
+				top--;
 				continue;
 			}
-			++pos;
+			pos++;
 			continue;
 
 		case OP_SafeSetWaittillVariableFieldCached:
+			assert(top->type != VAR_PRECODEPOS);
 			if ( top->type != VAR_CODEPOS )
 			{
 				SetVariableValue(Scr_GetLocalVar(pos), top);
-				++pos;
-				--top;
+				pos++;
+				top--;
 				continue;
 			}
 			ClearVariableValue(Scr_GetLocalVar(pos));
-			++pos;
+			pos++;
 			continue;
 
 		case OP_clearparams:
+			assert(top->type != VAR_PRECODEPOS);
 			while ( top->type != VAR_CODEPOS )
-				RemoveRefToValue(top--);
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_PRECODEPOS);
+			}
 			continue;
 
 		case OP_checkclearparams:
-			if ( top->type == VAR_PRECODEPOS )
-			{
-				top->type = VAR_CODEPOS;
-			}
-			else
+			assert(top->type != VAR_CODEPOS);
+			if ( top->type != VAR_PRECODEPOS )
 			{
 				Scr_Error("function called with too many parameters");
+				goto error;
 			}
+			top->type = VAR_CODEPOS;
 			continue;
 
 		case OP_EvalLocalVariableRefCached0:
-			fieldValueId = scrVmPub.localVars[0];
+			fieldValueId = Scr_GetLocalVarAtIndex(0);
 			continue;
 
 		case OP_EvalLocalVariableRefCached:
-			fieldValueId = Scr_GetLocalVar(pos++);
+			fieldValueId = Scr_GetLocalVar(pos);
+			pos++;
 			continue;
 
 		case OP_SetLevelFieldVariableField:
 			SetVariableValue(GetVariable(scrVarPub.levelId, Scr_ReadUnsignedShort(&pos)), top);
-			--top;
+			top--;
 			continue;
 
 		case OP_SetVariableField:
+			assert(fieldValueId);
 			SetVariableFieldValue(fieldValueId, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_SetAnimFieldVariableField:
 			SetVariableValue(GetVariable(scrVarPub.animId, Scr_ReadUnsignedShort(&pos)), top);
-			--top;
+			top--;
 			continue;
 
 		case OP_SetSelfFieldVariableField:
-			objectId = Scr_GetSelf(localId);
-			fieldValueId = Scr_GetVariableField(objectId, Scr_ReadUnsignedShort(&pos));
+			fieldValueId = Scr_GetVariableField(Scr_GetSelf(localId), Scr_ReadUnsignedShort(&pos));
+			assert(fieldValueId);
 			SetVariableFieldValue(fieldValueId, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_SetLocalVariableFieldCached0:
-			SetVariableValue(scrVmPub.localVars[0], top);
-			--top;
+			SetVariableValue(Scr_GetLocalVarAtIndex(0), top);
+			top--;
 			continue;
 
 		case OP_SetLocalVariableFieldCached:
 			SetVariableValue(Scr_GetLocalVar(pos), top);
-			++pos;
-			--top;
+			pos++;
+			top--;
 			continue;
 
 		case OP_CallBuiltin0:
-			scrVmPub.top = top;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			scrVmPub.function_frame->fs.pos = pos;
-			((void (*)(void))scrCompilePub.func_table[builtinIndex])();
-			top = scrVmPub.top;
-			pos = scrVmPub.function_frame->fs.pos;
-			if ( scrVmPub.outparamcount )
-			{
-				outparamcount = scrVmPub.outparamcount;
-				scrVmPub.outparamcount = 0;
-				scrVmPub.top -= outparamcount;
-				do
-				{
-					RemoveRefToValue(top--);
-					--outparamcount;
-				}
-				while ( outparamcount );
-			}
-			if ( scrVmPub.inparamcount )
-			{
-				scrVmPub.inparamcount = 0;
-			}
-			else
-			{
-				++top;
-				top->type = VAR_UNDEFINED;
-			}
-			continue;
-
 		case OP_CallBuiltin1:
-			scrVmPub.outparamcount = 1;
-			scrVmPub.top = top;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			scrVmPub.function_frame->fs.pos = pos;
-			((void (*)(void))scrCompilePub.func_table[builtinIndex])();
-			top = scrVmPub.top;
-			pos = scrVmPub.function_frame->fs.pos;
-			if ( scrVmPub.outparamcount )
-			{
-				outparamcount = scrVmPub.outparamcount;
-				scrVmPub.outparamcount = 0;
-				scrVmPub.top -= outparamcount;
-				do
-				{
-					RemoveRefToValue(top--);
-					--outparamcount;
-				}
-				while ( outparamcount );
-			}
-			if ( scrVmPub.inparamcount )
-			{
-				scrVmPub.inparamcount = 0;
-			}
-			else
-			{
-				++top;
-				top->type = VAR_UNDEFINED;
-			}
-			continue;
-
 		case OP_CallBuiltin2:
-			scrVmPub.outparamcount = 2;
-			scrVmPub.top = top;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			scrVmPub.function_frame->fs.pos = pos;
-			((void (*)(void))scrCompilePub.func_table[builtinIndex])();
-			top = scrVmPub.top;
-			pos = scrVmPub.function_frame->fs.pos;
-			if ( scrVmPub.outparamcount )
-			{
-				outparamcount = scrVmPub.outparamcount;
-				scrVmPub.outparamcount = 0;
-				scrVmPub.top -= outparamcount;
-				do
-				{
-					RemoveRefToValue(top--);
-					--outparamcount;
-				}
-				while ( outparamcount );
-			}
-			if ( scrVmPub.inparamcount )
-			{
-				scrVmPub.inparamcount = 0;
-			}
-			else
-			{
-				++top;
-				top->type = VAR_UNDEFINED;
-			}
-			continue;
-
 		case OP_CallBuiltin3:
-			scrVmPub.outparamcount = 3;
-			scrVmPub.top = top;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			scrVmPub.function_frame->fs.pos = pos;
-			((void (*)(void))scrCompilePub.func_table[builtinIndex])();
-			top = scrVmPub.top;
-			pos = scrVmPub.function_frame->fs.pos;
-			if ( scrVmPub.outparamcount )
-			{
-				outparamcount = scrVmPub.outparamcount;
-				scrVmPub.outparamcount = 0;
-				scrVmPub.top -= outparamcount;
-				do
-				{
-					RemoveRefToValue(top--);
-					--outparamcount;
-				}
-				while ( outparamcount );
-			}
-			if ( scrVmPub.inparamcount )
-			{
-				scrVmPub.inparamcount = 0;
-			}
-			else
-			{
-				++top;
-				top->type = VAR_UNDEFINED;
-			}
-			continue;
-
 		case OP_CallBuiltin4:
-			scrVmPub.outparamcount = 4;
-			scrVmPub.top = top;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			scrVmPub.function_frame->fs.pos = pos;
-			((void (*)(void))scrCompilePub.func_table[builtinIndex])();
-			top = scrVmPub.top;
-			pos = scrVmPub.function_frame->fs.pos;
-			if ( scrVmPub.outparamcount )
-			{
-				outparamcount = scrVmPub.outparamcount;
-				scrVmPub.outparamcount = 0;
-				scrVmPub.top -= outparamcount;
-				do
-				{
-					RemoveRefToValue(top--);
-					--outparamcount;
-				}
-				while ( outparamcount );
-			}
-			if ( scrVmPub.inparamcount )
-			{
-				scrVmPub.inparamcount = 0;
-			}
-			else
-			{
-				++top;
-				top->type = VAR_UNDEFINED;
-			}
-			continue;
-
 		case OP_CallBuiltin5:
-			scrVmPub.outparamcount = 5;
-			scrVmPub.top = top;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			scrVmPub.function_frame->fs.pos = pos;
-			((void (*)(void))scrCompilePub.func_table[builtinIndex])();
-			top = scrVmPub.top;
-			pos = scrVmPub.function_frame->fs.pos;
-			if ( scrVmPub.outparamcount )
-			{
-				outparamcount = scrVmPub.outparamcount;
-				scrVmPub.outparamcount = 0;
-				scrVmPub.top -= outparamcount;
-				do
-				{
-					RemoveRefToValue(top--);
-					--outparamcount;
-				}
-				while ( outparamcount );
-			}
-			if ( scrVmPub.inparamcount )
-			{
-				scrVmPub.inparamcount = 0;
-			}
-			else
-			{
-				++top;
-				top->type = VAR_UNDEFINED;
-			}
-			continue;
+			assert(!scrVmPub.outparamcount);
+			scrVmPub.outparamcount = gOpcode - OP_CallBuiltin0;
+			goto CallBuiltin;
 
 		case OP_CallBuiltin:
-			scrVmPub.outparamcount = *(unsigned char *)pos++;
+			assert(!scrVmPub.outparamcount);
+			scrVmPub.outparamcount = Scr_ReadByte(&pos);
+CallBuiltin:
+			assert(!scrVmPub.inparamcount);
 			scrVmPub.top = top;
+
 			builtinIndex = Scr_ReadUnsignedShort(&pos);
 			scrVmPub.function_frame->fs.pos = pos;
+
 			((void (*)(void))scrCompilePub.func_table[builtinIndex])();
+			goto post_builtin;
+
+		case OP_CallBuiltinMethod0:
+		case OP_CallBuiltinMethod1:
+		case OP_CallBuiltinMethod2:
+		case OP_CallBuiltinMethod3:
+		case OP_CallBuiltinMethod4:
+		case OP_CallBuiltinMethod5:
+			assert(!scrVmPub.outparamcount);
+			scrVmPub.outparamcount = gOpcode - OP_CallBuiltinMethod0;
+			goto CallBuiltinMethod;
+
+		case OP_CallBuiltinMethod:
+			assert(!scrVmPub.outparamcount);
+			scrVmPub.outparamcount = Scr_ReadByte(&pos);
+CallBuiltinMethod:
+			scrVmPub.top = top - 1;
+			builtinIndex = Scr_ReadUnsignedShort(&pos);
+
+			if ( top->type != VAR_POINTER )
+			{
+				RemoveRefToValue(top);
+				scrVarPub.error_index = -1;
+				Scr_Error(va("%s is not an entity", var_typename[top->type]));
+				goto error;
+			}
+
+			objectId = top->u.pointerValue;
+
+			if ( GetObjectType(objectId) != VAR_ENTITY )
+			{
+				RemoveRefToObject(objectId);
+				scrVarPub.error_index = -1;
+				Scr_Error(va("%s is not an entity", var_typename[GetObjectType(objectId)]));
+				goto error;
+			}
+
+			entref = Scr_GetEntityIdRef(objectId);
+			RemoveRefToObject(objectId);
+			scrVmPub.function_frame->fs.pos = pos;
+
+			((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
+post_builtin:
 			top = scrVmPub.top;
 			pos = scrVmPub.function_frame->fs.pos;
+
 			if ( scrVmPub.outparamcount )
 			{
 				outparamcount = scrVmPub.outparamcount;
+
 				scrVmPub.outparamcount = 0;
 				scrVmPub.top -= outparamcount;
+
 				do
 				{
-					RemoveRefToValue(top--);
-					--outparamcount;
+					RemoveRefToValue(top);
+					top--;
+					outparamcount--;
 				}
 				while ( outparamcount );
 			}
+
 			if ( scrVmPub.inparamcount )
 			{
+				assert(scrVmPub.inparamcount == 1);
 				scrVmPub.inparamcount = 0;
+				assert(top == scrVmPub.top);
 			}
 			else
 			{
-				++top;
+				assert(top == scrVmPub.top);
+				top++;
 				top->type = VAR_UNDEFINED;
 			}
 			continue;
 
-		case OP_CallBuiltinMethod0:
-			scrVmPub.top = top - 1;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
+		case OP_wait:
+#define WAIT_FRAME_TIME 20 // ideally should use sv_fps value instead
+			assert(Scr_IsInScriptMemory( pos ));
+			switch ( top->type )
 			{
-				RemoveRefToValue(top);
-				scrVarPub.error_index = -1;
-				Scr_Error(va("%s is not an entity", var_typename[top->type]));
-			}
-			objectId = top->u.pointerValue;
-			if ( GetValueType(objectId) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(&entref, objectId);
-				RemoveRefToObject(objectId);
-				scrVmPub.function_frame->fs.pos = pos;
-				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
-				top = scrVmPub.top;
-				pos = scrVmPub.function_frame->fs.pos;
-				if ( scrVmPub.outparamcount )
+			case VAR_FLOAT:
+				if ( top->u.floatValue < 0 )
 				{
-					outparamcount = scrVmPub.outparamcount;
-					scrVmPub.outparamcount = 0;
-					scrVmPub.top -= outparamcount;
-					do
-					{
-						RemoveRefToValue(top--);
-						--outparamcount;
-					}
-					while ( outparamcount );
-				}
-				if ( scrVmPub.inparamcount )
-				{
-					scrVmPub.inparamcount = 0;
-				}
-				else
-				{
-					++top;
-					top->type = VAR_UNDEFINED;
-				}
-				continue;
-			}
-			RemoveRefToObject(objectId);
-			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
-
-		case OP_CallBuiltinMethod1:
-			scrVmPub.outparamcount = 1;
-			scrVmPub.top = top - 1;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
-			{
-				RemoveRefToValue(top);
-				scrVarPub.error_index = -1;
-				Scr_Error(va("%s is not an entity", var_typename[top->type]));
-			}
-			objectId = top->u.pointerValue;
-			if ( GetValueType(objectId) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(&entref, objectId);
-				RemoveRefToObject(objectId);
-				scrVmPub.function_frame->fs.pos = pos;
-				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
-				top = scrVmPub.top;
-				pos = scrVmPub.function_frame->fs.pos;
-				if ( scrVmPub.outparamcount )
-				{
-					outparamcount = scrVmPub.outparamcount;
-					scrVmPub.outparamcount = 0;
-					scrVmPub.top -= outparamcount;
-					do
-					{
-						RemoveRefToValue(top--);
-						--outparamcount;
-					}
-					while ( outparamcount );
-				}
-				if ( scrVmPub.inparamcount )
-				{
-					scrVmPub.inparamcount = 0;
-				}
-				else
-				{
-					++top;
-					top->type = VAR_UNDEFINED;
-				}
-				continue;
-			}
-			RemoveRefToObject(objectId);
-			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
-
-		case OP_CallBuiltinMethod2:
-			scrVmPub.outparamcount = 2;
-			scrVmPub.top = top - 1;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
-			{
-				RemoveRefToValue(top);
-				scrVarPub.error_index = -1;
-				Scr_Error(va("%s is not an entity", var_typename[top->type]));
-			}
-			objectId = top->u.pointerValue;
-			if ( GetValueType(objectId) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(&entref, objectId);
-				RemoveRefToObject(objectId);
-				scrVmPub.function_frame->fs.pos = pos;
-				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
-				top = scrVmPub.top;
-				pos = scrVmPub.function_frame->fs.pos;
-				if ( scrVmPub.outparamcount )
-				{
-					outparamcount = scrVmPub.outparamcount;
-					scrVmPub.outparamcount = 0;
-					scrVmPub.top -= outparamcount;
-					do
-					{
-						RemoveRefToValue(top--);
-						--outparamcount;
-					}
-					while ( outparamcount );
-				}
-				if ( scrVmPub.inparamcount )
-				{
-					scrVmPub.inparamcount = 0;
-				}
-				else
-				{
-					++top;
-					top->type = VAR_UNDEFINED;
-				}
-				continue;
-			}
-			RemoveRefToObject(objectId);
-			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
-
-		case OP_CallBuiltinMethod3:
-			scrVmPub.outparamcount = 3;
-			scrVmPub.top = top - 1;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
-			{
-				RemoveRefToValue(top);
-				scrVarPub.error_index = -1;
-				Scr_Error(va("%s is not an entity", var_typename[top->type]));
-			}
-			objectId = top->u.pointerValue;
-			if ( GetValueType(objectId) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(&entref, objectId);
-				RemoveRefToObject(objectId);
-				scrVmPub.function_frame->fs.pos = pos;
-				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
-				top = scrVmPub.top;
-				pos = scrVmPub.function_frame->fs.pos;
-				if ( scrVmPub.outparamcount )
-				{
-					outparamcount = scrVmPub.outparamcount;
-					scrVmPub.outparamcount = 0;
-					scrVmPub.top -= outparamcount;
-					do
-					{
-						RemoveRefToValue(top--);
-						--outparamcount;
-					}
-					while ( outparamcount );
-				}
-				if ( scrVmPub.inparamcount )
-				{
-					scrVmPub.inparamcount = 0;
-				}
-				else
-				{
-					++top;
-					top->type = VAR_UNDEFINED;
-				}
-				continue;
-			}
-			RemoveRefToObject(objectId);
-			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
-
-		case OP_CallBuiltinMethod4:
-			scrVmPub.outparamcount = 4;
-			scrVmPub.top = top - 1;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
-			{
-				RemoveRefToValue(top);
-				scrVarPub.error_index = -1;
-				Scr_Error(va("%s is not an entity", var_typename[top->type]));
-			}
-			objectId = top->u.pointerValue;
-			if ( GetValueType(objectId) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(&entref, objectId);
-				RemoveRefToObject(objectId);
-				scrVmPub.function_frame->fs.pos = pos;
-				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
-				top = scrVmPub.top;
-				pos = scrVmPub.function_frame->fs.pos;
-				if ( scrVmPub.outparamcount )
-				{
-					outparamcount = scrVmPub.outparamcount;
-					scrVmPub.outparamcount = 0;
-					scrVmPub.top -= outparamcount;
-					do
-					{
-						RemoveRefToValue(top--);
-						--outparamcount;
-					}
-					while ( outparamcount );
-				}
-				if ( scrVmPub.inparamcount )
-				{
-					scrVmPub.inparamcount = 0;
-				}
-				else
-				{
-					++top;
-					top->type = VAR_UNDEFINED;
-				}
-				continue;
-			}
-			RemoveRefToObject(objectId);
-			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
-
-		case OP_CallBuiltinMethod5:
-			scrVmPub.outparamcount = 5;
-			scrVmPub.top = top - 1;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
-			{
-				RemoveRefToValue(top);
-				scrVarPub.error_index = -1;
-				Scr_Error(va("%s is not an entity", var_typename[top->type]));
-			}
-			objectId = top->u.pointerValue;
-			if ( GetValueType(objectId) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(&entref, objectId);
-				RemoveRefToObject(objectId);
-				scrVmPub.function_frame->fs.pos = pos;
-				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
-				top = scrVmPub.top;
-				pos = scrVmPub.function_frame->fs.pos;
-				if ( scrVmPub.outparamcount )
-				{
-					outparamcount = scrVmPub.outparamcount;
-					scrVmPub.outparamcount = 0;
-					scrVmPub.top -= outparamcount;
-					do
-					{
-						RemoveRefToValue(top--);
-						--outparamcount;
-					}
-					while ( outparamcount );
-				}
-				if ( scrVmPub.inparamcount )
-				{
-					scrVmPub.inparamcount = 0;
-				}
-				else
-				{
-					++top;
-					top->type = VAR_UNDEFINED;
-				}
-				continue;
-			}
-			RemoveRefToObject(objectId);
-			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
-
-		case OP_CallBuiltinMethod:
-			scrVmPub.outparamcount = *(unsigned char *)pos++;
-			scrVmPub.top = top - 1;
-			builtinIndex = Scr_ReadUnsignedShort(&pos);
-			if ( top->type != VAR_OBJECT )
-			{
-				RemoveRefToValue(top);
-				scrVarPub.error_index = -1;
-				Scr_Error(va("%s is not an entity", var_typename[top->type]));
-			}
-			objectId = top->u.pointerValue;
-			if ( GetValueType(objectId) == VAR_ENTITY )
-			{
-				Scr_GetEntityIdRef(&entref, objectId);
-				RemoveRefToObject(objectId);
-				scrVmPub.function_frame->fs.pos = pos;
-				((void (*)(scr_entref_t))scrCompilePub.func_table[builtinIndex])(entref);
-				top = scrVmPub.top;
-				pos = scrVmPub.function_frame->fs.pos;
-				if ( scrVmPub.outparamcount )
-				{
-					outparamcount = scrVmPub.outparamcount;
-					scrVmPub.outparamcount = 0;
-					scrVmPub.top -= outparamcount;
-					do
-					{
-						RemoveRefToValue(top--);
-						--outparamcount;
-					}
-					while ( outparamcount );
-				}
-				if ( scrVmPub.inparamcount )
-				{
-					scrVmPub.inparamcount = 0;
-				}
-				else
-				{
-					++top;
-					top->type = VAR_UNDEFINED;
-				}
-				continue;
-			}
-			RemoveRefToObject(objectId);
-			scrVarPub.error_index = -1;
-			Scr_Error(va("%s is not an entity", var_typename[GetValueType(objectId)]));
-
-		case OP_wait: // VoroN: use sv_fps here??
-			if ( top->type == VAR_FLOAT )
-			{
-				if ( top->u.floatValue < 0.0 )
 					Scr_Error("negative wait is not allowed");
-				waitTime = Q_rint(top->u.floatValue * 20.0);
-				//waitTime = Q_rint(top->u.floatValue * float(sv_fps->current.integer));
+					goto error;
+				}
+
+				waitTime = Q_rint(top->u.floatValue * WAIT_FRAME_TIME);
+
 				if ( !waitTime )
-					waitTime = top->u.floatValue != 0.0;
-			}
-			else if ( top->type == VAR_INTEGER )
-			{
-				waitTime = 20 * top->u.intValue;
-				//waitTime = sv_fps->current.integer * top->u.intValue;
-			}
-			else
-			{
+				{
+					waitTime = top->u.floatValue != 0;
+				}
+				break;
+
+			case VAR_INTEGER:
+				if ( top->u.intValue < 0 )
+				{
+					Scr_Error("negative wait is not allowed");
+					goto error;
+				}
+
+				waitTime = top->u.intValue * WAIT_FRAME_TIME;
+				break;
+
+			default:
 				scrVarPub.error_index = 2;
 				Scr_Error(va("type %s is not a float", var_typename[top->type]));
+				goto error;
 			}
-			// Com_Printf("%i\n", waitTime);
-			if ( waitTime > 0xFFFFFE )
+
+			if ( waitTime > VAR_NAME_LOW_MASK )
 			{
 				scrVarPub.error_index = 2;
-				if ( (waitTime & 0x80000000) == 0 )
-					Scr_Error("wait is too long");
-				Scr_Error("negative wait is not allowed");
+				Scr_Error("wait is too long");
+				goto error;
 			}
+
+			assert(waitTime >= 0);
+
 			if ( waitTime )
+			{
 				Scr_ResetTimeout();
-			waitTime = (scrVarPub.time + waitTime) & 0xFFFFFF;
-			--top;
+			}
+
+			waitTime = (scrVarPub.time + waitTime) & VAR_NAME_LOW_MASK;
+			top--;
+
 			stackValue.type = VAR_STACK;
 			stackValue.u.stackValue = VM_ArchiveStack(top - startTop, pos, top, localVarCount, &localId);
-			id = GetArray(GetVariable(scrVarPub.timeArrayId, waitTime));
-			stackId = GetNewObjectVariable(id, localId);
+
+			stackId = GetNewObjectVariable(GetArray(GetVariable(scrVarPub.timeArrayId, waitTime)), localId);
 			SetNewVariableValue(stackId, &stackValue);
+
 			Scr_SetThreadWaitTime(localId, waitTime);
-			startTop[1].type = VAR_UNDEFINED;
-			if ( gParamCount )
-			{
-				--gParamCount;
-				RemoveRefToObject(localId);
-				pos = scrVmPub.function_frame->fs.pos;
-				localId = scrVmPub.function_frame->fs.localId;
-				localVarCount = scrVmPub.function_frame->fs.localVarCount;
-				top = scrVmPub.function_frame->fs.top;
-				startTop = scrVmPub.function_frame->fs.startTop;
-				top->type = scrVmPub.function_frame->topType;
-				++top;
-				continue;
-			}
-			--g_script_error_level;
-			return localId;
+			goto thread_end;
 
 		case OP_waittillFrameEnd:
+			assert(Scr_IsInScriptMemory( pos ));
+			assert(!(scrVarPub.time & ~VAR_NAME_LOW_MASK));
+
 			stackValue.type = VAR_STACK;
 			stackValue.u.stackValue = VM_ArchiveStack(top - startTop, pos, top, localVarCount, &localId);
-			id = GetArray(GetVariable(scrVarPub.timeArrayId, scrVarPub.time));
-			stackId = GetNewObjectVariableReverse(id, localId);
+
+			stackId = GetNewObjectVariableReverse(GetArray(GetVariable(scrVarPub.timeArrayId, scrVarPub.time)), localId);
 			SetNewVariableValue(stackId, &stackValue);
+
 			Scr_SetThreadWaitTime(localId, scrVarPub.time);
-			startTop[1].type = VAR_UNDEFINED;
-			if ( gParamCount )
-			{
-				--gParamCount;
-				RemoveRefToObject(localId);
-				pos = scrVmPub.function_frame->fs.pos;
-				localId = scrVmPub.function_frame->fs.localId;
-				localVarCount = scrVmPub.function_frame->fs.localVarCount;
-				top = scrVmPub.function_frame->fs.top;
-				startTop = scrVmPub.function_frame->fs.startTop;
-				top->type = scrVmPub.function_frame->topType;
-				++top;
-				continue;
-			}
-			--g_script_error_level;
-			return localId;
+			goto thread_end;
 
 		case OP_PreScriptCall:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_PRECODEPOS;
 			continue;
 
 		case OP_ScriptFunctionCall2:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_PRECODEPOS;
-			if ( scrVmPub.function_count <= 30 )
-			{
-				selfId = Scr_GetSelf(localId);
-				AddRefToObject(selfId);
-				localId = AllocChildThread(selfId, localId);
-				scrVmPub.function_frame->fs.pos = pos;
-				pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
-				scrVmPub.function_frame->fs.localVarCount = localVarCount;
-				localVarCount = 0;
-				++scrVmPub.function_count;
-				++scrVmPub.function_frame;
-				scrVmPub.function_frame->fs.localId = localId;
-				continue;
-			}
-			Scr_Error("script stack overflow (too many embedded function calls)");
+			goto scriptFunctionCall;
 
 		case OP_ScriptFunctionCall:
-			if ( scrVmPub.function_count <= 30 )
+scriptFunctionCall:
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
 			{
-				selfId = Scr_GetSelf(localId);
-				AddRefToObject(selfId);
-				localId = AllocChildThread(selfId, localId);
-				scrVmPub.function_frame->fs.pos = pos;
-				pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
-				scrVmPub.function_frame->fs.localVarCount = localVarCount;
-				localVarCount = 0;
-				++scrVmPub.function_count;
-				++scrVmPub.function_frame;
-				scrVmPub.function_frame->fs.localId = localId;
-				continue;
+				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
 			}
-			Scr_Error("script stack overflow (too many embedded function calls)");
+
+			selfId = Scr_GetSelf(localId);
+			AddRefToObject(selfId);
+
+			localId = AllocChildThread(selfId, localId);
+
+			scrVmPub.function_frame->fs.pos = pos;
+			pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
+function_call:
+			scrVmPub.function_frame->fs.localVarCount = localVarCount;
+			localVarCount = 0;
+
+			scrVmPub.function_count++;
+			scrVmPub.function_frame++;
+
+			scrVmPub.function_frame->fs.localId = localId;
+			assert(pos);
+			continue;
 
 		case OP_ScriptFunctionCallPointer:
 			if ( top->type != VAR_FUNCTION )
 			{
 				Scr_Error(va("%s is not a function pointer", var_typename[top->type]));
+				goto error;
 			}
-			if ( scrVmPub.function_count <= 30 )
+
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
 			{
-				selfId = Scr_GetSelf(localId);
-				AddRefToObject(selfId);
-				localId = AllocChildThread(selfId, localId);
-				scrVmPub.function_frame->fs.pos = pos;
-				pos = top->u.codePosValue;
-				--top;
-				scrVmPub.function_frame->fs.localVarCount = localVarCount;
-				localVarCount = 0;
-				++scrVmPub.function_count;
-				++scrVmPub.function_frame;
-				scrVmPub.function_frame->fs.localId = localId;
-				continue;
+				scrVarPub.error_index = 1;
+				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
 			}
-			scrVarPub.error_index = 1;
-			Scr_Error("script stack overflow (too many embedded function calls)");
+
+			selfId = Scr_GetSelf(localId);
+			AddRefToObject(selfId);
+
+			localId = AllocChildThread(selfId, localId);
+
+			scrVmPub.function_frame->fs.pos = pos;
+			pos = top->u.codePosValue;
+
+			top--;
+			goto function_call;
 
 		case OP_ScriptMethodCall:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 1;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
+				goto error;
 			}
-			if ( scrVmPub.function_count <= 30 )
+
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
 			{
-				localId = AllocChildThread(top->u.stringValue, localId);
-				--top;
-				scrVmPub.function_frame->fs.pos = pos;
-				pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
-				scrVmPub.function_frame->fs.localVarCount = localVarCount;
-				localVarCount = 0;
-				++scrVmPub.function_count;
-				++scrVmPub.function_frame;
-				scrVmPub.function_frame->fs.localId = localId;
-				continue;
+				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
 			}
-			Scr_Error("script stack overflow (too many embedded function calls)");
+
+			localId = AllocChildThread(top->u.pointerValue, localId);
+			top--;
+
+			scrVmPub.function_frame->fs.pos = pos;
+			pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
+			goto function_call;
 
 		case OP_ScriptMethodCallPointer:
-			if ( top->type == VAR_FUNCTION )
+			if ( top->type != VAR_FUNCTION )
 			{
-				tempCodePos = top->u.codePosValue;
-				--top;
-				if ( top->type != VAR_OBJECT )
-				{
-					scrVarPub.error_index = 2;
-					Scr_Error(va("%s is not an object", var_typename[top->type]));
-				}
-				if ( scrVmPub.function_count <= 30 )
-				{
-					localId = AllocChildThread(top->u.stringValue, localId);
-					--top;
-					scrVmPub.function_frame->fs.pos = pos;
-					pos = tempCodePos;
-					scrVmPub.function_frame->fs.localVarCount = localVarCount;
-					localVarCount = 0;
-					++scrVmPub.function_count;
-					++scrVmPub.function_frame;
-					scrVmPub.function_frame->fs.localId = localId;
-					continue;
-				}
-				scrVarPub.error_index = 1;
-				Scr_Error("script stack overflow (too many embedded function calls)");
+				RemoveRefToValue(top);
+				top--;
+				value = top + 1;
+				Scr_Error(va("%s is not a function pointer", var_typename[value->type]));
+				goto error;
 			}
-			RemoveRefToValue(top--);
-			Scr_Error(va("%s is not a function pointer", var_typename[top[1].type]));
 
-		case OP_ScriptThreadCall:
-			if ( scrVmPub.function_count <= 30 )
-			{
-				selfId = Scr_GetSelf(localId);
-				AddRefToObject(selfId);
-				localId = AllocThread(selfId);
-				scrVmPub.function_frame->fs.pos = pos;
-				scrVmPub.function_frame->fs.startTop = startTop;
-				pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
-				startTop = &top[-Scr_ReadUnsigned(&scrVmPub.function_frame->fs.pos)];
-				scrVmPub.function_frame->fs.top = startTop;
-				scrVmPub.function_frame->topType = startTop->type;
-				startTop->type = VAR_PRECODEPOS;
-				++gParamCount;
-				scrVmPub.function_frame->fs.localVarCount = localVarCount;
-				localVarCount = 0;
-				++scrVmPub.function_count;
-				++scrVmPub.function_frame;
-				scrVmPub.function_frame->fs.localId = localId;
-				continue;
-			}
-			scrVarPub.error_index = 1;
-			Scr_Error("script stack overflow (too many embedded function calls)");
+			tempCodePos = top->u.codePosValue;
+			top--;
 
-		case OP_ScriptThreadCallPointer:
-			if ( top->type == VAR_FUNCTION )
-			{
-				if ( scrVmPub.function_count <= 30 )
-				{
-					tempCodePos = top->u.codePosValue;
-					--top;
-					selfId = Scr_GetSelf(localId);
-					AddRefToObject(selfId);
-					localId = AllocThread(selfId);
-					scrVmPub.function_frame->fs.pos = pos;
-					scrVmPub.function_frame->fs.startTop = startTop;
-					pos = tempCodePos;
-					startTop = &top[-Scr_ReadUnsigned(&scrVmPub.function_frame->fs.pos)];
-					scrVmPub.function_frame->fs.top = startTop;
-					scrVmPub.function_frame->topType = startTop->type;
-					startTop->type = VAR_PRECODEPOS;
-					++gParamCount;
-					scrVmPub.function_frame->fs.localVarCount = localVarCount;
-					localVarCount = 0;
-					++scrVmPub.function_count;
-					++scrVmPub.function_frame;
-					scrVmPub.function_frame->fs.localId = localId;
-					continue;
-				}
-				scrVarPub.error_index = 1;
-				Scr_Error("script stack overflow (too many embedded function calls)");
-			}
-			Scr_Error(va("%s is not a function pointer", var_typename[top->type]));
-
-		case OP_ScriptMethodThreadCall:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
+				goto error;
 			}
-			if ( scrVmPub.function_count > 30 )
+
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
 			{
 				scrVarPub.error_index = 1;
 				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
 			}
-			localId = AllocThread(top->u.stringValue);
-			--top;
+
+			localId = AllocChildThread(top->u.pointerValue, localId);
+			top--;
+
+			scrVmPub.function_frame->fs.pos = pos;
+			pos = tempCodePos;
+			goto function_call;
+
+		case OP_ScriptThreadCall:
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
+			{
+				scrVarPub.error_index = 1;
+				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
+			}
+
+			selfId = Scr_GetSelf(localId);
+			AddRefToObject(selfId);
+
+			localId = AllocThread(selfId);
+
 			scrVmPub.function_frame->fs.pos = pos;
 			scrVmPub.function_frame->fs.startTop = startTop;
+
 			pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
 			startTop = &top[-Scr_ReadUnsigned(&scrVmPub.function_frame->fs.pos)];
+thread_call:
 			scrVmPub.function_frame->fs.top = startTop;
 			scrVmPub.function_frame->topType = startTop->type;
+
 			startTop->type = VAR_PRECODEPOS;
-			++gParamCount;
-			scrVmPub.function_frame->fs.localVarCount = localVarCount;
-			localVarCount = 0;
-			++scrVmPub.function_count;
-			++scrVmPub.function_frame;
-			scrVmPub.function_frame->fs.localId = localId;
-			continue;
+			gParamCount++;
+			goto function_call;
+
+		case OP_ScriptThreadCallPointer:
+			if ( top->type != VAR_FUNCTION )
+			{
+				Scr_Error(va("%s is not a function pointer", var_typename[top->type]));
+				goto error;
+			}
+
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
+			{
+				scrVarPub.error_index = 1;
+				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
+			}
+
+			tempCodePos = top->u.codePosValue;
+			top--;
+
+			selfId = Scr_GetSelf(localId);
+			AddRefToObject(selfId);
+
+			localId = AllocThread(selfId);
+
+			scrVmPub.function_frame->fs.pos = pos;
+			scrVmPub.function_frame->fs.startTop = startTop;
+
+			pos = tempCodePos;
+			startTop = &top[-Scr_ReadUnsigned(&scrVmPub.function_frame->fs.pos)];
+			goto thread_call;
+
+		case OP_ScriptMethodThreadCall:
+			if ( top->type != VAR_POINTER )
+			{
+				scrVarPub.error_index = 2;
+				Scr_Error(va("%s is not an object", var_typename[top->type]));
+				goto error;
+			}
+
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
+			{
+				scrVarPub.error_index = 1;
+				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
+			}
+
+			localId = AllocThread(top->u.pointerValue);
+			top--;
+
+			scrVmPub.function_frame->fs.pos = pos;
+			scrVmPub.function_frame->fs.startTop = startTop;
+
+			pos = Scr_ReadCodePos(&scrVmPub.function_frame->fs.pos);
+			startTop = &top[-Scr_ReadUnsigned(&scrVmPub.function_frame->fs.pos)];
+			goto thread_call;
 
 		case OP_ScriptMethodThreadCallPointer:
 			if ( top->type != VAR_FUNCTION )
 			{
-				RemoveRefToValue(top--);
-				Scr_Error(va("%s is not a function pointer", var_typename[top[1].type]));
+				RemoveRefToValue(top);
+				top--;
+				value = top + 1;
+				Scr_Error(va("%s is not a function pointer", var_typename[value->type]));
+				goto error;
 			}
+
 			tempCodePos = top->u.codePosValue;
-			--top;
-			if ( top->type != VAR_OBJECT )
+			top--;
+
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
+				goto error;
 			}
-			if ( scrVmPub.function_count > 30 )
+
+			if ( scrVmPub.function_count > MAX_EMBEDDED_FUNCTION_CALLS )
 			{
 				scrVarPub.error_index = 1;
 				Scr_Error("script stack overflow (too many embedded function calls)");
+				goto error;
 			}
-			localId = AllocThread(top->u.stringValue);
-			--top;
+
+			localId = AllocThread(top->u.pointerValue);
+			top--;
+
 			scrVmPub.function_frame->fs.pos = pos;
 			scrVmPub.function_frame->fs.startTop = startTop;
+
 			pos = tempCodePos;
 			startTop = &top[-Scr_ReadUnsigned(&scrVmPub.function_frame->fs.pos)];
-			scrVmPub.function_frame->fs.top = startTop;
-			scrVmPub.function_frame->topType = startTop->type;
-			startTop->type = VAR_PRECODEPOS;
-			++gParamCount;
-			scrVmPub.function_frame->fs.localVarCount = localVarCount;
-			localVarCount = 0;
-			++scrVmPub.function_count;
-			++scrVmPub.function_frame;
-			scrVmPub.function_frame->fs.localId = localId;
-			continue;
+			goto thread_call;
 
 		case OP_DecTop:
 			RemoveRefToValue(top);
-			--top;
+			top--;
 			continue;
 
 		case OP_CastFieldObject:
 			objectId = Scr_EvalFieldObject(scrVarPub.tempVariable, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_EvalLocalVariableObjectCached:
 			objectId = Scr_EvalVariableObject(Scr_GetLocalVar(pos));
-			++pos;
+			pos++;
 			continue;
 
 		case OP_CastBool:
@@ -3172,26 +4318,33 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_JumpOnFalse:
 			Scr_CastBool(top);
+			assert(top->type == VAR_INTEGER);
 			jumpOffset = Scr_ReadUnsignedShort(&pos);
 			if ( !top->u.intValue )
+			{
 				pos += jumpOffset;
-			--top;
+			}
+			top--;
 			continue;
 
 		case OP_JumpOnTrue:
 			Scr_CastBool(top);
+			assert(top->type == VAR_INTEGER);
 			jumpOffset = Scr_ReadUnsignedShort(&pos);
 			if ( top->u.intValue )
+			{
 				pos += jumpOffset;
-			--top;
+			}
+			top--;
 			continue;
 
 		case OP_JumpOnFalseExpr:
 			Scr_CastBool(top);
+			assert(top->type == VAR_INTEGER);
 			jumpOffset = Scr_ReadUnsignedShort(&pos);
 			if ( top->u.intValue )
 			{
-				--top;
+				top--;
 				continue;
 			}
 			pos += jumpOffset;
@@ -3199,10 +4352,11 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_JumpOnTrueExpr:
 			Scr_CastBool(top);
+			assert(top->type == VAR_INTEGER);
 			jumpOffset = Scr_ReadUnsignedShort(&pos);
 			if ( !top->u.intValue )
 			{
-				--top;
+				top--;
 				continue;
 			}
 			pos += jumpOffset;
@@ -3213,180 +4367,196 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 			pos += jumpOffset;
 			continue;
 
-#define INFINITE_LOOP_TIMEOUT 5000
 		case OP_jumpback:
-			if ( (unsigned int)(Sys_MilliSeconds() - scrVmGlob.starttime) >= INFINITE_LOOP_TIMEOUT )
+#define INFINITE_LOOP_TIMEOUT 5000
+			if ( (unsigned int)(Sys_MilliSeconds() - scrVmGlob.starttime) < INFINITE_LOOP_TIMEOUT )
 			{
-				if ( !scrVmGlob.loading )
-				{
-					if ( !scrVmPub.abort_on_error )
-					{
-						Com_Printf("script runtime error: potential infinite loop in script - killing thread.\n");
-						Scr_PrintPrevCodePos(CON_CHANNEL_DONT_FILTER, pos, 0);
-						Scr_ResetTimeout();
-						while ( 1 )
-						{
-							parentLocalId = GetSafeParentLocalId(localId);
-							Scr_KillThread(localId);
-							scrVmPub.localVars -= localVarCount;
-							while ( top->type != VAR_CODEPOS )
-								RemoveRefToValue(top--);
-							--scrVmPub.function_count;
-							--scrVmPub.function_frame;
-							if ( !parentLocalId )
-								break;
-							RemoveRefToObject(localId);
-							pos = scrVmPub.function_frame->fs.pos;
-							localVarCount = scrVmPub.function_frame->fs.localVarCount;
-							localId = parentLocalId;
-							--top;
-						}
-						startTop[1].type = VAR_UNDEFINED;
-						if ( gParamCount )
-						{
-							--gParamCount;
-							RemoveRefToObject(localId);
-							pos = scrVmPub.function_frame->fs.pos;
-							localId = scrVmPub.function_frame->fs.localId;
-							localVarCount = scrVmPub.function_frame->fs.localVarCount;
-							top = scrVmPub.function_frame->fs.top;
-							startTop = scrVmPub.function_frame->fs.startTop;
-							top->type = scrVmPub.function_frame->topType;
-							++top;
-							continue;
-						}
-						--g_script_error_level;
-						return localId;
-					}
-					Scr_TerminalError("potential infinite loop in script");
-				}
+				jumpOffset = Scr_ReadUnsignedShort(&pos);
+				pos -= jumpOffset;
+				continue;
+			}
+
+			if ( scrVmGlob.loading )
+			{
 				Com_Printf("script runtime warning: potential infinite loop in script.\n");
 				Scr_PrintPrevCodePos(CON_CHANNEL_DONT_FILTER, pos, 0);
+
 				jumpOffset = Scr_ReadUnsignedShort(&pos);
 				pos -= jumpOffset;
+
 				Scr_ResetTimeout();
+				continue;
 			}
-			else
+
+			if ( scrVmPub.abort_on_error )
 			{
-				jumpOffset = Scr_ReadUnsignedShort(&pos);
-				pos -= jumpOffset;
+				Scr_TerminalError("potential infinite loop in script");
+				goto error;
 			}
-			continue;
+
+			Com_Printf("script runtime error: potential infinite loop in script - killing thread.\n");
+			Scr_PrintPrevCodePos(CON_CHANNEL_DONT_FILTER, pos, 0);
+
+			Scr_ResetTimeout();
+
+			while ( 1 )
+			{
+				parentLocalId = GetSafeParentLocalId(localId);
+				Scr_KillThread(localId);
+
+				scrVmPub.localVars -= localVarCount;
+				assert(top->type != VAR_PRECODEPOS);
+
+				while ( top->type != VAR_CODEPOS )
+				{
+					RemoveRefToValue(top);
+					top--;
+					assert(top->type != VAR_PRECODEPOS);
+				}
+
+				scrVmPub.function_count--;
+				scrVmPub.function_frame--;
+
+				if ( !parentLocalId )
+				{
+					break;
+				}
+
+				assert(top != startTop);
+				RemoveRefToObject(localId);
+
+				assert(top->type == VAR_CODEPOS);
+				pos = scrVmPub.function_frame->fs.pos;
+				assert(pos);
+
+				localVarCount = scrVmPub.function_frame->fs.localVarCount;
+				localId = parentLocalId;
+				top--;
+			}
+
+			assert(top == startTop);
+			goto thread_end;
 
 		case OP_inc:
-			++top;
-			Scr_EvalVariableFieldInternal(&tempValue, fieldValueId);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
-			if ( top->type == VAR_INTEGER )
-			{
-				++top->u.intValue;
-				++pos;
-			}
-			else
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+
+			*top = Scr_EvalVariableField(fieldValueId);
+
+			if ( top->type != VAR_INTEGER )
 			{
 				Scr_Error(va("++ must be applied to an int (applied to %s)", var_typename[top->type]));
+				goto error;
 			}
+
+			top->u.intValue++;
+			assert(*pos == OP_SetVariableField);
+			pos++;
+
 			SetVariableFieldValue(fieldValueId, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_dec:
-			++top;
-			Scr_EvalVariableFieldInternal(&tempValue, fieldValueId);
-			top->u = tempValue.u;
-			top->type = tempValue.type;
-			if ( top->type == VAR_INTEGER )
-			{
-				--top->u.intValue;
-				++pos;
-			}
-			else
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+
+			*top = Scr_EvalVariableField(fieldValueId);
+
+			if ( top->type != VAR_INTEGER )
 			{
 				Scr_Error(va("-- must be applied to an int (applied to %s)", var_typename[top->type]));
+				goto error;
 			}
+
+			top->u.intValue--;
+			assert(*pos == OP_SetVariableField);
+			pos++;
+
 			SetVariableFieldValue(fieldValueId, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_bit_or:
 			Scr_EvalOr(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_bit_ex_or:
 			Scr_EvalExOr(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_bit_and:
 			Scr_EvalAnd(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_equality:
 			Scr_EvalEquality(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_inequality:
 			Scr_EvalInequality(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_less:
 			Scr_EvalLess(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_greater:
 			Scr_EvalGreater(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_less_equal:
 			Scr_EvalLessEqual(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_greater_equal:
 			Scr_EvalGreaterEqual(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_shift_left:
 			Scr_EvalShiftLeft(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_shift_right:
 			Scr_EvalShiftRight(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_plus:
 			Scr_EvalPlus(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_minus:
 			Scr_EvalMinus(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_multiply:
 			Scr_EvalMultiply(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_divide:
 			Scr_EvalDivide(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_mod:
 			Scr_EvalMod(top - 1, top);
-			--top;
+			top--;
 			continue;
 
 		case OP_size:
@@ -3395,159 +4565,213 @@ unsigned int VM_ExecuteInternal(const char *pos, unsigned int localId, unsigned 
 
 		case OP_waittillmatch:
 		case OP_waittill:
-			if ( top->type != VAR_OBJECT )
+			assert(Scr_IsInScriptMemory( pos ));
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
+				goto error;
 			}
+
 			if ( !IsFieldObject(top->u.pointerValue) )
 			{
 				scrVarPub.error_index = 2;
-				Scr_Error(va("%s is not an object", var_typename[GetValueType(top->u.pointerValue)]));
+				Scr_Error(va("%s is not an object", var_typename[GetObjectType(top->u.pointerValue)]));
+				goto error;
 			}
+
 			tempValue.u = top->u;
-			--top;
-			if ( top->type == VAR_STRING )
+			top--;
+
+			if ( top->type != VAR_STRING )
 			{
-				stringValue = top->u.stringValue;
-				--top;
-				stackValue.type = VAR_STACK;
-				stackValue.u.stackValue = VM_ArchiveStack(top - startTop, pos, top, localVarCount, &localId);
-				id = GetArray(GetVariable(GetArray(GetVariable(tempValue.u.stringValue, 0x1FFFEu)), stringValue));
-				stackId = GetNewObjectVariable(id, localId);
-				SetNewVariableValue(stackId, &stackValue);
-				tempValue.type = VAR_OBJECT;
-				SetNewVariableValue(GetNewObjectVariable(GetArray(GetObjectVariable(scrVarPub.pauseArrayId, Scr_GetSelf(localId))), localId), &tempValue);
-				Scr_SetThreadNotifyName(localId, stringValue);
-				startTop[1].type = VAR_UNDEFINED;
-				if ( gParamCount )
-				{
-					--gParamCount;
-					RemoveRefToObject(localId);
-					pos = scrVmPub.function_frame->fs.pos;
-					localId = scrVmPub.function_frame->fs.localId;
-					localVarCount = scrVmPub.function_frame->fs.localVarCount;
-					top = scrVmPub.function_frame->fs.top;
-					startTop = scrVmPub.function_frame->fs.startTop;
-					top->type = scrVmPub.function_frame->topType;
-					++top;
-					continue;
-				}
-				--g_script_error_level;
-				return localId;
+				top++;
+				scrVarPub.error_index = 3;
+				Scr_Error("first parameter of waittill must evaluate to a string");
+				goto error;
 			}
-			++top;
-			scrVarPub.error_index = 3;
-			Scr_Error("first parameter of waittill must evaluate to a string");
+
+			stringValue = top->u.stringValue;
+			top--;
+
+			assert(GetObjectType( tempValue.u.pointerValue ) != VAR_THREAD);
+			assert(GetObjectType( tempValue.u.pointerValue ) != VAR_NOTIFY_THREAD);
+			assert(GetObjectType( tempValue.u.pointerValue ) != VAR_TIME_THREAD);
+			assert(GetObjectType( tempValue.u.pointerValue ) != VAR_CHILD_THREAD);
+			assert(GetObjectType( tempValue.u.pointerValue ) != VAR_DEAD_THREAD);
+
+			stackValue.type = VAR_STACK;
+			stackValue.u.stackValue = VM_ArchiveStack(top - startTop, pos, top, localVarCount, &localId);
+
+			stackId = GetNewObjectVariable(GetArray(GetVariable(GetArray(GetVariable(tempValue.u.pointerValue, OBJECT_NOTIFY_LIST)), stringValue)), localId);
+			SetNewVariableValue(stackId, &stackValue);
+
+			tempValue.type = VAR_POINTER;
+			SetNewVariableValue(GetNewObjectVariable(GetArray(GetObjectVariable(scrVarPub.pauseArrayId, Scr_GetSelf(localId))), localId), &tempValue);
+
+			Scr_SetThreadNotifyName(localId, stringValue);
+			goto thread_end;
 
 		case OP_notify:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 2;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
+				goto error;
 			}
+
 			id = top->u.pointerValue;
+
 			if ( !IsFieldObject(id) )
 			{
 				scrVarPub.error_index = 2;
-				Scr_Error(va("%s is not an object", var_typename[GetValueType(top->u.pointerValue)]));
+				Scr_Error(va("%s is not an object", var_typename[GetObjectType(id)]));
+				goto error;
 			}
-			--top;
+
+			top--;
+
 			if ( top->type != VAR_STRING )
 			{
-				++top;
+				top++;
 				scrVarPub.error_index = 1;
 				Scr_Error("first parameter of notify must evaluate to a string");
+				goto error;
 			}
+
 			stringValue = top->u.stringValue;
-			--top;
+			top--;
+
 			scrVmPub.function_frame->fs.pos = pos;
 			VM_Notify(id, stringValue, top);
+
 			pos = scrVmPub.function_frame->fs.pos;
+
 			RemoveRefToObject(id);
 			SL_RemoveRefToString(stringValue);
+
+			assert(top->type != VAR_CODEPOS);
 			while ( top->type != VAR_PRECODEPOS )
-				RemoveRefToValue(top--);
-			--top;
+			{
+				RemoveRefToValue(top);
+				top--;
+				assert(top->type != VAR_CODEPOS);
+			}
+
+			top--;
 			continue;
 
 		case OP_endon:
-			if ( top->type != VAR_OBJECT )
+			if ( top->type != VAR_POINTER )
 			{
 				scrVarPub.error_index = 1;
 				Scr_Error(va("%s is not an object", var_typename[top->type]));
+				goto error;
 			}
+
 			if ( !IsFieldObject(top->u.pointerValue) )
 			{
 				scrVarPub.error_index = 1;
-				Scr_Error(va("%s is not an object", var_typename[GetValueType(top->u.pointerValue)]));
+				Scr_Error(va("%s is not an object", var_typename[GetObjectType(top->u.pointerValue)]));
+				goto error;
 			}
-			if ( top[-1].type == VAR_STRING )
+
+			value = top - 1;
+
+			if ( value->type != VAR_STRING )
 			{
-				stringValue = top[-1].u.stringValue;
-				AddRefToObject(localId);
-				threadId = AllocThread(localId);
-				GetObjectVariable(GetArray(GetVariable(GetArray(GetVariable(top->u.stringValue, 0x1FFFEu)), stringValue)), threadId);
-				RemoveRefToObject(threadId);
-				tempValue.type = VAR_OBJECT;
-				tempValue.u = top->u;
-				SetNewVariableValue(GetNewObjectVariable(GetArray(GetObjectVariable(scrVarPub.pauseArrayId, localId)), threadId), &tempValue);
-				Scr_SetThreadNotifyName(threadId, stringValue);
-				top -= 2;
-				continue;
+				Scr_Error("first parameter of endon must evaluate to a string");
+				goto error;
 			}
-			Scr_Error("first parameter of endon must evaluate to a string");
+
+			stringValue = value->u.stringValue;
+
+			AddRefToObject(localId);
+			threadId = AllocThread(localId);
+
+			assert(GetObjectType( top->u.pointerValue ) != VAR_THREAD);
+			assert(GetObjectType( top->u.pointerValue ) != VAR_NOTIFY_THREAD);
+			assert(GetObjectType( top->u.pointerValue ) != VAR_TIME_THREAD);
+			assert(GetObjectType( top->u.pointerValue ) != VAR_CHILD_THREAD);
+			assert(GetObjectType( top->u.pointerValue ) != VAR_DEAD_THREAD);
+
+			GetObjectVariable(GetArray(GetVariable(GetArray(GetVariable(top->u.pointerValue, OBJECT_NOTIFY_LIST)), stringValue)), threadId);
+			RemoveRefToObject(threadId);
+
+			tempValue.type = VAR_POINTER;
+			tempValue.u = top->u;
+
+			SetNewVariableValue(GetNewObjectVariable(GetArray(GetObjectVariable(scrVarPub.pauseArrayId, localId)), threadId), &tempValue);
+			Scr_SetThreadNotifyName(threadId, stringValue);
+
+			top -= 2;
+			continue;
 
 		case OP_voidCodepos:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
 			top->type = VAR_PRECODEPOS;
 			continue;
 
 		case OP_switch:
 			jumpOffset = Scr_ReadUnsigned(&pos);
 			pos += jumpOffset;
+
 			gCaseCount = Scr_ReadUnsignedShort(&pos);
-			if ( top->type == VAR_STRING )
+
+			switch ( top->type )
 			{
+			case VAR_STRING:
 				caseValue = top->u.stringValue;
-				SL_RemoveRefToString(top->u.stringValue);
-			}
-			else if ( top->type == VAR_INTEGER )
-			{
-				if ( IsValidArrayIndex(top->u.pointerValue) )
-				{
-					caseValue = GetInternalVariableIndex(top->u.pointerValue);
-				}
-				else
+				SL_RemoveRefToString(caseValue);
+				break;
+
+			case VAR_INTEGER:
+				if ( !IsValidArrayIndex(top->u.pointerValue) )
 				{
 					Scr_Error(va("switch index %d out of range", top->u.intValue));
+					goto error;
 				}
-			}
-			else
-			{
+				caseValue = GetInternalVariableIndex(top->u.pointerValue);
+				break;
+
+			default:
 				Scr_Error(va("cannot switch on %s", var_typename[top->type]));
+				goto error;
 			}
+
 			if ( !gCaseCount )
 			{
-loop_dec_top:
-				--top;
+				top--;
 				continue;
 			}
+
+			assert(caseValue);
+
 			do
 			{
 				currentCaseValue = Scr_ReadUnsigned(&pos);
 				currentCodePos = Scr_ReadCodePos(&pos);
+
 				if ( currentCaseValue == caseValue )
 				{
 					pos = currentCodePos;
+					assert(pos);
 					goto loop_dec_top;
 				}
-				--gCaseCount;
+
+				gCaseCount--;
 			}
 			while ( gCaseCount );
+
 			if ( !currentCaseValue )
+			{
 				pos = currentCodePos;
-			--top;
+				assert(pos);
+			}
+loop_dec_top:
+			top--;
 			continue;
 
 		case OP_endswitch:
@@ -3564,49 +4788,60 @@ loop_dec_top:
 			continue;
 
 		case OP_abort:
-			--g_script_error_level;
+			assert(g_script_error_level >= 0);
+			g_script_error_level--;
 			return 0;
 
 		case OP_object:
-			++top;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+
 			classnum = Scr_ReadUnsigned(&pos);
 			entnum = Scr_ReadUnsigned(&pos);
+
 			top->u.pointerValue = FindEntityId(entnum, classnum);
+
 			if ( !top->u.pointerValue )
 			{
 				top->type = VAR_UNDEFINED;
 				Scr_Error("unknown object");
+				goto error;
 			}
-			top->type = VAR_OBJECT;
+
+			top->type = VAR_POINTER;
 			AddRefToObject(top->u.pointerValue);
 			continue;
 
 		case OP_thread_object:
 			++top;
 			top->u.pointerValue = Scr_ReadUnsignedShort(&pos);
-			top->type = VAR_OBJECT;
+			top->type = VAR_POINTER;
 			AddRefToObject(top->u.pointerValue);
 			continue;
 
 		case OP_EvalLocalVariable:
-			++top;
-			Scr_EvalVariable(&tempValue, FindVariable(localId, Scr_ReadUnsignedShort(&pos)));
-			top->u = tempValue.u;
-			top->type = tempValue.type;
+			assert(top >= scrVmPub.stack);
+			assert(top+1 <= scrVmPub.maxstack);
+			top++;
+			*top = Scr_EvalVariable(FindVariable(localId, Scr_ReadUnsignedShort(&pos)));
 			continue;
 
 		case OP_EvalLocalVariableRef:
 			fieldValueId = FindVariable(localId, Scr_ReadUnsignedShort(&pos));
-			if ( fieldValueId )
-				continue;
-			Scr_Error("cannot create a new local variable in the debugger");
+			if ( !fieldValueId )
+			{
+				Scr_Error("cannot create a new local variable in the debugger");
+				goto error;
+			}
+			continue;
 
 		case OP_prof_begin:
-			++pos;
+			pos++;
 			continue;
 
 		case OP_prof_end:
-			++pos;
+			pos++;
 			continue;
 
 		case OP_breakpoint:
@@ -3619,298 +4854,8 @@ loop_dec_top:
 
 		default:
 			scrVmPub.terminal_error = 1;
-			runtimeError(CON_CHANNEL_DONT_FILTER, pos, 0, va("CODE ERROR: unknown opcode %d", gOpcode));
+			RuntimeErrorInternal(CON_CHANNEL_DONT_FILTER, pos, 0, va("CODE ERROR: unknown opcode %d", gOpcode));
 			continue;
 		}
 	}
-}
-
-unsigned int VM_Execute(unsigned int localId, const char *pos, unsigned int paramcount)
-{
-	int varType;
-	unsigned int parentId;
-	VariableValue *startTop;
-	unsigned int numparams;
-
-	Scr_ClearOutParams();
-	startTop = Scr_GetValue(paramcount);
-	numparams = scrVmPub.inparamcount - paramcount;
-
-	if ( scrVmPub.function_count > 29 )
-	{
-		Scr_KillThread(localId);
-		scrVmPub.inparamcount = numparams + 1;
-
-		while ( numparams )
-		{
-			RemoveRefToValue(scrVmPub.top);
-			--scrVmPub.top;
-			--numparams;
-		}
-
-		++scrVmPub.top;
-		scrVmPub.top->type = VAR_UNDEFINED;
-		scriptError(pos, 0, "script stack overflow (too many embedded function calls)", 0);
-
-		return localId;
-	}
-	else
-	{
-		if ( scrVmPub.function_count )
-		{
-			++scrVmPub.function_count;
-			++scrVmPub.function_frame;
-			scrVmPub.function_frame->fs.localId = 0;
-		}
-
-		scrVmPub.function_frame->fs.pos = pos;
-		++scrVmPub.function_count;
-		++scrVmPub.function_frame;
-		scrVmPub.function_frame->fs.localId = localId;
-		varType = startTop->type;
-		startTop->type = VAR_PRECODEPOS;
-		scrVmPub.inparamcount = 0;
-		parentId = VM_ExecuteInternal(pos, localId, 0, scrVmPub.top, startTop);
-		startTop->type = varType;
-		scrVmPub.top = startTop + 1;
-		scrVmPub.inparamcount = numparams + 1;
-		ClearVariableValue(scrVarPub.tempVariable);
-
-		if ( scrVmPub.function_count )
-		{
-			--scrVmPub.function_count;
-			--scrVmPub.function_frame;
-		}
-
-		return parentId;
-	}
-}
-
-void VM_Resume(unsigned int timeId)
-{
-	unsigned int id;
-	VariableStackBuffer *stackBuf;
-	unsigned int parentId;
-	unsigned int localId;
-	function_stack_t stack;
-
-	Scr_ResetTimeout();
-	AddRefToObject(timeId);
-
-	for ( stack.startTop = scrVmPub.stack; ; RemoveRefToValue(stack.startTop + 1) )
-	{
-		localId = FindNextSibling(timeId);
-
-		if ( !localId )
-			break;
-
-		parentId = GetVariableKeyObject(localId);
-		stackBuf = GetVariableValueAddress_Bad(localId)->u.stackValue;
-		RemoveObjectVariable(timeId, parentId);
-		VM_UnarchiveStack(parentId, &stack, stackBuf);
-		id = VM_ExecuteInternal(stack.pos, stack.localId, stack.localVarCount, stack.top, stack.startTop);
-		RemoveRefToObject(id);
-	}
-
-	RemoveRefToObject(timeId);
-	ClearVariableValue(scrVarPub.tempVariable);
-	scrVmPub.top = scrVmPub.stack;
-}
-
-void VM_SetTime()
-{
-	unsigned int localId;
-	unsigned int id;
-
-	if ( scrVarPub.timeArrayId )
-	{
-		id = FindVariable(scrVarPub.timeArrayId, scrVarPub.time);
-
-		if ( id )
-		{
-			localId = FindObject(id);
-			VM_Resume(localId);
-			SafeRemoveVariable(scrVarPub.timeArrayId, scrVarPub.time);
-		}
-	}
-}
-
-void Scr_RunCurrentThreads()
-{
-	VM_SetTime();
-}
-
-void Scr_Settings(int developer, int developer_script, int abort_on_error)
-{
-	scrVarPub.developer = developer != 0;
-	scrVarPub.developer_script = developer_script != 0;
-	scrVmPub.abort_on_error = abort_on_error != 0;
-}
-
-void Scr_TerminalError(const char *error)
-{
-	Scr_DumpScriptThreads();
-	Scr_DumpScriptVariables();
-	scrVmPub.terminal_error = 1;
-	Scr_Error(error);
-}
-
-void Scr_Abort()
-{
-	scrVarPub.timeArrayId = 0;
-	scrVarPub.bInited = 0;
-}
-
-void Scr_ShutdownSystem(unsigned char sys, qboolean bComplete)
-{
-	unsigned int timeId;
-	unsigned int parentId;
-	VariableValueInternal_u notifyListOwnerId;
-	unsigned int id;
-	unsigned int nextId;
-	unsigned int localId;
-
-	Scr_CompileShutdown();
-	Scr_FreeEntityList();
-
-	if ( scrVarPub.timeArrayId )
-	{
-		Scr_FreeGameVariable(bComplete);
-
-		for ( id = FindNextSibling(scrVarPub.timeArrayId); id; id = FindNextSibling(id) )
-		{
-			timeId = FindObject(id);
-			VM_TerminateTime(timeId);
-		}
-
-		while ( 1 )
-		{
-			nextId = FindNextSibling(scrVarPub.pauseArrayId);
-
-			if ( !nextId )
-				break;
-
-			parentId = FindObject(nextId);
-			localId = FindNextSibling(parentId);
-			notifyListOwnerId = *GetVariableValueAddress_Bad(localId);
-			AddRefToObject(notifyListOwnerId.u.pointerValue);
-			Scr_CancelNotifyList(notifyListOwnerId.u.pointerValue);
-			RemoveRefToObject(notifyListOwnerId.u.pointerValue);
-		}
-
-		ClearObject(scrVarPub.levelId);
-		RemoveRefToEmptyObject(scrVarPub.levelId);
-		scrVarPub.levelId = 0;
-		ClearObject(scrVarPub.animId);
-		RemoveRefToEmptyObject(scrVarPub.animId);
-		scrVarPub.animId = 0;
-		ClearObject(scrVarPub.timeArrayId);
-		RemoveRefToEmptyObject(scrVarPub.timeArrayId);
-		scrVarPub.timeArrayId = 0;
-		RemoveRefToEmptyObject(scrVarPub.pauseArrayId);
-		scrVarPub.pauseArrayId = 0;
-		Scr_FreeObjects();
-	}
-}
-
-void Scr_Shutdown()
-{
-	if ( scrVarPub.bInited )
-	{
-		scrVarPub.bInited = 0;
-		Var_FreeTempVariables();
-		Var_Shutdown();
-		SL_Shutdown();
-	}
-}
-
-void Scr_ClearErrorMessage()
-{
-	scrVarPub.error_message = 0;
-	scrVmGlob.dialog_error_message = 0;
-	scrVarPub.error_index = 0;
-}
-
-void Scr_ClearStrings()
-{
-	scrCompilePub.canonicalStrings = 0;
-	Hunk_ClearHigh(scrVarPub.canonicalStrMark);
-}
-
-void Scr_AllocAnims(int num)
-{
-	scrAnimPub.animtree_loading = 1;
-	scrAnimPub.xanim_num[num] = 0;
-	scrAnimPub.xanim_lookup[num][0].anims = 0;
-	scrAnimPub.animtrees = Scr_AllocArray();
-	scrAnimPub.animtree_node = 0;
-	scrCompilePub.developer_statement = 0;
-}
-
-void Scr_AllocStrings()
-{
-	scrVarPub.canonicalStrMark = Hunk_SetMark();
-	scrCompilePub.canonicalStrings = (uint16_t *)Hunk_AllocInternal(0x20000u);
-	scrVarPub.canonicalStrCount = 0;
-}
-
-void Scr_VM_Init()
-{
-	scrVmPub.maxstack = &scrVmPub.stack[2047];
-	scrVmPub.top = scrVmPub.stack;
-	scrVmPub.function_count = 0;
-	scrVmPub.function_frame = scrVmPub.function_frame_start;
-	scrVmPub.localVars = scrVmGlob.localVarsStack - 1;
-	scrVarPub.evaluate = 0;
-	scrVmPub.debugCode = 0;
-	Scr_ClearErrorMessage();
-	scrVmPub.terminal_error = 0;
-	scrVmPub.outparamcount = 0;
-	scrVmPub.inparamcount = 0;
-	scrVarPub.tempVariable = AllocValue();
-	scrVarPub.timeArrayId = 0;
-	scrVarPub.pauseArrayId = 0;
-	scrVarPub.levelId = 0;
-	scrVarPub.gameId = 0;
-	scrVarPub.animId = 0;
-	scrVarPub.freeEntList = 0;
-	scrVmPub.stack->type = VAR_CODEPOS;
-	scrVmGlob.loading = 0;
-}
-
-void Scr_Init()
-{
-	if ( scrVarPub.bInited )
-		return;
-
-	SL_Init();
-	Var_Init();
-	Scr_VM_Init();
-	scrCompilePub.script_loading = 0;
-	scrAnimPub.animtree_loading = 0;
-	scrCompilePub.scriptsPos = 0;
-	scrCompilePub.loadedscripts = 0;
-	scrAnimPub.animtrees = 0;
-	scrCompilePub.builtinMeth = 0;
-	scrCompilePub.builtinFunc = 0;
-	scrVarPub.bInited = 1;
-}
-
-void Scr_AddExecEntThreadNum(int entnum, unsigned int classnum, int handle, int paramcount)
-{
-	unsigned int threadId;
-	unsigned int id;
-	unsigned int self;
-	const char *pos;
-
-	pos = &scrVarPub.programBuffer[handle];
-	if ( !scrVmPub.function_count )
-		Scr_ResetTimeout();
-	self = Scr_GetEntityId(entnum, classnum);
-	AddRefToObject(self);
-	threadId = AllocThread(self);
-	id = VM_Execute(threadId, pos, paramcount);
-	RemoveRefToObject(id);
-	++scrVmPub.outparamcount;
-	--scrVmPub.inparamcount;
 }

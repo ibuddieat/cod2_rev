@@ -242,7 +242,7 @@ static_assert((sizeof(animScriptData_t) == 736200), "ERROR: animScriptData_t siz
 
 typedef struct
 {
-	scr_anim_t anim;
+	scr_anim_s anim;
 	int nameHash;
 	char name[MAX_QPATH];
 } loadAnim_t;
@@ -337,10 +337,10 @@ struct bgsAnim_t
 	struct
 	{
 		scr_animtree_t tree;
-		scr_anim_t     root;
-		scr_anim_t     torso;
-		scr_anim_t     legs;
-		scr_anim_t     turning;
+		scr_anim_s     root;
+		scr_anim_s     torso;
+		scr_anim_s     legs;
+		scr_anim_s     turning;
 	} generic_human;
 };
 

@@ -592,7 +592,7 @@ void G_ShutdownGame( qboolean freeScripts )
 		SV_FreeClientScriptPers();
 	}
 
-	Scr_ShutdownSystem(1, level.savePersist == qfalse);
+	Scr_ShutdownSystem(level.savePersist == qfalse);
 
 	if ( freeScripts )
 	{

@@ -241,7 +241,11 @@ typedef void (*xcommand_t)(void);
 #define MAX_VOICE_MSG_LEN			0x20000
 
 #define MAX_DOWNLOAD_WINDOW         8       // max of eight download frames
+#ifdef LIBCOD
+#define MAX_DOWNLOAD_BLKSIZE        1024    // 1024 byte block chunks
+#else
 #define MAX_DOWNLOAD_BLKSIZE        2048    // 2048 byte block chunks
+#endif
 
 #define PACKET_BACKUP   32  // number of old messages that must be kept on client and
 // server for delta comrpession and ping estimation

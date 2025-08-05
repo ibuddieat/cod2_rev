@@ -294,14 +294,14 @@ void ClientUserinfoChanged( int clientNum )
 	if ( client->sess.connected == CON_CONNECTED && level.manualNameChange )
 	{
 		s = Info_ValueForKey( userinfo, "name" );
-		ClientCleanName( s, client->sess.name, sizeof(client->sess.name) );
+		ClientCleanName( s, client->sess.newnetname, sizeof(client->sess.newnetname) );
 	}
 	else
 	{
 		Q_strncpyz( oldname, client->sess.cs.name, sizeof( oldname ) );
 		s = Info_ValueForKey( userinfo, "name" );
 		ClientCleanName( s, client->sess.cs.name, sizeof(client->sess.cs.name) );
-		Q_strncpyz( client->sess.name, client->sess.cs.name, sizeof(client->sess.cs.name) );
+		Q_strncpyz( client->sess.newnetname, client->sess.cs.name, sizeof(client->sess.cs.name) );
 	}
 
 	ci = &level_bgs.clientinfo[clientNum];
@@ -523,7 +523,7 @@ const char *ClientConnect( int clientNum, unsigned short scriptPersId )
 	ci->nextValid = qtrue;
 
 	client->sess.connected = CON_CONNECTING;
-	client->sess.pers = scriptPersId;
+	client->sess.scriptPersId = scriptPersId;
 
 	// force into spectator
 	client->sess.cs.team = TEAM_SPECTATOR;

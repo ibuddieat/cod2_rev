@@ -202,7 +202,7 @@ void DeathmatchScoreboardMessage( gentity_t *ent )
 			    client->sess.score,
 			    -1,
 			    client->sess.deaths,
-			    client->sess.statusIcon);
+			    client->sess.status_icon);
 		}
 		else
 		{
@@ -216,7 +216,7 @@ void DeathmatchScoreboardMessage( gentity_t *ent )
 			    client->sess.score,
 			    ping,
 			    client->sess.deaths,
-			    client->sess.statusIcon);
+			    client->sess.status_icon);
 		}
 
 		j = strlen(entry);

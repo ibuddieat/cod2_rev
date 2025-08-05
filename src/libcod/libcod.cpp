@@ -21,6 +21,8 @@ int codecallback_userinfochanged = 0;
 int codecallback_fire_grenade = 0;
 int codecallback_vid_restart = 0;
 
+int client_challenge_ping[MAX_CLIENTS] = {0};
+
 void RegisterLibcodDvars()
 {
 	sv_master[0] = Dvar_RegisterString("sv_master1", MASTER_SERVER_NAME, DVAR_ARCHIVE | DVAR_CHANGEABLE_RESET);

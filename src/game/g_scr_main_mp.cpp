@@ -259,7 +259,7 @@ void (*Scr_GetMethod( const char **pName, int *type ))( scr_entref_t )
 	void (*hud_meth)(scr_entref_t);
 	void (*meth)(scr_entref_t);
 
-	*type = 0;
+	*type = BUILTIN_ANY;
 
 	meth = Player_GetMethod(pName);
 	scriptent_meth = ScriptEnt_GetMethod(pName);
@@ -920,7 +920,7 @@ void Scr_ConstructMessageString( int firstParmIndex, int lastParmIndex, const ch
 
 			wasString = true;
 		}
-		else if ( type == VAR_OBJECT && Scr_GetPointerType(firstParmIndex) == VAR_ENTITY )
+		else if ( type == VAR_POINTER && Scr_GetPointerType(firstParmIndex) == VAR_ENTITY )
 		{
 			ent = Scr_GetEntity(firstParmIndex);
 
@@ -1057,6 +1057,7 @@ void Scr_PlayerKilled( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 {
 	Scr_AddInt(deathAnimDuration);
 	Scr_AddInt(psTimeOffset);
+
 	Scr_AddConstString(G_GetHitLocationString(hitLoc));
 	GScr_AddVector(vDir);
 	Scr_AddString(BG_GetWeaponDef(iWeapon)->szInternalName);
@@ -1067,12 +1068,11 @@ void Scr_PlayerKilled( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 		Scr_AddString("badMOD");
 
 	Scr_AddInt(damage);
+
 	GScr_AddEntity(attacker);
 	GScr_AddEntity(inflictor);
 
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerkilled, 9);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerkilled, 9 ) );
 }
 
 /*
@@ -1086,8 +1086,10 @@ void Scr_PlayerDamage( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 {
 	Scr_AddInt(timeOffset);
 	Scr_AddConstString(G_GetHitLocationString(hitLoc));
+
 	GScr_AddVector(vDir);
 	GScr_AddVector(vPoint);
+
 	Scr_AddString(BG_GetWeaponDef(iWeapon)->szInternalName);
 
 	if ( meansOfDeath < MOD_NUM )
@@ -1097,12 +1099,11 @@ void Scr_PlayerDamage( gentity_t *self, gentity_t *inflictor, gentity_t *attacke
 
 	Scr_AddInt(dflags);
 	Scr_AddInt(damage);
+
 	GScr_AddEntity(attacker);
 	GScr_AddEntity(inflictor);
 
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerdamage, 10);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerdamage, 10 ) );
 }
 
 /*
@@ -1112,9 +1113,7 @@ Scr_PlayerDisconnect
 */
 void Scr_PlayerDisconnect( gentity_t *self )
 {
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerdisconnect, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerdisconnect, 0 ) );
 }
 
 /*
@@ -1124,9 +1123,7 @@ Scr_PlayerConnect
 */
 void Scr_PlayerConnect( gentity_t *self )
 {
-	unsigned short callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerconnect, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecEntThread( self, g_scr_data.gametype.playerconnect, 0 ) );
 }
 
 /*
@@ -1136,9 +1133,7 @@ Scr_PlayerConnect
 */
 void Scr_StartupGameType()
 {
-	unsigned short callback = Scr_ExecThread(g_scr_data.gametype.startupgametype, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecThread( g_scr_data.gametype.startupgametype, 0 ) );
 }
 
 /*
@@ -1148,9 +1143,7 @@ Scr_LoadGameType
 */
 void Scr_LoadGameType()
 {
-	unsigned short callback = Scr_ExecThread(g_scr_data.gametype.main, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecThread( g_scr_data.gametype.main, 0 ) );
 }
 
 /*
@@ -1165,9 +1158,7 @@ void Scr_LoadLevel()
 		return;
 	}
 
-	unsigned short callback = Scr_ExecThread(g_scr_data.levelscript, 0);
-
-	Scr_FreeThread(callback);
+	Scr_FreeThread( Scr_ExecThread( g_scr_data.levelscript, 0 ) );
 }
 
 /*
@@ -1196,7 +1187,7 @@ void Scr_SightTracePassed()
 		iClipMask &= ~CONTENTS_BODY;
 	}
 
-	if ( Scr_GetType(3) == VAR_OBJECT && Scr_GetPointerType(3) == VAR_ENTITY )
+	if ( Scr_GetType(3) == VAR_POINTER && Scr_GetPointerType(3) == VAR_ENTITY )
 	{
 		pIgnoreEnt = Scr_GetEntity(3);
 		iIgnoreEntNum = pIgnoreEnt->s.number;
@@ -2814,13 +2805,13 @@ void GScr_UpdateClientNames()
 			continue;
 		}
 
-		if ( !strcmp(cl->sess.cs.name, cl->sess.name) )
+		if ( !strcmp(cl->sess.cs.name, cl->sess.newnetname) )
 		{
 			continue;
 		}
 
 		I_strncpyz(oldname, cl->sess.cs.name, sizeof(oldname));
-		I_strncpyz(cl->sess.cs.name, cl->sess.name, sizeof(cl->sess.cs.name));
+		I_strncpyz(cl->sess.cs.name, cl->sess.newnetname, sizeof(cl->sess.cs.name));
 
 		ClientUserinfoChanged(i);
 	}
@@ -2863,7 +2854,7 @@ GScr_IsPlayer
 */
 void GScr_IsPlayer()
 {
-	Scr_AddBool( Scr_GetType(0) == VAR_OBJECT && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->client != NULL );
+	Scr_AddBool( Scr_GetType(0) == VAR_POINTER && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->client != NULL );
 }
 
 /*
@@ -2963,7 +2954,7 @@ void GScr_GetAngleDelta()
 		}
 	}
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	XAnimGetRelDelta(Scr_GetAnims(anim.tree), anim.index, rot, trans, startTime, endTime);
 
 	Scr_AddFloat(RotationToYaw(rot));
@@ -3005,7 +2996,7 @@ void GScr_GetMoveDelta()
 		}
 	}
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	XAnimGetRelDelta(Scr_GetAnims(anim.tree), anim.index, rot, trans, startTime, endTime);
 
 	Scr_AddVector(trans);
@@ -3888,7 +3879,7 @@ void GScr_AnimHasNotetrack()
 {
 	scr_anim_s anim;
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	Scr_AddBool( XAnimNotetrackExists( Scr_GetAnims(anim.tree), anim.index, Scr_GetConstString(1) ) );
 }
 
@@ -3902,7 +3893,7 @@ void GScr_GetAnimLength()
 	scr_anim_s anim;
 	XAnim *anims;
 
-	Scr_GetAnim(&anim, 0, NULL);
+	anim = Scr_GetAnim(0, NULL);
 	anims = Scr_GetAnims(anim.tree);
 
 	if ( !XAnimIsPrimitive(anims, anim.index) )
@@ -3960,7 +3951,7 @@ GScr_IsAlive
 */
 void GScr_IsAlive()
 {
-	Scr_AddBool( Scr_GetType(0) == VAR_OBJECT && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->health > 0 );
+	Scr_AddBool( Scr_GetType(0) == VAR_POINTER && Scr_GetPointerType(0) == VAR_ENTITY && Scr_GetEntity(0)->health > 0 );
 }
 
 /*
@@ -3982,11 +3973,11 @@ void GScr_IsDefined()
 {
 	int type = Scr_GetType(0);
 
-	if ( type == VAR_OBJECT )
+	if ( type == VAR_POINTER )
 	{
 		type = Scr_GetPointerType(0);
 		assert( type >= FIRST_OBJECT );
-		Scr_AddBool( type < VAR_REMOVED_THREAD && type != VAR_REMOVED_ENTITY );
+		Scr_AddBool( type < VAR_DEAD_THREAD && type != VAR_DEAD_ENTITY );
 		return;
 	}
 
@@ -5251,7 +5242,7 @@ void GScr_Obituary()
 	gentity_t *tempEnt = G_TempEntity(vec3_origin, EV_OBITUARY);
 	tempEnt->s.otherEntityNum = pOtherEnt->s.number;
 
-	if ( Scr_GetType(1) == VAR_OBJECT && Scr_GetPointerType(1) == VAR_ENTITY )
+	if ( Scr_GetType(1) == VAR_POINTER && Scr_GetPointerType(1) == VAR_ENTITY )
 	{
 		tempEnt->s.attackerEntityNum = Scr_GetEntity(1)->s.number;
 	}
@@ -5542,7 +5533,7 @@ void ScrCmd_LinkTo( scr_entref_t entref )
 
 	gentity_t *ent = GetEntity(entref);
 
-	if ( Scr_GetType(0) != VAR_OBJECT || Scr_GetPointerType(0) != VAR_ENTITY )
+	if ( Scr_GetType(0) != VAR_POINTER || Scr_GetPointerType(0) != VAR_ENTITY )
 	{
 		Scr_ParamError(0, "not an entity");
 	}
@@ -5716,7 +5707,7 @@ void Scr_BulletTracePassed()
 		iClipMask = CONTENTS_SOLID | CONTENTS_GLASS | CONTENTS_WATER | CONTENTS_SKY | CONTENTS_CLIPSHOT | CONTENTS_UNKNOWN;
 	}
 
-	if ( Scr_GetType(3) == VAR_OBJECT && Scr_GetPointerType(3) == VAR_ENTITY )
+	if ( Scr_GetType(3) == VAR_POINTER && Scr_GetPointerType(3) == VAR_ENTITY )
 	{
 		iIgnoreEntNum = Scr_GetEntity(3)->s.number;
 	}
@@ -5749,7 +5740,7 @@ void Scr_BulletTrace()
 		iClipMask &= ~CONTENTS_BODY;
 	}
 
-	if ( Scr_GetType(3) == VAR_OBJECT && Scr_GetPointerType(3) == VAR_ENTITY )
+	if ( Scr_GetType(3) == VAR_POINTER && Scr_GetPointerType(3) == VAR_ENTITY )
 	{
 		pIgnoreEnt = Scr_GetEntity(3);
 		iIgnoreEntNum = pIgnoreEnt->s.number;

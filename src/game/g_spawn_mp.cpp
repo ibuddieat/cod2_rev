@@ -51,7 +51,7 @@ G_SpawnString
 */
 qboolean G_SpawnString( const char *key, const char *defaultString, const char **out )
 {
-	return G_SpawnStringInternal(&level.spawnVars, key, defaultString, out);
+	return G_SpawnStringInternal(&level.spawnVar, key, defaultString, out);
 }
 
 /*
@@ -61,9 +61,7 @@ Scr_GetHudElem
 */
 game_hudelem_t* Scr_GetHudElem( unsigned int index )
 {
-	scr_entref_t entref;
-
-	Scr_GetEntityRef(&entref, index);
+	scr_entref_t entref = Scr_GetEntityRef(index);
 
 	if ( entref.classnum != CLASS_NUM_HUDELEM )
 	{
@@ -82,9 +80,7 @@ Scr_GetEntity
 */
 gentity_t* Scr_GetEntity( unsigned int index )
 {
-	scr_entref_t entref;
-
-	Scr_GetEntityRef(&entref, index);
+	scr_entref_t entref = Scr_GetEntityRef(index);
 
 	if ( entref.classnum != CLASS_NUM_ENTITY )
 	{
@@ -287,11 +283,37 @@ void Scr_SetGenericField( byte *b, int type, int ofs )
 
 /*
 ===============
+isValidEnt
+===============
+*/
+static bool isValidEnt( gentity_t *ent )
+{
+	if ( !ent )
+	{
+		return false;
+	}
+
+	if ( ent->s.number != ent - g_entities )
+	{
+		return false;
+	}
+
+	if ( !ent->r.inuse )
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/*
+===============
 Scr_FreeHudElem
 ===============
 */
 void Scr_FreeHudElem( game_hudelem_t *hud )
 {
+	assert(hud);
 	assert(hud - g_hudelems >= 0 && hud - g_hudelems < MAX_HUDELEMS_TOTAL);
 	assert(hud->elem.type != HE_TYPE_FREE);
 
@@ -306,8 +328,10 @@ Scr_FreeEntity
 */
 void Scr_FreeEntity( gentity_t *ent )
 {
-	assert(ent->s.number == ent - g_entities);
-	assert(ent->r.inuse);
+	if ( !isValidEnt( ent ) )
+	{
+		return;
+	}
 
 	Scr_FreeEntityConstStrings(ent);
 	Scr_FreeEntityNum(ent->s.number, CLASS_NUM_ENTITY);
@@ -410,6 +434,7 @@ Scr_AddHudElem
 */
 void Scr_AddHudElem( game_hudelem_t *hud )
 {
+	assert(hud);
 	assert(hud - g_hudelems >= 0 && hud - g_hudelems < MAX_HUDELEMS_TOTAL);
 	assert(hud->elem.type != HE_TYPE_FREE);
 
@@ -423,8 +448,10 @@ Scr_AddEntity
 */
 void Scr_AddEntity( gentity_t *ent )
 {
-	assert(ent->s.number == ent - g_entities);
-	assert(ent->r.inuse);
+	if ( !isValidEnt( ent ) )
+	{
+		return;
+	}
 
 	Scr_AddEntityNum(ent->s.number, CLASS_NUM_ENTITY);
 }
@@ -675,7 +702,7 @@ qboolean G_CallSpawnEntity( gentity_t *ent )
 {
 	spawn_t *s;
 
-	assert(!level.spawnVars.spawnVarsValid);
+	assert(!level.spawnVar.spawnVarsValid);
 
 	if ( !ent->classname )
 	{
@@ -723,7 +750,7 @@ void G_CallSpawn(void)
 	gentity_t *ent;
 	const char *classname;
 
-	assert(level.spawnVars.spawnVarsValid);
+	assert(level.spawnVar.spawnVarsValid);
 
 	G_SpawnString("classname", "", &classname);
 
@@ -780,14 +807,14 @@ void G_SpawnEntitiesFromString( void )
 	// the worldspawn is not an actual entity, but it still
 	// has a "spawn" function to perform any global setup
 	// needed by a level (setting configstrings or cvars, etc)
-	if ( !G_ParseSpawnVars( &level.spawnVars ) )
+	if ( !G_ParseSpawnVars( &level.spawnVar ) )
 	{
 		Com_Error( ERR_DROP, "SpawnEntities: no entities" );
 	}
 	SP_worldspawn();
 
 	// parse ents
-	while ( G_ParseSpawnVars( &level.spawnVars ) )
+	while ( G_ParseSpawnVars( &level.spawnVar ) )
 	{
 		G_CallSpawn();
 	}
@@ -800,9 +827,10 @@ Scr_Notify
 */
 void Scr_Notify( gentity_t *ent, unsigned short stringValue, unsigned int paramcount )
 {
-	assert(ent);
-	assert(ent->s.number == ent - g_entities);
-	assert(ent->r.inuse);
+	if ( !isValidEnt( ent ) )
+	{
+		return;
+	}
 
 	Scr_NotifyNum(ent->s.number, CLASS_NUM_ENTITY, stringValue, paramcount);
 }
@@ -841,7 +869,7 @@ void G_LoadStructs()
 	Scr_FreeThread(hThread);
 
 	// parse structs
-	while ( G_ParseSpawnVars(&level.spawnVars) )
+	while ( G_ParseSpawnVars(&level.spawnVar) )
 	{
 		G_SpawnString("classname", "", &classname);
 
@@ -1068,11 +1096,11 @@ G_ParseEntityFields
 */
 void G_ParseEntityFields( gentity_t *ent )
 {
-	assert(level.spawnVars.spawnVarsValid);
+	assert(level.spawnVar.spawnVarsValid);
 
-	for ( int i = 0; i < level.spawnVars.numSpawnVars; i++ )
+	for ( int i = 0; i < level.spawnVar.numSpawnVars; i++ )
 	{
-		G_ParseEntityField(level.spawnVars.spawnVars[i][0], level.spawnVars.spawnVars[i][1], ent);
+		G_ParseEntityField(level.spawnVar.spawnVars[i][0], level.spawnVar.spawnVars[i][1], ent);
 	}
 
 	G_SetOrigin(ent, ent->r.currentOrigin);
@@ -1090,15 +1118,15 @@ void G_SpawnStruct()
 	unsigned int index;
 	int i;
 
-	assert(level.spawnVars.spawnVarsValid);
+	assert(level.spawnVar.spawnVarsValid);
 	assert(g_scr_data.createstruct);
 
 	Scr_AddExecThread(g_scr_data.createstruct, 0);
 	structId = Scr_GetObject(0);
 
-	for ( i = 0; i < level.spawnVars.numSpawnVars; i++ )
+	for ( i = 0; i < level.spawnVar.numSpawnVars; i++ )
 	{
-		index = G_SetEntityScriptVariableInternal(level.spawnVars.spawnVars[i][0], level.spawnVars.spawnVars[i][1]);
+		index = G_SetEntityScriptVariableInternal(level.spawnVar.spawnVars[i][0], level.spawnVar.spawnVars[i][1]);
 
 		if ( index )
 		{

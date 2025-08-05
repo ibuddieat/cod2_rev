@@ -690,6 +690,11 @@ void SV_DirectConnect( netadr_t from )
 		Com_Printf( "Client %i connecting with %i challenge ping from %s\n", i, ping, NET_AdrToString(from) );
 		svs.challenges[i].connected = qtrue;
 
+#ifdef LIBCOD
+		extern int client_challenge_ping[MAX_CLIENTS];
+		client_challenge_ping[i] = ping;
+#endif
+
 		// never reject a LAN client based on ping
 		if ( !Sys_IsLANAddress( from ) )
 		{
@@ -1263,8 +1268,7 @@ void SV_WriteDownloadToClient( client_t *cl, msg_t *msg )
 		blockspersnap = 7; // fixes crash when client set snaps value too low
 
 #ifdef LIBCOD
-	if (sv_fastDownload->current.boolean)
-		blockspersnap = 1; // always one block for fast dl
+	blockspersnap = 1; // always one block for fast dl
 #endif
 
 	while (blockspersnap--)
@@ -1581,7 +1585,7 @@ gentity_t *SV_AddTestClient()
 
 	snprintf(
 	    userinfo,
-		sizeof(userinfo),
+	    sizeof(userinfo),
 	    "connect \"\\cg_predictItems\\1\\cl_anonymous\\0\\color\\4\\head\\default\\model\\multi\\snaps\\20\\rate\\5000\\name\\"
 	    "bot%d\\password\\%s\\protocol\\%d\"",
 	    botport,

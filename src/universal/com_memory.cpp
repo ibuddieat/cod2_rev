@@ -2,14 +2,14 @@
 #include "com_files.h"
 
 static hunkUsed_t hunk_low, hunk_high;
+
 static byte *s_origHunkData = NULL;
 static byte *s_hunkData = NULL;
+
 static int s_hunkTotal;
 
 static fileData_t* com_hunkData;
 static fileData_t* com_fileDataHashTable[FILEDATA_HASH_SIZE];
-
-static int currentPos;
 
 void Sys_OutOfMemErrorInternal(const char *filename, int line)
 {
@@ -366,39 +366,6 @@ int Hunk_SetMark()
 void Hunk_ClearTempMemoryHigh()
 {
 	Hunk_ClearTempMemoryHighInternal();
-}
-
-void* TempMalloc(int size)
-{
-	int pos;
-	char *buf;
-
-	pos = currentPos + size;
-	buf = (char *)Hunk_ReallocateTempMemoryInternal(pos) + currentPos;
-	currentPos = pos;
-
-	return buf;
-}
-
-char* TempMallocAlign(int size)
-{
-	return (char *)TempMalloc(size);
-}
-
-char* TempMallocAlignStrict(int size)
-{
-	return (char *)TempMalloc(size);
-}
-
-void* TempMemorySetPos(char *pos)
-{
-	currentPos -= (char *)TempMalloc(0) - pos;
-	return Hunk_ReallocateTempMemoryInternal(currentPos);
-}
-
-void TempMemoryReset()
-{
-	currentPos = 0;
 }
 
 int Hunk_HideTempMemory()
