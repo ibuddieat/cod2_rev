@@ -4274,7 +4274,7 @@ void GScr_FGetArg()
 	int filenum = Scr_GetInt(0);
 	int arg = Scr_GetInt(1);
 
-	if ( filenum < 0 || filenum > MAX_SCRIPT_IO_FILE_HANDLES )
+	if ( filenum < 0 || filenum >= MAX_SCRIPT_IO_FILE_HANDLES )
 	{
 		Com_Printf("freadline failed, invalid file number %i\n", filenum);
 		Scr_AddString("");
@@ -4331,7 +4331,7 @@ void GScr_FReadLn()
 
 	int filenum = Scr_GetInt(0);
 
-	if ( filenum < 0 || filenum > MAX_SCRIPT_IO_FILE_HANDLES )
+	if ( filenum < 0 || filenum >= MAX_SCRIPT_IO_FILE_HANDLES )
 	{
 		Com_Printf("freadln failed, invalid file number %i\n", filenum);
 		Scr_AddInt(-1);
@@ -4387,7 +4387,7 @@ void GScr_FPrintln()
 
 	int filenum = Scr_GetInt(0);
 
-	if ( filenum < 0 || filenum > MAX_SCRIPT_IO_FILE_HANDLES )
+	if ( filenum < 0 || filenum >= MAX_SCRIPT_IO_FILE_HANDLES )
 	{
 		Com_Printf("FPrintln failed, invalid file number %i\n", filenum);
 		Scr_AddInt(-1);
@@ -4426,7 +4426,7 @@ void GScr_CloseFile()
 
 	int filenum = Scr_GetInt(0);
 
-	if ( filenum < 0 || filenum > MAX_SCRIPT_IO_FILE_HANDLES )
+	if ( filenum < 0 || filenum >= MAX_SCRIPT_IO_FILE_HANDLES )
 	{
 		Com_Printf("CloseFile failed, invalid file number %i\n", filenum);
 		Scr_AddInt(-1);
